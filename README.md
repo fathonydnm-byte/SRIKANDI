@@ -8,7 +8,8 @@ Repo ini adalah **sumber kebenaran (source of truth) di git** untuk dua aplikasi
 
 ```text
 docs/
-  HANDOFF_PENGEMBANGAN_APLIKASI_ARSIP_UINSA.md   # baseline operasional — wajib dibaca lebih dulu
+  HANDOFF_PENGEMBANGAN_APLIKASI_ARSIP_UINSA.md          # baseline operasional — wajib dibaca lebih dulu
+  ADDENDUM_2026-08-20_PROTOKOL_KEPUTUSAN_RC_CF.md       # keputusan protokol poll RC→CF (melengkapi §12.5/§14)
 central-file/                                     # aplikasi Arsip Aktif (dipasang per unit pengolah)
   .clasp.json                                     # scriptId project Apps Script Central File
   appsscript.json, Code.js, Config.js, ...        # source hasil `clasp pull` dari project live
@@ -21,6 +22,7 @@ record-center/                                    # aplikasi Arsip Inaktif (dipa
 - **Central File**: source di `central-file/` ditarik langsung via `clasp pull` dari project Apps Script yang **sedang live di produksi pilot** (akun `bag.umum@uinsa.ac.id`, Bagian Umum Kantor Pusat – Biro AUPK). Terverifikasi cocok dengan baseline handoff: `VERSION 3.25.1`, `SCHEMA_VERSION 8`, 30 file (29 file kode + manifest), termasuk `ReceiptPrint.html` sebagai tipe HTML yang benar. Ini pertama kalinya kode ini masuk git — sebelumnya hanya hidup di Apps Script editor.
 - **Record Center**: paket `RC-00 + RC-01 v1.0.0 PILOT` **sudah dibangun & lulus uji lokal** menurut dokumen handoff, tetapi **belum di-deploy** ke akun Record Center, dan source-nya **belum ada di repo ini** — direktori kerja sesi AI sebelumnya (`/workspace/scratch/e254d26ae452/record-center-rc01`) tidak lagi dapat diakses dari sesi ini. Perlu dipulihkan dari ZIP rilis resmi (`UINSA_Record_Center_RC-00_RC-01_v1.0.0.zip`, SHA-256 tercatat di §23 handoff) jika masih tersimpan di Google Drive/Library pengguna, atau dibangun ulang berdasarkan spesifikasi di handoff §13–§14.
 - Langkah selanjutnya mengikuti urutan yang sudah ditetapkan di handoff §1.3 dan §21 (checklist Fase A–E): pasang RC-00/RC-01, konfigurasi federasi CF↔RC, UAT pengiriman `UP-2026-0002`, baru lanjut RC-02.
+- Protokol pengambilan keputusan RC→CF sudah diputuskan (poll dari CF, bukan push dari RC) — lihat `docs/ADDENDUM_2026-08-20_PROTOKOL_KEPUTUSAN_RC_CF.md` sebelum mengimplementasikan RC-01.1/CF-06.1.
 
 ## Prinsip kerja di repo ini
 
