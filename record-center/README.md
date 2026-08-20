@@ -32,4 +32,7 @@ Status: **kode ditulis & lulus syntax check, belum pernah dipasang ke Apps Scrip
 7. Simpan shared secret yang diterbitkan — akan dibutuhkan untuk mengisi field Record Center pada installer Central File (`recordCenterSharedSecret`, dst., sudah ada di `installUnitInstance_` CF).
 8. Jalankan Backup Sekarang dan pastikan health check `OK`/`WARNING` (bukan `ERROR`) sebelum lanjut ke RC-01.
 
-Tidak ada `.clasp.json` yang di-commit di sini karena belum ada `scriptId` — belum ada project Apps Script yang dibuat untuk RC.
+## Status pemasangan
+
+- Project Apps Script + spreadsheet RC-00 sudah dibuat (20 Agustus 2026) pada akun `bag.umum@uinsby.ac.id`, `scriptId` tercatat di `.clasp.json` pada direktori ini. Folder induk dan 10 file source sudah ter-*push*.
+- Instalasi (menjalankan installer dari menu spreadsheet, mengisi form, mendaftarkan sumber CF) dilakukan pengguna langsung di browser — `google.script.run` pada dialog installer memerlukan sesi browser aktif dan tidak dapat dipicu dari sesi agent ini.
