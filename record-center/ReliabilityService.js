@@ -41,7 +41,12 @@ function showRcInstallerDialog() {
     PropertiesService.getUserProperties().setProperty(
       'RC_INSTALLER_ACTIVE_SPREADSHEET_ID', spreadsheet.getId());
   }
-  const html = HtmlService.createHtmlOutputFromFile('AdminSetup')
+  // AdminSetup.html berisi scriptlet <?!= include(...) ?> (Styles/Client),
+  // jadi harus lewat createTemplateFromFile().evaluate() — createHtmlOutputFromFile
+  // menyajikan file mentah tanpa mengeksekusi scriptlet, membuat rcCall() dari
+  // Client.html tidak pernah termuat dan tombol dialog tidak bereaksi.
+  const html = HtmlService.createTemplateFromFile('AdminSetup')
+    .evaluate()
     .setWidth(920)
     .setHeight(760);
   SpreadsheetApp.getUi().showModalDialog(html, 'Instalasi & Reliability — Record Center');
