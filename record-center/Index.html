@@ -1,0 +1,114 @@
+<!doctype html>
+<html>
+<head>
+  <base target="_top">
+  <?!= include('Styles'); ?>
+</head>
+<body>
+  <div class="rc-header">
+    <div>
+      <h1 id="rcTitle">Record Center — UINSA</h1>
+      <div class="rc-hint">RC-00 (fondasi instance) — endpoint federatif RC-01 belum aktif.</div>
+    </div>
+    <span id="rcOverallBadge" class="rc-badge">…</span>
+  </div>
+
+  <div class="rc-card">
+    <h2>Kesehatan Instance</h2>
+    <div id="rcChecks" class="rc-grid"></div>
+    <button onclick="refreshHealth()">Cek Ulang</button>
+    <button class="secondary" onclick="runBackup()">Backup Sekarang</button>
+    <div id="rcHealthMsg" class="rc-msg" style="display:none"></div>
+  </div>
+
+  <div class="rc-card">
+    <h2>Sumber Central File Terdaftar</h2>
+    <table class="rc-table">
+      <thead><tr><th>Unit</th><th>Instance ID</th><th>Admin</th><th>Status</th><th>Terdaftar</th></tr></thead>
+      <tbody id="rcSourceRows"></tbody>
+    </table>
+    <div class="rc-hint">Untuk mendaftarkan/menonaktifkan sumber, buka menu Record Center → Instalasi &amp; Reliability pada spreadsheet.</div>
+  </div>
+
+  <div class="rc-card">
+    <h2>Backup Terakhir</h2>
+    <table class="rc-table">
+      <thead><tr><th>Waktu</th><th>Status</th><th>File</th><th>Folder</th></tr></thead>
+      <tbody id="rcBackupRows"></tbody>
+    </table>
+  </div>
+
+  <?!= include('Client'); ?>
+  <script>
+    function renderChecks(checks) {
+      const container = document.getElementById('rcChecks');
+      container.innerHTML = '';
+      checks.forEach(check => {
+        const div = document.createElement('div');
+        div.className = 'rc-card';
+        div.style.margin = '0';
+        div.innerHTML = '<strong>' + check.code + '</strong> ' +
+          '<span class="rc-badge ' + rcBadgeClass(check.status) + '">' + check.status + '</span>' +
+          '<div class="rc-hint">' + check.detail + '</div>';
+        container.appendChild(div);
+      });
+    }
+
+    function renderSources(sources) {
+      const body = document.getElementById('rcSourceRows');
+      body.innerHTML = sources.length ? '' : '<tr><td colspan="5">Belum ada sumber terdaftar.</td></tr>';
+      sources.forEach(source => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = '<td>' + source.unitName + '</td><td>' + source.sourceId + '</td>' +
+          '<td>' + source.adminEmail + '</td>' +
+          '<td><span class="rc-badge ' + (source.status === 'AKTIF' ? 'ok' : 'error') + '">' + source.status + '</span></td>' +
+          '<td>' + (source.registeredAt || '') + '</td>';
+        body.appendChild(tr);
+      });
+    }
+
+    function renderBackups(backups) {
+      const body = document.getElementById('rcBackupRows');
+      body.innerHTML = backups.length ? '' : '<tr><td colspan="4">Belum ada backup.</td></tr>';
+      backups.forEach(backup => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = '<td>' + (backup.COMPLETED_AT || backup.STARTED_AT || '') + '</td>' +
+          '<td><span class="rc-badge ' + (backup.STATUS === 'COMPLETE' ? 'ok' : 'error') + '">' + backup.STATUS + '</span></td>' +
+          '<td>' + (backup.DRIVE_FILE_COUNT || 0) + ' file</td>' +
+          '<td>' + (backup.DRIVE_FOLDER_COUNT || 0) + ' folder</td>';
+        body.appendChild(tr);
+      });
+    }
+
+    function loadDashboard() {
+      rcCall('apiGetRcDashboard').then(data => {
+        document.getElementById('rcOverallBadge').textContent = data.health.overallStatus;
+        document.getElementById('rcOverallBadge').className = 'rc-badge ' + rcBadgeClass(data.health.overallStatus);
+        document.getElementById('rcTitle').textContent = data.instance.rcName || 'Record Center — UINSA';
+        renderChecks(data.health.checks);
+        renderSources(data.sources);
+        renderBackups(data.recentBackups);
+      }).catch(error => rcShowMessage('rcHealthMsg', error.message, true));
+    }
+
+    function refreshHealth() {
+      rcCall('apiRunRcHealthCheck').then(result => {
+        renderChecks(result.checks);
+        document.getElementById('rcOverallBadge').textContent = result.overallStatus;
+        document.getElementById('rcOverallBadge').className = 'rc-badge ' + rcBadgeClass(result.overallStatus);
+        rcShowMessage('rcHealthMsg', 'Health check selesai: ' + result.overallStatus, result.overallStatus === 'ERROR');
+      }).catch(error => rcShowMessage('rcHealthMsg', error.message, true));
+    }
+
+    function runBackup() {
+      rcShowMessage('rcHealthMsg', 'Membuat backup…', false);
+      rcCall('apiStartRcBackup').then(result => {
+        rcShowMessage('rcHealthMsg', 'Backup selesai: ' + result.fileCount + ' file, ' + result.folderCount + ' folder.', false);
+        loadDashboard();
+      }).catch(error => rcShowMessage('rcHealthMsg', error.message, true));
+    }
+
+    loadDashboard();
+  </script>
+</body>
+</html>

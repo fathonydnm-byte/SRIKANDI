@@ -1,0 +1,149 @@
+<!doctype html>
+<html>
+<head>
+  <base target="_top">
+  <?!= include('Styles'); ?>
+</head>
+<body>
+  <h1>Instalasi &amp; Reliability — Record Center</h1>
+  <div id="setupSummary" class="rc-hint">Memuat…</div>
+
+  <div class="rc-card">
+    <h2>1. Fondasi Instance (RC-00)</h2>
+    <label>Nama Record Center</label>
+    <input type="text" id="rcName" placeholder="Record Center Rektorat / Unit Kearsipan I UINSA">
+    <label>Nama administrator</label>
+    <input type="text" id="adminName">
+    <label>Email administrator (guard dashboard)</label>
+    <input type="email" id="adminEmail">
+    <label>Email admin tambahan (opsional, pisah koma)</label>
+    <input type="text" id="additionalAdminEmails">
+    <label>Lokasi default dokumen</label>
+    <input type="text" id="location" value="Surabaya">
+    <label>ID folder induk Record Center (folder Drive kosong yang sudah dibuat)</label>
+    <input type="text" id="rootFolderId" placeholder="ID folder, bukan URL lengkap">
+    <div class="rc-hint">
+      <label style="display:inline"><input type="checkbox" id="confirmRebind" style="width:auto"> Konfirmasi pengikatan ulang bila spreadsheet ini pernah terikat instance RC lain</label>
+    </div>
+    <button onclick="installInstance()">Pasang / Perbarui Instance</button>
+    <div id="installMsg" class="rc-msg" style="display:none"></div>
+  </div>
+
+  <div class="rc-card">
+    <h2>2. Daftarkan Sumber Central File</h2>
+    <p class="rc-hint">Instance ID diambil dari installer Central File unit tersebut (menu Arsip Aktif → Instalasi &amp; Reliability).</p>
+    <label>Instance ID Central File</label>
+    <input type="text" id="sourceId" placeholder="INS-xxxxxxxx-xxxx-...">
+    <label>Nama unit</label>
+    <input type="text" id="sourceUnitName" placeholder="Bagian Umum Kantor Pusat – Biro AUPK">
+    <label>Kode unit</label>
+    <input type="text" id="sourceUnitCode">
+    <label>Email administrator unit</label>
+    <input type="email" id="sourceAdminEmail">
+    <label>Catatan (opsional)</label>
+    <textarea id="sourceNotes" rows="2"></textarea>
+    <div class="rc-hint">
+      <label style="display:inline"><input type="checkbox" id="generateNewSecret" style="width:auto"> Terbitkan shared secret baru (wajib untuk pendaftaran pertama; centang ulang hanya jika sengaja rotasi secret — ini akan membatalkan secret lama)</label>
+    </div>
+    <button onclick="registerSource()">Daftarkan / Perbarui Sumber</button>
+    <div id="registerMsg" class="rc-msg" style="display:none"></div>
+    <div id="secretBox" style="display:none">
+      <div class="rc-hint"><strong>Salin shared secret ini SEKARANG.</strong> Tidak akan ditampilkan lagi setelah dialog ini ditutup. Masukkan ke installer Central File pada field shared secret Record Center.</div>
+      <div id="secretValue" class="rc-secret-box"></div>
+    </div>
+  </div>
+
+  <div class="rc-card">
+    <h2>Sumber Terdaftar</h2>
+    <table class="rc-table">
+      <thead><tr><th>Unit</th><th>Instance ID</th><th>Status</th><th></th></tr></thead>
+      <tbody id="sourceRows"></tbody>
+    </table>
+  </div>
+
+  <?!= include('Client'); ?>
+  <script>
+    function loadSetup() {
+      rcCall('apiGetInstanceSetup').then(setup => {
+        document.getElementById('setupSummary').textContent =
+          (setup.installed ? 'Instance sudah terpasang: ' : 'Belum terpasang. ') +
+          setup.spreadsheetName + ' (' + setup.spreadsheetId + ')' +
+          (setup.rebindRequired ? ' — PERINGATAN: spreadsheet ini masih terikat instance lain.' : '');
+        document.getElementById('rcName').value = setup.defaults.rcName;
+        document.getElementById('adminName').value = setup.defaults.adminName;
+        document.getElementById('adminEmail').value = setup.defaults.adminEmail;
+        document.getElementById('additionalAdminEmails').value = setup.defaults.additionalAdminEmails;
+        document.getElementById('location').value = setup.defaults.location;
+        document.getElementById('rootFolderId').value = setup.defaults.rootFolderId;
+        if (setup.installed) loadSources();
+      }).catch(error => rcShowMessage('installMsg', error.message, true));
+    }
+
+    function installInstance() {
+      const form = {
+        rcName: document.getElementById('rcName').value,
+        adminName: document.getElementById('adminName').value,
+        adminEmail: document.getElementById('adminEmail').value,
+        additionalAdminEmails: document.getElementById('additionalAdminEmails').value,
+        location: document.getElementById('location').value,
+        rootFolderId: document.getElementById('rootFolderId').value,
+        confirmRebind: document.getElementById('confirmRebind').checked
+      };
+      rcCall('apiInstallRecordCenterInstance', form).then(result => {
+        rcShowMessage('installMsg', result.message, false);
+        loadSetup();
+      }).catch(error => rcShowMessage('installMsg', error.message, true));
+    }
+
+    function registerSource() {
+      const form = {
+        sourceId: document.getElementById('sourceId').value,
+        unitName: document.getElementById('sourceUnitName').value,
+        unitCode: document.getElementById('sourceUnitCode').value,
+        adminEmail: document.getElementById('sourceAdminEmail').value,
+        notes: document.getElementById('sourceNotes').value,
+        generateNewSecret: document.getElementById('generateNewSecret').checked
+      };
+      rcCall('apiRegisterSource', form).then(result => {
+        rcShowMessage('registerMsg', result.message, false);
+        if (result.secretIssued) {
+          document.getElementById('secretBox').style.display = 'block';
+          document.getElementById('secretValue').textContent = result.secret;
+        } else {
+          document.getElementById('secretBox').style.display = 'none';
+        }
+        document.getElementById('generateNewSecret').checked = false;
+        loadSources();
+      }).catch(error => rcShowMessage('registerMsg', error.message, true));
+    }
+
+    function loadSources() {
+      rcCall('apiListSources').then(sources => {
+        const body = document.getElementById('sourceRows');
+        body.innerHTML = sources.length ? '' : '<tr><td colspan="4">Belum ada sumber terdaftar.</td></tr>';
+        sources.forEach(source => {
+          const tr = document.createElement('tr');
+          const actionLabel = source.status === 'AKTIF' ? 'Nonaktifkan' : 'Nonaktif';
+          tr.innerHTML = '<td>' + source.unitName + '</td><td>' + source.sourceId + '</td>' +
+            '<td><span class="rc-badge ' + (source.status === 'AKTIF' ? 'ok' : 'error') + '">' + source.status + '</span></td>' +
+            '<td>' + (source.status === 'AKTIF'
+              ? '<button class="secondary" onclick="deactivate(\'' + source.sourceId + '\')">Nonaktifkan</button>'
+              : '') + '</td>';
+          body.appendChild(tr);
+        });
+      }).catch(error => rcShowMessage('registerMsg', error.message, true));
+    }
+
+    function deactivate(sourceId) {
+      const reason = prompt('Alasan menonaktifkan sumber ' + sourceId + ' (minimal 10 karakter):');
+      if (!reason) return;
+      rcCall('apiDeactivateSource', {sourceId: sourceId, reason: reason}).then(result => {
+        rcShowMessage('registerMsg', result.message, false);
+        loadSources();
+      }).catch(error => rcShowMessage('registerMsg', error.message, true));
+    }
+
+    loadSetup();
+  </script>
+</body>
+</html>

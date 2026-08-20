@@ -1,0 +1,23 @@
+<script>
+  function rcCall(fnName, arg) {
+    return new Promise((resolve, reject) => {
+      google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(error => reject(new Error(error && error.message ? error.message : String(error))))
+        [fnName](arg);
+    });
+  }
+
+  function rcShowMessage(elementId, text, isError) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    el.textContent = text;
+    el.className = 'rc-msg ' + (isError ? 'error' : 'success');
+    el.style.display = 'block';
+  }
+
+  function rcBadgeClass(status) {
+    return String(status || '').toLowerCase() === 'ok' ? 'ok'
+      : (String(status || '').toLowerCase() === 'warning' ? 'warning' : 'error');
+  }
+</script>

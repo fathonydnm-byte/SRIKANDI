@@ -1,0 +1,64 @@
+<style>
+  :root {
+    --rc-navy: #143b5d;
+    --rc-navy-dark: #0d2740;
+    --rc-gold: #b8892b;
+    --rc-bg: #f4f7f9;
+    --rc-card: #ffffff;
+    --rc-border: #dbe4ea;
+    --rc-text: #17344c;
+    --rc-muted: #5b7186;
+    --rc-ok: #1b7a43;
+    --rc-warn: #b8892b;
+    --rc-error: #a4222f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: var(--rc-bg);
+    color: var(--rc-text);
+    margin: 0;
+    padding: 24px;
+  }
+  h1, h2, h3 { color: var(--rc-navy); margin-top: 0; }
+  .rc-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .rc-badge {
+    display: inline-block; padding: 3px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 600; letter-spacing: .02em;
+  }
+  .rc-badge.ok { background: #e4f4e9; color: var(--rc-ok); }
+  .rc-badge.warning { background: #fbf1de; color: var(--rc-warn); }
+  .rc-badge.error { background: #fbe6e8; color: var(--rc-error); }
+  .rc-card {
+    background: var(--rc-card); border: 1px solid var(--rc-border);
+    border-radius: 14px; padding: 20px; margin-bottom: 16px;
+  }
+  .rc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  table.rc-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.rc-table th, table.rc-table td {
+    text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--rc-border);
+  }
+  table.rc-table th { color: var(--rc-muted); font-weight: 600; }
+  label { display: block; font-size: 13px; color: var(--rc-muted); margin: 10px 0 4px; }
+  input[type=text], input[type=email], textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--rc-border);
+    border-radius: 8px; font-size: 14px; font-family: inherit;
+  }
+  button {
+    background: var(--rc-navy); color: white; border: none; border-radius: 8px;
+    padding: 9px 16px; font-size: 14px; cursor: pointer; margin-top: 12px;
+  }
+  button:hover { background: var(--rc-navy-dark); }
+  button.secondary { background: transparent; color: var(--rc-navy); border: 1px solid var(--rc-navy); }
+  .rc-hint { font-size: 12px; color: var(--rc-muted); margin-top: 4px; }
+  .rc-secret-box {
+    font-family: 'Courier New', monospace; background: #fbf1de; border: 1px dashed var(--rc-gold);
+    padding: 10px; border-radius: 8px; word-break: break-all; font-size: 13px; margin-top: 8px;
+  }
+  .rc-msg { padding: 10px 12px; border-radius: 8px; margin-top: 12px; font-size: 13px; }
+  .rc-msg.success { background: #e4f4e9; color: var(--rc-ok); }
+  .rc-msg.error { background: #fbe6e8; color: var(--rc-error); }
+</style>
