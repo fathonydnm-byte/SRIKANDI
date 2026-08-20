@@ -1,0 +1,4 @@
+node_modules/
+.clasp-credentials.json
+*.log
+.DS_Store

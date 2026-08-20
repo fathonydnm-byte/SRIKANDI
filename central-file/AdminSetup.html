@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <style>
+    :root{--navy:#143b5d;--navy2:#0f2e49;--green:#17805c;--gold:#caa54b;--red:#b42318;--ink:#172b3a;--muted:#657789;--line:#dbe4ea;--bg:#f4f7f9}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 Arial,sans-serif}
+    header{padding:20px 24px;background:linear-gradient(135deg,var(--navy2),var(--navy));color:#fff;border-bottom:4px solid var(--gold)}
+    header h1{margin:0 0 4px;font-size:22px}header p{margin:0;color:#d8e6ef}
+    main{padding:18px 22px 28px}
+    .tabs{display:flex;gap:8px;margin-bottom:14px}
+    .tab{border:1px solid var(--line);background:#fff;color:var(--navy);padding:9px 14px;border-radius:10px;font-weight:700;cursor:pointer}
+    .tab.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+    .panel{display:none}.panel.active{display:block}
+    .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:14px;box-shadow:0 4px 14px rgba(20,59,93,.05)}
+    h2{margin:0 0 4px;font-size:17px;color:var(--navy)}.sub{margin:0 0 15px;color:var(--muted)}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+    .span2{grid-column:1/-1}
+    label{display:flex;flex-direction:column;gap:5px;font-weight:700;color:#29465c}
+    input{width:100%;border:1px solid #c9d6df;border-radius:9px;padding:9px 10px;font:inherit;color:var(--ink);background:#fff}
+    input:focus{outline:3px solid rgba(23,128,92,.13);border-color:var(--green)}
+    small{font-weight:400;color:var(--muted)}
+    .check{display:flex;flex-direction:row;align-items:flex-start;gap:8px;font-weight:500;padding:10px;border-radius:9px;background:#fff6df;border:1px solid #ead39a}
+    .check input{width:auto;margin-top:3px}
+    .connection-heading{margin-top:8px;padding-top:14px;border-top:1px solid var(--line)}
+    .connection-heading strong{display:block;color:var(--navy);font-size:16px}.connection-heading span{color:var(--muted);font-size:12px}
+    .actions{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px;flex-wrap:wrap}
+    button{border:0;border-radius:9px;padding:10px 14px;font-weight:700;cursor:pointer}
+    button:disabled{opacity:.55;cursor:wait}.primary{background:var(--green);color:#fff}.secondary{background:#eaf0f4;color:var(--navy)}.danger{background:#fce8e6;color:var(--red)}
+    .status{min-height:22px;color:var(--muted)}.status.error{color:var(--red)}.status.success{color:var(--green)}
+    .instance{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}.metric{padding:12px;border-radius:10px;background:#f6f9fb;border:1px solid var(--line)}.metric span{display:block;color:var(--muted);font-size:12px}.metric strong{display:block;margin-top:3px;color:var(--navy);word-break:break-word}
+    .health{display:grid;gap:8px}.health-row{display:grid;grid-template-columns:110px 1fr;gap:10px;padding:10px;border:1px solid var(--line);border-radius:9px}.badge{display:inline-flex;justify-content:center;align-items:center;width:82px;height:24px;border-radius:999px;font-size:11px;font-weight:800}.badge.OK,.badge.COMPLETE{background:#dff4e9;color:#11633f}.badge.WARNING,.badge.RUNNING{background:#fff2cf;color:#805c05}.badge.ERROR,.badge.FAILED{background:#fde8e6;color:#9d2218}
+    table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{color:var(--navy);background:#f6f9fb}
+    a{color:var(--green);font-weight:700}.empty{color:var(--muted);padding:12px 0}
+    @media(max-width:700px){.grid,.instance{grid-template-columns:1fr}.span2{grid-column:auto}}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Reliability &amp; Multi-unit Setup</h1>
+    <p>Satu paket kode untuk setiap instance unit—konfigurasi disimpan di luar source code.</p>
+  </header>
+  <main>
+    <div class="tabs">
+      <button class="tab active" data-tab="setup">Konfigurasi Unit</button>
+      <button class="tab" data-tab="health">Health &amp; Backup</button>
+    </div>
+
+    <section id="setupPanel" class="panel active">
+      <form id="setupForm" class="card">
+        <h2>Identitas instance</h2>
+        <p class="sub">Gunakan spreadsheet template dan folder institusional milik unit. Tidak ada file kode yang perlu diubah.</p>
+        <div class="grid">
+          <label>ID unit *
+            <input id="unitId" required maxlength="50" placeholder="UINSA-BAGUM">
+            <small>Unik lintas unit; huruf, angka, tanda - atau _.</small>
+          </label>
+          <label>Kode singkat unit *
+            <input id="unitCode" required maxlength="30" placeholder="BAGUM">
+            <small>Dipakai pada nama backup.</small>
+          </label>
+          <label class="span2">Nama resmi unit *
+            <input id="unitName" required maxlength="250" placeholder="Bagian Umum Kantor Pusat">
+          </label>
+          <label>Nama administrator *
+            <input id="administratorName" required maxlength="250">
+          </label>
+          <label>Email administrator *
+            <input id="administratorEmail" type="email" required maxlength="250">
+          </label>
+          <label>Nama penerima default
+            <input id="receiverName" maxlength="250">
+          </label>
+          <label>Unit penerima default
+            <input id="receiverUnit" maxlength="250">
+          </label>
+          <label>Lokasi dokumen
+            <input id="location" maxlength="100" value="Surabaya">
+          </label>
+          <label class="span2">ID folder induk unit *
+            <input id="unitRootFolderId" required maxlength="200" placeholder="Tempel ID folder Google Drive">
+            <small>Installer membuat 01 ARSIP AKTIF, 90 KARANTINA APLIKASI, dan 99 BACKUP APLIKASI di dalamnya.</small>
+          </label>
+          <div class="connection-heading span2">
+            <strong>Koneksi Record Center (opsional pada tahap Central File)</strong>
+            <span>Biarkan detail teknis kosong sampai aplikasi Record Center selesai dipasang. Paket CF-06 tetap tersimpan aman di outbox.</span>
+          </div>
+          <label>Nama Record Center
+            <input id="recordCenterName" maxlength="250" value="Record Center Rektorat / Unit Kearsipan I">
+          </label>
+          <label>Email Record Center
+            <input id="recordCenterEmail" type="email" maxlength="250">
+          </label>
+          <label>ID instance Record Center
+            <input id="recordCenterInstanceId" maxlength="150" placeholder="Diisi dari installer aplikasi Record Center">
+          </label>
+          <label>URL Web App Record Center
+            <input id="recordCenterEndpointUrl" type="url" maxlength="1000" placeholder="https://script.google.com/macros/s/.../exec">
+          </label>
+          <label class="span2">Shared secret koneksi
+            <input id="recordCenterSharedSecret" type="password" maxlength="500" autocomplete="new-password" placeholder="Kosongkan untuk mempertahankan nilai lama">
+            <small id="recordCenterSecretStatus">Minimal 32 karakter; jangan dikirim melalui chat atau ditulis pada source code.</small>
+          </label>
+          <label id="rebindWrap" class="check span2" hidden>
+            <input id="confirmRebind" type="checkbox">
+            <span>Spreadsheet ini merupakan salinan baru. Ikat ulang instance dan jangan gunakan konfigurasi spreadsheet asal.</span>
+          </label>
+        </div>
+        <div class="actions">
+          <span id="setupStatus" class="status">Memuat konfigurasi…</span>
+          <button id="installButton" class="primary" type="submit">Instal / Perbarui Instance</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="healthPanel" class="panel">
+      <div class="card">
+        <h2>Status instance</h2>
+        <p class="sub">Health check tidak mengubah data arsip.</p>
+        <div id="instanceSummary" class="instance"></div>
+        <div class="actions">
+          <span id="healthStatus" class="status"></span>
+          <div>
+            <button id="refreshHealth" class="secondary" type="button">Jalankan Health Check</button>
+            <button id="verifyBackup" class="secondary" type="button">Verifikasi Backup Terakhir</button>
+            <button id="createTemplate" class="secondary" type="button">Buat Template Distribusi</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Hasil pemeriksaan</h2>
+        <div id="healthResults" class="health"><div class="empty">Belum ada hasil.</div></div>
+      </div>
+      <div class="card">
+        <h2>Backup</h2>
+        <p class="sub">Backup metadata menyalin spreadsheet dan membuat manifest Drive. Backup penuh juga menyalin file secara bertahap.</p>
+        <div class="actions">
+          <span id="backupStatus" class="status"></span>
+          <div>
+            <button id="metadataBackup" class="primary" type="button">Backup Metadata Sekarang</button>
+            <button id="fullBackup" class="secondary" type="button">Mulai Backup Penuh</button>
+          </div>
+        </div>
+        <div style="overflow:auto;margin-top:14px">
+          <table>
+            <thead><tr><th>Waktu</th><th>Jenis</th><th>Status</th><th>File</th><th>Salinan</th><th>Folder</th></tr></thead>
+            <tbody id="backupRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script>
+    const $=id=>document.getElementById(id);
+    let dashboard=null;
+    document.querySelectorAll('[data-tab]').forEach(button=>button.addEventListener('click',()=>{
+      document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===button));
+      document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+      $(button.dataset.tab+'Panel').classList.add('active');
+      if(button.dataset.tab==='health')loadDashboard();
+    }));
+    function server(name,...args){
+      return new Promise((resolve,reject)=>google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(error=>reject(new Error(error.message||error)))[name](...args));
+    }
+    function setBusy(button,busy){button.disabled=busy}
+    function setStatus(element,text,type){
+      element.textContent=text||'';
+      element.className='status'+(type?' '+type:'');
+    }
+    async function loadInitialSetup(){
+      setStatus($('setupStatus'),'Memuat konfigurasi…');
+      try{
+        const setup=await server('apiGetUnitSetup');
+        renderSetup(setup);
+      }catch(error){
+        setStatus($('setupStatus'),error.message,'error');
+      }
+    }
+    async function loadDashboard(){
+      setStatus($('healthStatus'),'Memuat status…');
+      try{
+        dashboard=await server('apiGetReliabilityDashboard');
+        renderSetup(dashboard.setup);
+        renderDashboard(dashboard);
+        setStatus($('healthStatus'),dashboard.installed?'Status berhasil dimuat.':'Instance belum dipasang.',dashboard.installed?'success':'error');
+      }catch(error){
+        setStatus($('healthStatus'),error.message,'error');
+        setStatus($('setupStatus'),'Pemeriksaan health gagal: '+error.message,'error');
+      }
+    }
+    function renderSetup(setup){
+      if(!setup)return;
+      const d=setup.defaults||{};
+      ['unitId','unitCode','unitName','administratorName','administratorEmail','receiverName','receiverUnit','location','unitRootFolderId','recordCenterName','recordCenterEmail','recordCenterInstanceId','recordCenterEndpointUrl']
+        .forEach(id=>{if(d[id]!==undefined&&d[id]!==null)$(id).value=d[id]});
+      $('recordCenterSharedSecret').value='';
+      $('recordCenterSecretStatus').textContent=d.recordCenterSecretConfigured
+        ?'Shared secret sudah tersimpan. Kosongkan untuk mempertahankan nilai lama.'
+        :'Belum dikonfigurasi. Minimal 32 karakter dan diisi setelah aplikasi Record Center dipasang.';
+      $('rebindWrap').hidden=!setup.rebindRequired;
+      setStatus($('setupStatus'),setup.installed
+        ?'Instance terpasang pada '+setup.spreadsheetName+' · rilis '+setup.release.VERSION
+        :'Lengkapi data lalu jalankan installer.',setup.installed?'success':'');
+    }
+    function renderDashboard(data){
+      if(!data||!data.installed){
+        $('instanceSummary').innerHTML='<div class="empty">Instance belum dipasang.</div>';
+        $('healthResults').innerHTML='<div class="empty">Jalankan installer terlebih dahulu.</div>';
+        $('backupRows').innerHTML='';
+        return;
+      }
+      const i=data.instance||{};
+      $('instanceSummary').innerHTML=[
+        ['Unit',i.unitName||'–'],['Instance',i.instanceId||'–'],
+        ['Rilis',i.releaseVersion||'–'],['Schema',i.schemaVersion||'–']
+      ].map(x=>'<div class="metric"><span>'+escapeHtml(x[0])+'</span><strong>'+escapeHtml(x[1])+'</strong></div>').join('');
+      renderHealth(data.health);
+      const rows=data.backups||[];
+      $('backupRows').innerHTML=rows.length?rows.map(row=>'<tr>'+
+        '<td>'+escapeHtml(row.completedAt||row.startedAt||'–')+'</td>'+
+        '<td>'+escapeHtml(row.type)+'</td>'+
+        '<td><span class="badge '+escapeHtml(row.status)+'">'+escapeHtml(row.status)+'</span></td>'+
+        '<td>'+Number(row.fileCount||0)+'</td>'+
+        '<td>'+Number(row.copiedFileCount||0)+'</td>'+
+        '<td>'+(row.folderUrl?'<a href="'+encodeURI(row.folderUrl)+'" target="_blank">Buka</a>':'–')+'</td>'+
+        '</tr>').join(''):'<tr><td colspan="6" class="empty">Belum ada backup.</td></tr>';
+      $('metadataBackup').disabled=Boolean(data.runningBackup);
+      $('fullBackup').disabled=Boolean(data.runningBackup);
+      if(data.runningBackup)setStatus($('backupStatus'),'Satu backup sedang berjalan dan dilanjutkan otomatis.');
+    }
+    function renderHealth(health){
+      const rows=health&&health.checks||[];
+      $('healthResults').innerHTML=rows.length?rows.map(row=>
+        '<div class="health-row"><div><span class="badge '+escapeHtml(row.status)+'">'+escapeHtml(row.status)+'</span></div>'+
+        '<div><strong>'+escapeHtml(row.code)+'</strong><br>'+escapeHtml(row.detail)+'</div></div>'
+      ).join(''):'<div class="empty">Belum ada hasil.</div>';
+    }
+    $('setupForm').addEventListener('submit',async event=>{
+      event.preventDefault();
+      const button=$('installButton');setBusy(button,true);setStatus($('setupStatus'),'Memasang dan memeriksa instance…');
+      const payload={
+        unitId:$('unitId').value,unitCode:$('unitCode').value,unitName:$('unitName').value,
+        administratorName:$('administratorName').value,administratorEmail:$('administratorEmail').value,
+        receiverName:$('receiverName').value,receiverUnit:$('receiverUnit').value,
+        location:$('location').value,unitRootFolderId:$('unitRootFolderId').value,
+        recordCenterName:$('recordCenterName').value,
+        recordCenterEmail:$('recordCenterEmail').value,
+        recordCenterInstanceId:$('recordCenterInstanceId').value,
+        recordCenterEndpointUrl:$('recordCenterEndpointUrl').value,
+        recordCenterSharedSecret:$('recordCenterSharedSecret').value,
+        confirmRebind:$('confirmRebind').checked
+      };
+      try{
+        const result=await server('apiInstallUnitInstance',payload);
+        setStatus($('setupStatus'),result.message,'success');
+        await loadDashboard();
+      }catch(error){setStatus($('setupStatus'),error.message,'error')}
+      finally{setBusy(button,false)}
+    });
+    $('refreshHealth').addEventListener('click',async()=>{
+      const button=$('refreshHealth');setBusy(button,true);setStatus($('healthStatus'),'Menjalankan health check…');
+      try{const health=await server('apiRunReliabilityHealthCheck');renderHealth(health);setStatus($('healthStatus'),'Health check: '+health.overallStatus,health.overallStatus==='ERROR'?'error':'success')}
+      catch(error){setStatus($('healthStatus'),error.message,'error')}finally{setBusy(button,false)}
+    });
+    async function startBackup(type,button){
+      setBusy(button,true);setStatus($('backupStatus'),'Menyiapkan '+type+'…');
+      try{
+        const result=await server('apiStartReliabilityBackup',{backupType:type});
+        setStatus($('backupStatus'),result.message,'success');
+        await loadDashboard();
+      }catch(error){setStatus($('backupStatus'),error.message,'error')}finally{setBusy(button,false)}
+    }
+    $('metadataBackup').addEventListener('click',()=>startBackup('METADATA_MANIFEST',$('metadataBackup')));
+    $('fullBackup').addEventListener('click',()=>startBackup('FULL_COPY',$('fullBackup')));
+    $('verifyBackup').addEventListener('click',async()=>{
+      const button=$('verifyBackup');setBusy(button,true);setStatus($('healthStatus'),'Memverifikasi backup terakhir…');
+      try{const result=await server('apiVerifyReliabilityBackup','');setStatus($('healthStatus'),result.message,result.ok?'success':'error')}
+      catch(error){setStatus($('healthStatus'),error.message,'error')}finally{setBusy(button,false)}
+    });
+    $('createTemplate').addEventListener('click',async()=>{
+      const button=$('createTemplate');setBusy(button,true);setStatus($('healthStatus'),'Membuat salinan template bersih…');
+      try{
+        const result=await server('apiCreateDistributionTemplate');
+        setStatus($('healthStatus'),result.message,'success');
+        window.open(result.fileUrl,'_blank');
+      }catch(error){setStatus($('healthStatus'),error.message,'error')}finally{setBusy(button,false)}
+    });
+    function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]))}
+    loadInitialSetup();
+  </script>
+</body>
+</html>

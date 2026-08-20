@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <base target="_top">
+  <?!= include('Styles'); ?>
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">A</span>
+        <div><strong>Arsip Aktif</strong><small id="instanceUnitName">Memuat unit…</small></div>
+      </div>
+      <nav>
+        <button class="nav-button active" data-page="dashboard">Dashboard</button>
+        <button class="nav-button" data-page="receipts">Penerimaan Arsip</button>
+        <button class="nav-button" data-page="input">Input Arsip</button>
+        <button class="nav-button" data-page="media">Alih Media</button>
+        <button class="nav-button" data-page="edit">Edit Arsip</button>
+        <button class="nav-button" data-page="deletion">Koreksi &amp; Pembatalan</button>
+        <button class="nav-button" data-page="search">Cari Arsip</button>
+        <button class="nav-button" data-page="labels">Cetak Lidah Folder</button>
+        <button class="nav-button" data-page="retention">Usul Pemindahan</button>
+        <button class="nav-button" data-page="loans">Peminjaman</button>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div><h1 id="pageTitle">Dashboard</h1><p id="pageSubtitle">Ringkasan kondisi arsip Anda.</p></div>
+        <div id="userBadge" class="user-badge">Memuat…</div>
+      </header>
+
+      <section id="dashboardPage" class="page active">
+        <div class="stat-grid">
+          <article class="stat-card"><span>Total Berkas</span><strong id="statBerkas">–</strong></article>
+          <article class="stat-card"><span>Total Item</span><strong id="statItem">–</strong></article>
+          <article class="stat-card"><span>Sedang Dipinjam</span><strong id="statLoan">–</strong></article>
+          <article class="stat-card warning"><span>Retensi H-7</span><strong id="statDue">–</strong></article>
+          <article class="stat-card danger"><span>Habis Aktif</span><strong id="statExpired">–</strong></article>
+        </div>
+        <div class="empty-state"><h2>Input berkas dan item dalam satu layar</h2><p>Buat berkas baru atau lanjutkan input item pada berkas yang sudah ada.</p><button class="primary" data-go="input">Mulai Input Arsip</button></div>
+      </section>
+
+      <section id="receiptsPage" class="page">
+        <div class="receipt-stat-grid">
+          <article class="stat-card"><span>Total Tanda Terima</span><strong id="receiptStatTotal">–</strong></article>
+          <article class="stat-card success"><span>Aktif</span><strong id="receiptStatActive">–</strong></article>
+          <article class="stat-card"><span>Bukti Tertandatangani</span><strong id="receiptStatEvidence">–</strong></article>
+          <article class="stat-card danger"><span>Dibatalkan</span><strong id="receiptStatCancelled">–</strong></article>
+        </div>
+
+        <form id="receiptForm" class="form-card receipt-form-card">
+          <input type="hidden" id="receiptId">
+          <div class="section-heading">
+            <div>
+              <h2 id="receiptFormTitle">Catat Penerimaan Arsip</h2>
+              <p>Satu tanda terima dapat memuat beberapa item arsip fisik. Tanggal dan jam dicatat otomatis oleh server.</p>
+            </div>
+            <button type="button" id="resetReceiptForm" class="secondary">Bersihkan Form</button>
+          </div>
+          <div class="info-panel">
+            <strong>Registrasi awal dan bukti penerimaan</strong>
+            <span>Metadata item—termasuk klasifikasi keamanan dan akses—dicatat sejak diterima. Tanda terima cetak tetap menampilkan uraian, halaman, tingkat perkembangan, dan kondisi.</span>
+          </div>
+
+          <div class="section-heading compact"><div><h2>Penyerah dan Penerima</h2></div></div>
+          <div class="form-grid">
+            <label class="field">Pegawai penyerah *
+              <div class="receipt-inline-control">
+                <select id="receiptSenderEmployee" required>
+                  <option value="">Memuat Master Pegawai…</option>
+                </select>
+                <button type="button" id="openEmployeeModal" class="secondary">+ Pegawai</button>
+              </div>
+              <small class="helper">Khusus pegawai internal UINSA. Pegawai baru dapat ditambahkan langsung dari sini.</small>
+            </label>
+            <div id="receiptSenderInfo" class="loan-object-info">Pilih pegawai yang menyerahkan arsip.</div>
+            <label class="field">Nama penerima arsip *
+              <input id="receiptReceiverName" maxlength="250" required autocomplete="off">
+            </label>
+            <label class="field">Unit kerja penerima *
+              <input id="receiptReceiverUnit" maxlength="250" required autocomplete="off">
+            </label>
+            <label class="field span-2">Catatan umum penerimaan (opsional)
+              <textarea id="receiptNotes" rows="3" maxlength="2000" placeholder="Catatan yang berlaku untuk seluruh item pada tanda terima ini…"></textarea>
+            </label>
+          </div>
+
+          <div class="section-heading compact receipt-items-heading">
+            <div>
+              <h2>Daftar Item Arsip</h2>
+              <p>Satu baris mewakili satu item arsip.</p>
+            </div>
+            <button type="button" id="addReceiptItem" class="secondary">+ Tambah Item</button>
+          </div>
+          <div id="receiptItems" class="receipt-items"></div>
+          <div id="receiptTotals" class="receipt-totals">0 item · 0 halaman</div>
+
+          <div class="form-actions">
+            <span id="receiptFormStatus" aria-live="polite">Lengkapi data penerimaan.</span>
+            <button type="submit" id="saveReceipt" class="primary">Simpan &amp; Buat PDF</button>
+          </div>
+        </form>
+
+        <section class="form-card receipt-history-card">
+          <div class="section-heading">
+            <div>
+              <h2>Riwayat Tanda Terima</h2>
+              <p>Cari, cetak ulang, unggah bukti tertandatangani, edit, atau batalkan secara terkendali.</p>
+            </div>
+            <button type="button" id="refreshReceipts" class="secondary">Segarkan Data</button>
+          </div>
+          <div class="receipt-toolbar">
+            <label class="field">Cari tanda terima
+              <input id="receiptSearch" autocomplete="off" maxlength="250" placeholder="Nomor, nama, unit, uraian, atau penerima">
+            </label>
+            <label class="field">Status
+              <select id="receiptStatusFilter">
+                <option value="ALL">Semua status</option>
+                <option value="AKTIF">Aktif</option>
+                <option value="WITH_EVIDENCE">Sudah ada bukti</option>
+                <option value="WITHOUT_EVIDENCE">Belum ada bukti</option>
+                <option value="DIBATALKAN">Dibatalkan</option>
+              </select>
+            </label>
+          </div>
+          <div id="receiptTableEmpty" class="search-empty">Memuat tanda terima…</div>
+          <div id="receiptTableWrap" class="receipt-table-wrap" hidden>
+            <table class="receipt-table">
+              <thead>
+                <tr>
+                  <th>Nomor &amp; Waktu</th>
+                  <th>Penyerah / Penerima</th>
+                  <th>Item Arsip</th>
+                  <th>Status &amp; Bukti</th>
+                  <th>Tindakan</th>
+                </tr>
+              </thead>
+              <tbody id="receiptResultsBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <form id="receiptEvidenceForm" class="form-card receipt-evidence-card" hidden>
+          <input type="hidden" id="receiptEvidenceId">
+          <div class="section-heading">
+            <div>
+              <h2>Upload Tanda Terima Tertandatangani</h2>
+              <p id="receiptEvidenceTitle">Pilih tanda terima dari tabel.</p>
+            </div>
+            <button type="button" id="cancelReceiptEvidence" class="secondary">Batal</button>
+          </div>
+          <div class="form-grid">
+            <label class="field span-2">PDF tanda terima tertandatangani *
+              <input id="receiptEvidenceFile" type="file" accept="application/pdf,.pdf" required>
+              <small class="helper">PDF maksimal 10 MB. File disimpan di folder BUKTI PENERIMAAN ARSIP.</small>
+            </label>
+          </div>
+          <div class="form-actions">
+            <span id="receiptEvidenceStatus" aria-live="polite"></span>
+            <button type="submit" id="uploadReceiptEvidence" class="primary">Upload Bukti</button>
+          </div>
+        </form>
+
+        <form id="receiptCancelForm" class="form-card receipt-cancel-card" hidden>
+          <input type="hidden" id="cancelReceiptId">
+          <div class="section-heading">
+            <div>
+              <h2>Batalkan Tanda Terima</h2>
+              <p id="receiptCancelTitle">Pilih tanda terima aktif dari tabel.</p>
+            </div>
+            <button type="button" id="closeReceiptCancel" class="secondary">Batal</button>
+          </div>
+          <div class="danger-panel">
+            <strong>Jejak bukti dipertahankan</strong>
+            <span>Tanda terima tidak dihapus. Status menjadi DIBATALKAN, alasan dicatat, dan bukti tertandatangani yang sudah ada tetap disimpan.</span>
+          </div>
+          <div class="form-grid">
+            <label class="field span-2">Alasan pembatalan *
+              <textarea id="receiptCancelReason" rows="4" minlength="10" maxlength="2000" required></textarea>
+              <small class="helper">Minimal 10 karakter.</small>
+            </label>
+            <label class="field span-2">Bukti pembatalan (opsional)
+              <input id="receiptCancelProof" type="file" accept="application/pdf,.pdf">
+              <small class="helper">PDF maksimal 10 MB.</small>
+            </label>
+            <label class="field span-2">Konfirmasi *
+              <input id="receiptCancelConfirmation" autocomplete="off" required placeholder="Ketik BATALKAN">
+            </label>
+          </div>
+          <div class="form-actions">
+            <span id="receiptCancelStatus" aria-live="polite"></span>
+            <button type="submit" id="confirmReceiptCancel" class="danger-button">Batalkan Tanda Terima</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="inputPage" class="page">
+        <form id="archiveForm" class="form-card" enctype="multipart/form-data">
+          <input type="hidden" id="inputSourceMode" value="RECEIPT">
+          <input type="hidden" id="berkasMode" name="berkasMode" value="EXISTING">
+          <input type="hidden" id="newBerkasId" name="newBerkasId">
+          <input type="hidden" id="previewItemId" name="previewItemId">
+          <input type="hidden" id="previewCreatedAt" name="previewCreatedAt">
+
+          <div class="section-heading">
+            <div><h2>Sumber Registrasi Item</h2><p>Pilih item yang sudah diregistrasi saat penerimaan, atau gunakan input manual untuk arsip lama.</p></div>
+            <button type="button" id="refreshReceiptFiling" class="secondary">Segarkan Antrean</button>
+          </div>
+          <div class="mode-switch" id="inputSourceModeSwitch" role="group" aria-label="Sumber registrasi item">
+            <button type="button" id="chooseReceiptSource" class="mode-button active">Dari Penerimaan Arsip</button>
+            <button type="button" id="chooseManualSource" class="mode-button">Input Manual</button>
+          </div>
+          <div id="receiptFilingSection">
+            <div class="receipt-filing-toolbar">
+              <label class="field">Cari item penerimaan
+                <input id="receiptFilingSearch" autocomplete="off" maxlength="250" placeholder="Nomor tanda terima, penyerah, nomor surat, atau uraian">
+              </label>
+              <div id="receiptFilingStats" class="receipt-filing-stats">Memuat antrean…</div>
+            </div>
+            <div id="receiptFilingEmpty" class="empty-state">Memuat item penerimaan yang belum diberkaskan…</div>
+            <div id="receiptFilingTableWrap" class="table-wrap" hidden>
+              <table class="receipt-filing-table">
+                <thead><tr><th>Pilih</th><th>Tanda Terima</th><th>Tanggal / Nomor</th><th>Uraian</th><th>Detail</th></tr></thead>
+                <tbody id="receiptFilingBody"></tbody>
+              </table>
+            </div>
+            <div id="receiptFilingSelected" class="receipt-filing-selected">Belum ada item dipilih.</div>
+          </div>
+
+          <div class="section-heading">
+            <div><h2>Pilih Berkas Induk</h2><p>Metadata berkas cukup diisi sekali. Setelah menyimpan, Anda dapat langsung memasukkan item berikutnya.</p></div>
+            <button type="button" id="changeBerkas" class="secondary" hidden>Ganti / Buat Berkas</button>
+          </div>
+          <div class="mode-switch" id="berkasModeSwitch" role="group" aria-label="Mode berkas">
+            <button type="button" id="chooseExisting" class="mode-button active">Pilih Berkas yang Ada</button>
+            <button type="button" id="chooseNew" class="mode-button">Buat Berkas Baru</button>
+          </div>
+          <div id="existingBerkasSection" class="form-grid">
+            <label class="field span-2">Berkas induk *<select id="itemBerkasId" name="berkasId"><option value="">Pilih berkas induk</option></select><small id="berkasInfo" class="helper"></small></label>
+          </div>
+          <div id="lockedBerkasSummary" class="locked-summary" hidden></div>
+          <div id="uploadBanner" class="upload-banner" hidden aria-live="polite"><span id="uploadMessage"></span><button type="button" id="retryUpload" class="secondary" hidden>Coba Upload Lagi</button></div>
+
+          <div id="newBerkasSection" hidden>
+            <div class="section-heading compact"><div><h2>Identitas Berkas Baru</h2><p>Kolom ini dikunci setelah item pertama berhasil disimpan.</p></div></div>
+            <div class="form-grid">
+              <label class="field span-2">Judul berkas *<input id="title" name="title" autocomplete="off" maxlength="500"></label>
+            </div>
+            <div class="section-heading compact"><div><h2>Kode Klasifikasi</h2><p>Pilih sampai tingkat terakhir yang tersedia.</p></div></div>
+            <div class="form-grid three">
+              <label class="field">Primer *<select id="primaryClass"></select></label>
+              <label class="field">Sekunder<select id="secondaryClass" disabled></select></label>
+              <label class="field">Tersier<select id="tertiaryClass" disabled></select></label>
+            </div>
+            <input type="hidden" id="classificationId" name="classificationId">
+
+            <div class="section-heading compact"><div><h2>Retensi Manual</h2><p>Ditetapkan sekali pada tingkat berkas induk.</p></div></div>
+            <div class="form-grid three">
+              <label class="field">Retensi aktif *<div class="input-pair"><input id="activeRetentionValue" name="activeRetentionValue" type="number" min="0" step="1"><select id="activeRetentionUnit" name="activeRetentionUnit"><option>TAHUN</option><option>BULAN</option></select></div></label>
+              <label class="field">Retensi inaktif *<div class="input-pair"><input id="inactiveRetentionValue" name="inactiveRetentionValue" type="number" min="0" step="1"><select id="inactiveRetentionUnit" name="inactiveRetentionUnit"><option>TAHUN</option><option>BULAN</option></select></div></label>
+              <label class="field">Nasib akhir *<select id="finalDisposition" name="finalDisposition"><option value="">Pilih nasib akhir</option><option>MUSNAH</option><option>PERMANEN</option><option>DINILAI KEMBALI</option></select></label>
+            </div>
+
+            <div class="section-heading compact"><div><h2>Lokasi Fisik</h2></div></div>
+            <div class="form-grid three">
+              <label class="field">No. Filling Cabinet<input id="filingCabinet" name="filingCabinet" autocomplete="off"></label>
+              <label class="field">No. Laci<input id="drawer" name="drawer" autocomplete="off"></label>
+              <label class="field">No. Folder<input value="Otomatis mengikuti No. Berkas" disabled></label>
+              <label class="field span-3">Catatan berkas<textarea id="berkasNotes" name="berkasNotes" rows="2" maxlength="1000"></textarea></label>
+            </div>
+          </div>
+
+          <div id="manualItemSection" hidden>
+            <div class="section-heading item-heading"><div><h2>Daftar Isi Berkas / Item Arsip</h2><p id="itemSequenceHint">Isi metadata item. PDF alih media dapat diunggah sekarang atau dilengkapi kemudian.</p></div><button type="button" id="clearItemFields" class="secondary">Bersihkan Item</button></div>
+            <div class="form-grid">
+              <label class="field">Nomor surat utama<input id="primaryLetterNumber" name="primaryLetterNumber" autocomplete="off" placeholder="Nomor UINSA"></label>
+              <label class="field">Nomor alternatif/vendor<input id="alternateLetterNumber" name="alternateLetterNumber" autocomplete="off"></label>
+              <label class="field">Tanggal naskah *<input id="documentDate" name="documentDate" type="date" required></label>
+              <label class="field">Jumlah halaman *<input id="pageCount" name="pageCount" type="number" min="1" step="1" required></label>
+              <label class="field">Tingkat perkembangan *<select id="developmentLevel" name="developmentLevel" required><option value="ASLI">Asli</option><option value="COPY">Copy</option></select></label>
+              <label class="field">Klasifikasi keamanan dan akses *
+                <select id="securityClassification" name="securityClassification" required>
+                  <option value="BIASA/TERBUKA">Biasa/Terbuka</option>
+                  <option value="TERBATAS">Terbatas</option>
+                  <option value="RAHASIA">Rahasia</option>
+                  <option value="SANGAT RAHASIA">Sangat Rahasia</option>
+                </select>
+                <small class="helper">Tingkat keamanan berkas mengikuti item yang paling ketat.</small>
+              </label>
+              <label class="field span-2">Uraian informasi arsip *<textarea id="itemDescription" name="description" rows="4" maxlength="2000" required></textarea><small class="helper">Uraian lengkap disimpan di database; sistem membuat versi nama file yang aman.</small></label>
+              <label class="field span-2">PDF alih media (opsional)<input id="pdfFile" name="pdfFile" type="file" accept="application/pdf,.pdf"><small class="helper">Ukuran harus kurang dari 100 MB. Kosongkan agar metadata langsung tersimpan; PDF dapat dilengkapi melalui menu Alih Media.</small></label>
+              <label class="field span-2">Catatan item<textarea id="itemNotes" name="itemNotes" rows="2" maxlength="1000"></textarea></label>
+            </div>
+          </div>
+          <div class="form-actions"><span id="formStatus" aria-live="polite"></span><button type="submit" id="saveItem" class="primary">Berkaskan Item Terpilih</button></div>
+        </form>
+      </section>
+
+      <section id="mediaPage" class="page">
+        <form id="mediaForm" class="form-card" enctype="multipart/form-data">
+          <div class="section-heading">
+            <div><h2>Upload Alih Media</h2><p>Lengkapi PDF untuk item yang sebelumnya disimpan tanpa file alih media.</p></div>
+          </div>
+          <div class="info-panel">
+            <strong>Nomor dan nama file otomatis</strong>
+            <span>Sistem memakai nomor berkas, nomor item, dan uraian terbaru. Item yang sudah memiliki PDF dikelola melalui menu Edit Arsip.</span>
+          </div>
+          <div class="form-grid">
+            <label class="field">Berkas induk *
+              <select id="mediaBerkasId" required><option value="">Memuat daftar berkas…</option></select>
+            </label>
+            <label class="field">Item tanpa PDF *
+              <select id="mediaItemId" required><option value="">Pilih berkas terlebih dahulu</option></select>
+            </label>
+            <div id="mediaItemInfo" class="deletion-impact span-2">Pilih item yang akan dilengkapi alih medianya.</div>
+            <label class="field span-2">PDF alih media *
+              <input id="mediaPdf" type="file" accept="application/pdf,.pdf" required>
+              <small class="helper">PDF harus kurang dari 100 MB. Upload dikirim bertahap dan dapat dilanjutkan bila koneksi terputus.</small>
+            </label>
+          </div>
+          <div class="form-actions"><span id="mediaStatus" aria-live="polite"></span><button type="submit" id="uploadMedia" class="primary">Upload Alih Media</button></div>
+        </form>
+      </section>
+
+      <section id="searchPage" class="page">
+        <form id="searchForm" class="form-card">
+          <div class="section-heading">
+            <div><h2>Cari Arsip</h2><p>Temukan item berdasarkan nomor surat, uraian, judul berkas, kode klasifikasi, atau lokasi fisik.</p></div>
+            <button type="button" id="resetSearch" class="secondary">Bersihkan Filter</button>
+          </div>
+          <div class="form-grid">
+            <label class="field span-2">Kata kunci
+              <input id="searchQuery" autocomplete="off" maxlength="250" placeholder="Contoh: B-523, renovasi kantin, CV Abandira, atau KS.01.1">
+              <small class="helper">Beberapa kata akan dicocokkan bersama. Nomor surat utama dan nomor vendor sama-sama dapat dicari.</small>
+            </label>
+          </div>
+          <div class="form-grid three search-filters">
+            <label class="field">Tanggal naskah mulai<input id="searchDateFrom" type="date"></label>
+            <label class="field">Tanggal naskah sampai<input id="searchDateTo" type="date"></label>
+            <label class="field">Kode klasifikasi<input id="searchClassification" autocomplete="off" maxlength="80" placeholder="Contoh: KS.01.1"></label>
+            <label class="field">Tingkat perkembangan
+              <select id="searchDevelopment"><option value="ALL">Semua</option><option value="ASLI">Asli</option><option value="COPY">Copy</option></select>
+            </label>
+            <label class="field">Status alih media
+              <select id="searchFileStatus"><option value="ALL">Semua</option><option value="TERSEDIA">PDF tersedia</option><option value="BELUM_DIUNGGAH">Belum diunggah</option></select>
+            </label>
+          </div>
+          <div class="form-actions"><span id="searchStatus" aria-live="polite">Masukkan kata kunci atau gunakan filter.</span><button type="submit" id="runSearch" class="primary">Cari Arsip</button></div>
+        </form>
+
+        <section class="form-card search-results-card">
+          <div class="section-heading">
+            <div><h2>Hasil Pencarian</h2><p id="searchSummary">Belum ada pencarian.</p></div>
+          </div>
+          <div id="searchEmpty" class="search-empty">Masukkan kata kunci atau filter, lalu tekan <strong>Cari Arsip</strong>.</div>
+          <div id="searchTableWrap" class="search-table-wrap" hidden>
+            <table class="search-table">
+              <thead><tr><th>No. Berkas / Item</th><th>Tanggal &amp; Nomor Surat</th><th>Uraian Arsip</th><th>Klasifikasi &amp; Lokasi</th><th>Status</th><th>Akses</th></tr></thead>
+              <tbody id="searchResultsBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section id="labelsPage" class="page">
+        <section class="form-card label-picker-card">
+          <div class="section-heading">
+            <div><h2>Cetak Lidah Folder</h2><p>Pilih berkas aktif, atur posisi awal kertas, lalu unduh PDF A4 siap cetak.</p></div>
+            <button type="button" id="refreshFolderLabels" class="secondary">Segarkan Data</button>
+          </div>
+          <div class="info-panel">
+            <strong>Format mengikuti contoh UINSA</strong>
+            <span>Setiap label berukuran 7 × 3 cm. Satu halaman A4 memuat 14 label dalam susunan 2 kolom × 7 baris.</span>
+          </div>
+          <div class="label-toolbar">
+            <label class="field">Cari berkas
+              <input id="labelSearch" autocomplete="off" maxlength="250" placeholder="Nomor, judul, kode klasifikasi, atau lokasi">
+            </label>
+            <label class="field">Status cetak
+              <select id="labelPrintStatus">
+                <option value="ALL">Semua</option>
+                <option value="BELUM_DICETAK">Belum dicetak</option>
+                <option value="PERLU_CETAK_ULANG">Perlu cetak ulang</option>
+                <option value="SUDAH_DICETAK">Sudah dibuatkan PDF</option>
+              </select>
+            </label>
+            <label class="field">Mulai dari posisi
+              <select id="labelStartSlot" aria-describedby="labelStartHelp"></select>
+              <small id="labelStartHelp" class="helper">Gunakan posisi berikutnya pada kertas yang sebagian sudah terpakai.</small>
+            </label>
+          </div>
+          <div class="label-selection-actions">
+            <button type="button" id="selectVisibleLabels" class="secondary">Pilih Semua Hasil</button>
+            <button type="button" id="clearSelectedLabels" class="secondary">Batalkan Semua</button>
+            <span id="labelSelectionSummary">Belum ada berkas dipilih.</span>
+          </div>
+          <div id="labelTableEmpty" class="search-empty">Memuat daftar berkas aktif…</div>
+          <div id="labelTableWrap" class="label-table-wrap" hidden>
+            <table class="label-table">
+              <thead><tr><th class="label-check-column"><input id="toggleVisibleLabels" type="checkbox" aria-label="Pilih semua hasil yang tampil"></th><th>No. Berkas</th><th>Kode Klasifikasi</th><th>Judul Berkas</th><th>Lokasi</th><th>Status Cetak</th></tr></thead>
+              <tbody id="labelResultsBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="form-card label-preview-card">
+          <div class="section-heading">
+            <div><h2>Preview Halaman Pertama</h2><p>Preview menunjukkan posisi label terpilih pada lembar A4 pertama.</p></div>
+          </div>
+          <div id="folderLabelPreview" class="folder-label-preview" aria-live="polite"></div>
+          <div class="form-actions">
+            <span id="labelStatus">Pilih minimal satu berkas.</span>
+            <button type="button" id="generateFolderLabels" class="primary" disabled>Buat PDF Lidah Folder</button>
+          </div>
+        </section>
+      </section>
+
+      <section id="retentionPage" class="page">
+        <div class="retention-stat-grid">
+          <article class="stat-card"><span>Masih Aktif</span><strong id="retentionStatActive">–</strong></article>
+          <article class="stat-card warning"><span>H-7</span><strong id="retentionStatDue">–</strong></article>
+          <article class="stat-card danger"><span>Habis Aktif</span><strong id="retentionStatExpired">–</strong></article>
+          <article class="stat-card success"><span>Dalam Usul</span><strong id="retentionStatProposed">–</strong></article>
+        </div>
+
+        <section class="form-card retention-list-card">
+          <div class="section-heading">
+            <div><h2>Monitoring Retensi Aktif</h2><p>Pilih berkas yang masa aktifnya telah habis untuk disiapkan sebagai usul pemindahan.</p></div>
+            <button type="button" id="refreshRetention" class="secondary">Segarkan Data</button>
+          </div>
+          <div class="info-panel">
+            <strong>Guardrail Central File</strong>
+            <span>Pembuatan draft usul tidak mengubah fase berkas menjadi inaktif. Berkas tetap AKTIF sampai diterima dan diverifikasi oleh Record Center.</span>
+          </div>
+          <div class="retention-toolbar">
+            <label class="field">Cari berkas
+              <input id="retentionSearch" autocomplete="off" maxlength="250" placeholder="Nomor, judul, kode klasifikasi, atau lokasi">
+            </label>
+            <label class="field">Status
+              <select id="retentionStatusFilter">
+                <option value="ALL">Semua status</option>
+                <option value="EXPIRED">Habis aktif</option>
+                <option value="DUE">H-7</option>
+                <option value="ACTIVE">Masih aktif</option>
+                <option value="PROPOSED">Dalam usul</option>
+                <option value="TRANSFERRED">Riwayat pemindahan lama</option>
+              </select>
+            </label>
+          </div>
+          <div class="retention-selection-bar">
+            <label class="check-line"><input id="selectAllRetentionCandidates" type="checkbox"> Pilih semua kandidat yang tampil</label>
+            <span id="retentionSelectionSummary">Belum ada kandidat dipilih.</span>
+            <button type="button" id="openTransferProposalDraft" class="primary" disabled>Buat Draft Usul Pindah</button>
+          </div>
+          <div id="retentionTableEmpty" class="search-empty">Memuat data retensi…</div>
+          <div id="retentionTableWrap" class="retention-table-wrap" hidden>
+            <table class="retention-table">
+              <thead><tr><th>Pilih</th><th>No. &amp; Berkas</th><th>Retensi</th><th>Tanggal Acuan &amp; Batas</th><th>Status</th><th>Lokasi</th></tr></thead>
+              <tbody id="retentionResultsBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <form id="transferProposalDraftForm" class="form-card retention-transfer-card" hidden>
+          <div class="section-heading">
+            <div><h2>Buat Draft Usul Pemindahan</h2><p id="transferProposalDraftTitle">Periksa jumlah berkas sebelum menyimpan snapshot.</p></div>
+            <button type="button" id="closeTransferProposalDraft" class="secondary">Batal</button>
+          </div>
+          <div id="transferProposalDraftImpact" class="deletion-impact"></div>
+          <div class="form-grid retention-transfer-fields">
+            <label class="field span-2">Judul draft *
+              <input id="transferProposalTitle" name="proposalTitle" maxlength="300" required value="Usul Pemindahan Arsip Inaktif">
+            </label>
+            <label class="field span-2">Catatan internal (opsional)
+              <textarea id="transferProposalNotes" name="proposalNotes" rows="3" maxlength="2000" placeholder="Catatan pemeriksaan awal atau kelompok berkas…"></textarea>
+            </label>
+          </div>
+          <div class="form-actions">
+            <span id="transferProposalDraftStatus" aria-live="polite"></span>
+            <button type="submit" id="saveTransferProposalDraft" class="primary">Simpan Draft &amp; Snapshot JRA</button>
+          </div>
+        </form>
+
+        <form id="transferSubmissionForm" class="form-card retention-submission-card" enctype="multipart/form-data" hidden>
+          <input type="hidden" id="transferSubmissionProposalId" name="proposalId">
+          <div class="section-heading">
+            <div>
+              <h2>Ajukan ke Record Center</h2>
+              <p id="transferSubmissionTitle">Lengkapi Nota Dinas yang telah mendapat disposisi pimpinan.</p>
+            </div>
+            <button type="button" id="closeTransferSubmission" class="secondary">Batal</button>
+          </div>
+          <div class="info-panel">
+            <strong>Paket pengajuan CF-06</strong>
+            <span>Daftar Arsip Usul Pindah XLSX dan Riwayat JRA memakai snapshot CF-05. PDF daftar usul tetap tersimpan sebagai lampiran Nota Dinas dan tidak perlu diunggah ulang.</span>
+          </div>
+          <div id="transferSubmissionPackage" class="submission-package"></div>
+          <div class="form-grid retention-transfer-fields">
+            <label class="field">Tujuan Record Center *
+              <input id="transferRecordCenterName" name="recordCenterName" maxlength="250" required value="Record Center Rektorat / Unit Kearsipan I">
+            </label>
+            <label class="field">Email Record Center (opsional)
+              <input id="transferRecordCenterEmail" name="recordCenterEmail" type="email" maxlength="250" placeholder="Diisi setelah aplikasi Record Center dipasang">
+            </label>
+            <label class="field span-2">Nota Dinas Permohonan Pemindahan berdisposisi *
+              <input id="transferNotaDinasFile" type="file" accept="application/pdf,.pdf" required>
+              <small class="helper">PDF kurang dari 10 MB. File disimpan bersama tiga dokumen snapshot usul.</small>
+            </label>
+            <label class="field span-2">Konfirmasi pengajuan *
+              <input id="transferSubmissionConfirmation" name="confirmation" maxlength="20" required placeholder="Ketik AJUKAN">
+              <small class="helper">Berkas tetap berada pada fase AKTIF sampai diterima dan diverifikasi Record Center.</small>
+            </label>
+          </div>
+          <div class="form-actions">
+            <span id="transferSubmissionStatus" aria-live="polite"></span>
+            <button type="submit" id="submitTransferProposal" class="primary">Upload &amp; Ajukan</button>
+          </div>
+        </form>
+
+        <section class="form-card retention-list-card">
+          <div class="section-heading compact">
+            <div><h2>Riwayat Usul Pemindahan</h2><p>Buat dokumen, unggah Nota Dinas berdisposisi, dan pantau paket yang diajukan ke Record Center.</p></div>
+          </div>
+          <div id="transferProposalEmpty" class="search-empty">Belum ada draft usul pemindahan.</div>
+          <div id="transferProposalTableWrap" class="retention-table-wrap" hidden>
+            <table class="retention-table">
+              <thead><tr><th>Nomor &amp; Judul</th><th>Status</th><th>Jumlah</th><th>Dibuat</th><th>Tindakan</th></tr></thead>
+              <tbody id="transferProposalResultsBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section id="loansPage" class="page">
+        <div class="loan-stat-grid">
+          <article class="stat-card"><span>Sedang Dipinjam</span><strong id="loanStatActive">–</strong></article>
+          <article class="stat-card danger"><span>Terlambat</span><strong id="loanStatOverdue">–</strong></article>
+          <article class="stat-card"><span>Berkas Dipinjam</span><strong id="loanStatBerkas">–</strong></article>
+          <article class="stat-card"><span>Item Dipinjam</span><strong id="loanStatItems">–</strong></article>
+        </div>
+
+        <form id="loanForm" class="form-card loan-form-card" enctype="multipart/form-data">
+          <input type="hidden" id="loanPreviewId" name="loanPreviewId">
+          <div class="section-heading">
+            <div><h2>Catat Peminjaman Arsip</h2><p>Pilih satu berkas lengkap atau satu/beberapa item, lalu catat peminjam dan tanggal wajib kembali.</p></div>
+            <button type="button" id="clearLoanForm" class="secondary">Bersihkan Form</button>
+          </div>
+          <div class="info-panel">
+            <strong>Pengamanan benturan aktif</strong>
+            <span>Berkas yang dipinjam seluruhnya tidak dapat dipinjam per item. Jika satu item sedang dipinjam, berkas tidak dapat dipinjam seluruhnya sampai item tersebut kembali.</span>
+          </div>
+          <div class="form-grid">
+            <label class="field">Objek peminjaman *
+              <select id="loanObjectType" name="loanObjectType" required>
+                <option value="BERKAS">Satu berkas lengkap</option>
+                <option value="ITEM">Satu / beberapa item arsip</option>
+              </select>
+            </label>
+            <label class="field">Berkas induk *
+              <select id="loanBerkasId" name="loanBerkasId" required><option value="">Memuat daftar berkas…</option></select>
+            </label>
+            <div id="loanItemField" class="field span-2" hidden>
+              <span>Item arsip *</span>
+              <div class="loan-item-picker-toolbar">
+                <input id="loanItemSearch" autocomplete="off" maxlength="250" placeholder="Cari nomor, tanggal, atau uraian item">
+                <button type="button" id="selectAllLoanItems" class="secondary">Pilih Semua Tersedia</button>
+                <button type="button" id="clearLoanItems" class="secondary">Batalkan Pilihan</button>
+              </div>
+              <div id="loanItemPicker" class="loan-item-picker"><span class="helper">Pilih berkas terlebih dahulu.</span></div>
+              <small id="loanItemSelectionSummary" class="helper">Belum ada item dipilih.</small>
+            </div>
+            <div id="loanObjectInfo" class="loan-object-info span-2">Pilih berkas atau item yang akan dipinjam.</div>
+          </div>
+
+          <div class="section-heading compact"><div><h2>Data Peminjam</h2></div></div>
+          <div class="form-grid">
+            <label class="field">Nama peminjam *<input id="borrowerName" name="borrowerName" maxlength="250" required autocomplete="off"></label>
+            <label class="field">NIP/NIK (opsional)<input id="borrowerIdentity" name="borrowerIdentity" maxlength="100" autocomplete="off"></label>
+            <label class="field">Unit kerja *<input id="borrowerUnit" name="borrowerUnit" maxlength="250" required autocomplete="off"></label>
+            <label class="field">Nomor WhatsApp (opsional)<input id="borrowerWhatsapp" name="borrowerWhatsapp" maxlength="50" autocomplete="off" inputmode="tel"></label>
+            <label class="field span-2">Keperluan *
+              <textarea id="loanPurpose" name="loanPurpose" rows="3" maxlength="1000" required placeholder="Contoh: Pemeriksaan dokumen pengadaan oleh BPK…"></textarea>
+            </label>
+          </div>
+
+          <div class="section-heading compact"><div><h2>Jadwal dan Persetujuan</h2></div></div>
+          <div class="form-grid">
+            <label class="field">Tanggal pinjam *<input id="loanDate" name="loanDate" type="date" required></label>
+            <label class="field">Tanggal wajib kembali *<input id="loanDueDate" name="loanDueDate" type="date" required></label>
+            <label class="field">Jumlah halaman/item yang dipinjam *
+              <input id="loanPageCount" name="loanPageCount" type="number" min="1" step="1" required>
+              <small class="helper">Diisi otomatis dari database dan dapat dikoreksi bila yang dipinjam hanya sebagian.</small>
+            </label>
+            <label class="field">Bukti persetujuan (opsional)
+              <input id="loanEvidence" type="file" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png">
+              <small class="helper">PDF, JPG, JPEG, atau PNG; maksimal 25 MB. Disimpan di folder BUKTI PEMINJAMAN.</small>
+            </label>
+            <label class="field span-2">Catatan
+              <textarea id="loanNotes" name="loanNotes" rows="3" maxlength="2000"></textarea>
+            </label>
+          </div>
+          <div class="form-actions">
+            <span id="loanFormStatus" aria-live="polite">Lengkapi data peminjaman.</span>
+            <button type="submit" id="saveLoan" class="primary">Simpan Peminjaman</button>
+          </div>
+        </form>
+
+        <section class="form-card loan-list-card">
+          <div class="section-heading">
+            <div><h2>Pelacakan Peminjaman</h2><p>Telusuri arsip yang masih dipinjam, terlambat, maupun sudah dikembalikan.</p></div>
+            <button type="button" id="refreshLoans" class="secondary">Segarkan Data</button>
+          </div>
+          <div class="loan-toolbar">
+            <label class="field">Cari transaksi
+              <input id="loanSearch" autocomplete="off" maxlength="250" placeholder="Nama, unit, nomor, judul, atau keperluan">
+            </label>
+            <label class="field">Status
+              <select id="loanStatusFilter">
+                <option value="ACTIVE">Sedang dipinjam</option>
+                <option value="OVERDUE">Terlambat</option>
+                <option value="RETURNED">Sudah kembali</option>
+                <option value="ALL">Semua status</option>
+              </select>
+            </label>
+          </div>
+          <div id="loanTableEmpty" class="search-empty">Memuat transaksi peminjaman…</div>
+          <div id="loanTableWrap" class="loan-table-wrap" hidden>
+            <table class="loan-table">
+              <thead><tr><th>Objek Arsip</th><th>Peminjam</th><th>Jadwal</th><th>Jumlah</th><th>Status &amp; Bukti</th><th>Tindakan</th></tr></thead>
+              <tbody id="loanResultsBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <form id="loanReturnForm" class="form-card loan-return-card" hidden>
+          <input type="hidden" id="returnLoanId" name="returnLoanId">
+          <div class="section-heading">
+            <div><h2>Catat Pengembalian</h2><p id="loanReturnTitle">Pilih transaksi aktif yang akan diselesaikan.</p></div>
+            <button type="button" id="cancelLoanReturn" class="secondary">Batal</button>
+          </div>
+          <div id="loanReturnImpact" class="loan-object-info"></div>
+          <div class="form-grid loan-return-fields">
+            <label class="field">Tanggal kembali *<input id="returnDate" name="returnDate" type="date" required></label>
+            <label class="field span-2">Catatan pengembalian
+              <textarea id="returnNotes" name="returnNotes" rows="3" maxlength="1000" placeholder="Contoh: Dikembalikan lengkap dan kondisi baik…"></textarea>
+            </label>
+            <label class="field span-2">Konfirmasi *
+              <input id="returnConfirmation" name="returnConfirmation" autocomplete="off" required placeholder="Ketik KEMBALIKAN">
+            </label>
+          </div>
+          <div class="form-actions">
+            <span id="loanReturnStatus" aria-live="polite"></span>
+            <button type="submit" id="completeLoanReturn" class="primary">Catat Pengembalian</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="editPage" class="page">
+        <form id="editForm" class="form-card" enctype="multipart/form-data">
+          <div class="section-heading">
+            <div><h2>Edit Detail Item Arsip</h2><p>Perbaiki metadata atau ganti file alih media tanpa menghapus dan menginput ulang item.</p></div>
+          </div>
+          <div class="info-panel">
+            <strong>Perubahan terkontrol</strong>
+            <span>Perubahan tanggal dapat mengubah nomor kronologis. Perubahan uraian memperbarui nama PDF. File lama dipindahkan ke karantina bila PDF diganti.</span>
+          </div>
+          <div class="form-grid">
+            <label class="field">Berkas induk *
+              <select id="editBerkasId" name="editBerkasId" required><option value="">Memuat daftar berkas…</option></select>
+            </label>
+            <label class="field">Item arsip *
+              <select id="editItemId" name="editItemId" required><option value="">Pilih berkas terlebih dahulu</option></select>
+            </label>
+            <label class="field">Tanggal naskah *<input id="editDocumentDate" name="editDocumentDate" type="date" required></label>
+            <label class="field">Jumlah halaman *<input id="editPageCount" name="editPageCount" type="number" min="1" step="1" required></label>
+            <label class="field">Tingkat perkembangan *
+              <select id="editDevelopmentLevel" name="editDevelopmentLevel" required><option value="ASLI">Asli</option><option value="COPY">Copy</option></select>
+            </label>
+            <label class="field">Kondisi fisik
+              <select id="editCondition" name="editCondition">
+                <option value="">Tidak dicatat</option>
+                <option value="BAIK">Baik</option>
+                <option value="RUSAK RINGAN">Rusak ringan</option>
+                <option value="RUSAK SEDANG">Rusak sedang</option>
+                <option value="RUSAK BERAT">Rusak berat</option>
+              </select>
+            </label>
+            <label class="field">Klasifikasi keamanan dan akses *
+              <select id="editSecurityClassification" name="editSecurityClassification" required>
+                <option value="BIASA/TERBUKA">Biasa/Terbuka</option>
+                <option value="TERBATAS">Terbatas</option>
+                <option value="RAHASIA">Rahasia</option>
+                <option value="SANGAT RAHASIA">Sangat Rahasia</option>
+              </select>
+            </label>
+            <div class="field current-file"><span>File alih media saat ini</span><a id="editCurrentFile" href="#" target="_blank" rel="noopener">Pilih item untuk melihat file</a></div>
+            <label class="field span-2">Uraian informasi arsip *
+              <textarea id="editDescription" name="editDescription" rows="5" maxlength="2000" required></textarea>
+            </label>
+            <label class="field span-2">Ganti PDF alih media (opsional)
+              <input id="replacementPdf" name="replacementPdf" type="file" accept="application/pdf,.pdf">
+              <small class="helper">Kosongkan bila file tidak berubah. PDF pengganti harus kurang dari 100 MB.</small>
+            </label>
+            <label class="field span-2">Alasan perubahan *
+              <textarea id="editReason" name="editReason" rows="3" minlength="10" maxlength="2000" required placeholder="Contoh: Satu rangkap kontrak diserahkan kepada vendor sehingga jumlah halaman disesuaikan…"></textarea>
+              <small class="helper">Minimal 10 karakter dan akan dicatat pada Audit Log.</small>
+            </label>
+          </div>
+          <div class="form-actions"><span id="editStatus" aria-live="polite"></span><button type="submit" id="saveEdit" class="primary">Simpan Perubahan</button></div>
+        </form>
+      </section>
+
+      <section id="deletionPage" class="page">
+        <form id="deletionForm" class="form-card" enctype="multipart/form-data">
+          <div class="section-heading">
+            <div><h2>Koreksi &amp; Pembatalan Arsip</h2><p>Batalkan satu item atau seluruh berkas dari arsip aktif dengan jejak audit lengkap.</p></div>
+          </div>
+          <div class="danger-panel">
+            <strong>Pengamanan aktif</strong>
+            <span>Data tidak dihapus permanen. Metadata dinonaktifkan, file dipindahkan ke karantina aplikasi, alasan dicatat di Audit Log, dan nomor definitif disusun ulang.</span>
+          </div>
+          <div class="form-grid deletion-fields">
+            <label class="field">Objek yang dibatalkan *
+              <select id="deletionScope" name="deletionScope" required>
+                <option value="ITEM">Satu item arsip</option>
+                <option value="BERKAS">Seluruh berkas beserta semua item</option>
+              </select>
+            </label>
+            <label class="field">Berkas induk *
+              <select id="deletionBerkasId" name="deletionBerkasId" required><option value="">Memuat daftar berkas…</option></select>
+            </label>
+            <label id="deletionItemField" class="field span-2">Item arsip *
+              <select id="deletionItemId" name="deletionItemId"><option value="">Pilih berkas terlebih dahulu</option></select>
+            </label>
+            <div id="deletionImpact" class="deletion-impact span-2">Pilih objek untuk melihat dampak pembatalan.</div>
+            <label class="field span-2">Alasan pembatalan *
+              <textarea id="deletionReason" name="deletionReason" rows="4" maxlength="2000" minlength="10" required placeholder="Contoh: Item tidak kembali setelah pemeriksaan dan telah dinyatakan hilang berdasarkan berita acara…"></textarea>
+              <small class="helper">Minimal 10 karakter. Alasan ini disimpan permanen di Audit Log.</small>
+            </label>
+            <label class="field span-2">Bukti disposisi (opsional)
+              <input id="dispositionFile" name="dispositionFile" type="file" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png">
+              <small class="helper">PDF, JPG, JPEG, atau PNG; maksimal 25 MB. Disimpan terpisah di folder BUKTI PENGHAPUSAN.</small>
+            </label>
+            <label class="field span-2">Konfirmasi *
+              <input id="deletionConfirmation" name="deletionConfirmation" autocomplete="off" required placeholder="Ketik HAPUS">
+            </label>
+          </div>
+          <div class="form-actions"><span id="deletionStatus" aria-live="polite"></span><button type="submit" id="deleteArchive" class="danger-button">Batalkan dari Arsip Aktif</button></div>
+        </form>
+      </section>
+    </main>
+  </div>
+  <div id="employeeModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="employeeModalTitle">
+    <form id="employeeForm" class="modal-card receipt-employee-modal">
+      <div class="modal-header">
+        <div>
+          <h2 id="employeeModalTitle">Tambah Pegawai Penyerah</h2>
+          <p>Data langsung masuk ke pilihan Master Pegawai.</p>
+        </div>
+        <button type="button" id="closeEmployeeModal" class="icon-button" aria-label="Tutup">&times;</button>
+      </div>
+      <div class="receipt-employee-fields">
+        <label class="field">Nama pegawai *
+          <input id="newEmployeeName" maxlength="250" required autocomplete="off">
+        </label>
+        <label class="field">Unit kerja *
+          <input id="newEmployeeUnit" maxlength="250" required autocomplete="off">
+        </label>
+        <span id="employeeFormStatus" aria-live="polite"></span>
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="cancelEmployeeModal" class="secondary">Batal</button>
+        <button type="submit" id="saveEmployee" class="primary">Simpan Pegawai</button>
+      </div>
+    </form>
+  </div>
+  <div id="loadingOverlay" class="loading-overlay" role="dialog" aria-modal="true" aria-labelledby="loadingTitle" aria-describedby="loadingMessage" hidden>
+    <div class="loading-card">
+      <span class="loading-spinner" aria-hidden="true"></span>
+      <h2 id="loadingTitle">Menyimpan item arsip</h2>
+      <p id="loadingMessage">Memvalidasi metadata dan menyiapkan penyimpanan…</p>
+      <small>Mohon tunggu. Jangan menutup atau memuat ulang halaman.</small>
+    </div>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <?!= include('Client'); ?>
+  <?!= include('LabelLogo'); ?>
+  <?!= include('LabelPrint'); ?>
+  <?!= include('OutIndicatorPrint'); ?>
+  <?!= include('ReceiptPrint'); ?>
+</body>
+</html>

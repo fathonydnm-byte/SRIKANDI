@@ -1,0 +1,3263 @@
+<script>
+const state={bootstrap:null,bootstrapRequestId:0,pendingUpload:null,lockedBerkasId:'',lockedBerkasLabel:'',deletionOptions:null,editOptions:null,deletionUpload:null,editUpload:null,mediaOptions:null,mediaUpload:null,searchResults:null,labelOptions:null,selectedLabelIds:new Set(),retentionOptions:null,selectedRetentionIds:new Set(),transferSubmissionUpload:null,loanOptions:null,loanOptionsPromise:null,loanUpload:null,selectedLoanItemIds:new Set(),selectedReturnLoanId:'',receiptOptions:null,receiptUpload:null,receiptCancelUpload:null,receiptItemSequence:0,receiptSaveRequestId:'',receiptFilingOptions:null,selectedReceiptItemIds:new Set(),receiptFilingRequestId:'',inputSourceMode:'RECEIPT'};
+const ARCHIVE_MEDIA_MAX_BYTES=100*1024*1024;
+const $=id=>document.getElementById(id);
+let loadingStageTimers=[];
+
+document.addEventListener('DOMContentLoaded',()=>{
+  bindNavigation();
+  bindReceiptPage();
+  bindArchiveForm();
+  bindMediaForm();
+  bindSearchForm();
+  bindFolderLabelPage();
+  bindRetentionPage();
+  bindLoanPage();
+  bindEditForm();
+  bindDeletionForm();
+  loadBootstrap();
+});
+
+function runServer(name,...args){
+  return new Promise((resolve,reject)=>google.script.run.withSuccessHandler(resolve).withFailureHandler(error=>reject(new Error(error.message||error)))[name](...args));
+}
+
+function runServerWithTimeout_(timeoutMs,name,...args){
+  let timer;
+  const timeout=new Promise((resolve,reject)=>{
+    timer=setTimeout(()=>{
+      const error=new Error('Server belum memberikan respons dalam batas waktu.');
+      error.code='SERVER_TIMEOUT';
+      reject(error);
+    },Math.max(1000,Number(timeoutMs)||45000));
+  });
+  return Promise.race([runServer(name,...args),timeout]).finally(()=>clearTimeout(timer));
+}
+
+function newReceiptRequestId_(){
+  return 'RCV-'+Date.now().toString(36).toUpperCase()+'-'+
+    Math.random().toString(36).slice(2,10).toUpperCase();
+}
+
+function formPayloadWithoutFiles(form){
+  const payload={};
+  for(const [name,value] of new FormData(form).entries()){
+    if(value instanceof File)continue;
+    payload[name]=value;
+  }
+  return payload;
+}
+
+async function loadBootstrap(preferredBerkasId){
+  const requestId=++state.bootstrapRequestId;
+  const retentionOptionsAtStart=state.retentionOptions;
+  const loanOptionsAtStart=state.loanOptions;
+  try{
+    const bootstrap=await runServer('apiGetBootstrap');
+    if(requestId!==state.bootstrapRequestId)return;
+    state.bootstrap=bootstrap;
+    // Jangan menghapus data modul yang selesai dimuat ketika bootstrap masih berjalan.
+    // Ini mencegah tabel Peminjaman tetap terlihat tetapi state dropdown/tindakannya kosong.
+    if(state.retentionOptions===retentionOptionsAtStart)state.retentionOptions=null;
+    if(state.loanOptions===loanOptionsAtStart){
+      if(state.loanOptions&&$('loansPage').classList.contains('active')){
+        loadLoanOptions(true,true,true)
+          .catch(error=>toast('Data Peminjaman gagal disegarkan: '+error.message,true));
+      }else{
+        state.loanOptions=null;
+      }
+    }
+    $('userBadge').textContent=state.bootstrap.user;
+    if($('instanceUnitName')){
+      const instance=state.bootstrap.instance||{};
+      $('instanceUnitName').textContent=instance.unitName||instance.unitCode||'UINSA';
+      $('instanceUnitName').title='Rilis '+(instance.releaseVersion||'–')+' · Instance '+(instance.instanceId||'–');
+    }
+    renderDashboard();
+    renderClassification('ROOT','primaryClass');
+    renderBerkasOptions(preferredBerkasId||state.lockedBerkasId);
+  }catch(e){toast(e.message,true)}
+}
+
+function renderDashboard(){
+  const d=state.bootstrap.dashboard;
+  $('statBerkas').textContent=d.totalBerkas;
+  $('statItem').textContent=d.totalItems;
+  $('statLoan').textContent=d.activeLoans;
+  $('statDue').textContent=d.retentionDueSoon;
+  $('statExpired').textContent=d.expiredRetention;
+}
+
+function renderBerkasOptions(preferredId){
+  const select=$('itemBerkasId');
+  select.innerHTML='<option value="">Pilih berkas induk</option>';
+  state.bootstrap.berkasOptions.forEach(row=>select.add(new Option(row.label,row.id)));
+  if(preferredId&&state.bootstrap.berkasOptions.some(row=>row.id===preferredId))select.value=preferredId;
+  onBerkasChanged();
+}
+
+function renderClassification(parentId,selectId){
+  const select=$(selectId);
+  select.innerHTML='<option value="">Pilih</option>';
+  const rows=(state.bootstrap.classificationsByParent[parentId]||[]);
+  rows.forEach(row=>select.add(new Option(row.label,row.id)));
+  select.disabled=rows.length===0;
+  updateClassificationId();
+}
+
+function bindNavigation(){
+  document.querySelectorAll('[data-page],[data-go]').forEach(button=>button.addEventListener('click',()=>showPage(button.dataset.page||button.dataset.go)));
+}
+
+function showPage(page){
+  const titles={dashboard:['Dashboard','Ringkasan kondisi arsip Anda.'],receipts:['Penerimaan Arsip','Catat penyerahan fisik dan buat tanda terima secara otomatis.'],input:['Input Arsip','Buat berkas baru atau lanjutkan daftar isi berkas yang sudah ada.'],media:['Alih Media','Lengkapi PDF untuk item arsip yang sudah tersimpan.'],search:['Cari Arsip','Temukan arsip aktif dan akses alih medianya dengan cepat.'],labels:['Cetak Lidah Folder','Buat PDF label folder fisik dari nomor definitif terbaru.'],retention:['Usul Pemindahan','Pantau retensi aktif dan siapkan draft usul tanpa mengubah fase arsip.'],loans:['Peminjaman','Catat, pantau, dan selesaikan peminjaman berkas maupun item arsip.'],edit:['Edit Arsip','Perbaiki metadata dan file alih media item yang sudah tersimpan.'],deletion:['Koreksi & Pembatalan','Koreksi atau batalkan data arsip secara terkendali dan tercatat.']};
+  document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.nav-button').forEach(x=>x.classList.toggle('active',x.dataset.page===page));
+  $(page+'Page').classList.add('active');
+  $('pageTitle').textContent=titles[page][0];
+  $('pageSubtitle').textContent=titles[page][1];
+  if(page==='receipts')loadReceiptOptions();
+  if(page==='input')loadReceiptFilingOptions();
+  if(page==='media')loadMediaOptions();
+  if(page==='labels')loadFolderLabelOptions();
+  if(page==='retention')loadRetentionOptions();
+  if(page==='loans')loadLoanOptions();
+  if(page==='edit')loadEditOptions();
+  if(page==='deletion')loadDeletionOptions();
+}
+
+function bindReceiptPage(){
+  $('receiptSenderEmployee').addEventListener('change',renderReceiptSenderInfo_);
+  $('addReceiptItem').addEventListener('click',()=>addReceiptItemRow_());
+  $('receiptItems').addEventListener('click',event=>{
+    const button=event.target.closest('[data-remove-receipt-item]');
+    if(button)removeReceiptItemRow_(button.dataset.removeReceiptItem);
+  });
+  $('receiptItems').addEventListener('input',updateReceiptTotals_);
+  $('receiptForm').addEventListener('submit',submitReceipt_);
+  $('resetReceiptForm').addEventListener('click',()=>resetReceiptForm_(true));
+  $('refreshReceipts').addEventListener('click',()=>loadReceiptOptions(true));
+  $('receiptSearch').addEventListener('input',renderReceiptTable_);
+  $('receiptStatusFilter').addEventListener('change',renderReceiptTable_);
+  $('receiptResultsBody').addEventListener('click',event=>{
+    const printButton=event.target.closest('[data-receipt-print]');
+    if(printButton){printReceipt_(printButton.dataset.receiptPrint);return}
+    const editButton=event.target.closest('[data-receipt-edit]');
+    if(editButton){editReceipt_(editButton.dataset.receiptEdit);return}
+    const evidenceButton=event.target.closest('[data-receipt-evidence]');
+    if(evidenceButton){openReceiptEvidence_(evidenceButton.dataset.receiptEvidence);return}
+    const cancelButton=event.target.closest('[data-receipt-cancel]');
+    if(cancelButton)openReceiptCancel_(cancelButton.dataset.receiptCancel);
+  });
+  $('receiptEvidenceForm').addEventListener('submit',submitReceiptEvidence_);
+  $('cancelReceiptEvidence').addEventListener('click',closeReceiptEvidence_);
+  $('receiptCancelForm').addEventListener('submit',submitReceiptCancel_);
+  $('closeReceiptCancel').addEventListener('click',closeReceiptCancel_);
+  $('openEmployeeModal').addEventListener('click',openEmployeeModal_);
+  $('closeEmployeeModal').addEventListener('click',closeEmployeeModal_);
+  $('cancelEmployeeModal').addEventListener('click',closeEmployeeModal_);
+  $('employeeForm').addEventListener('submit',submitReceiptEmployee_);
+  addReceiptItemRow_();
+}
+
+async function loadReceiptOptions(force=false){
+  if(state.receiptOptions&&!force){renderReceiptPage_();return}
+  $('receiptTableEmpty').hidden=false;
+  $('receiptTableEmpty').textContent='Memuat tanda terima dan Master Pegawai…';
+  $('receiptTableWrap').hidden=true;
+  $('refreshReceipts').disabled=true;
+  try{
+    state.receiptOptions=await runServer('apiGetReceiptOptions');
+    renderReceiptPage_();
+  }catch(error){
+    $('receiptTableEmpty').textContent='Data Penerimaan Arsip gagal dimuat.';
+    toast(error.message,true);
+  }finally{
+    $('refreshReceipts').disabled=false;
+  }
+}
+
+function renderReceiptPage_(){
+  if(!state.receiptOptions)return;
+  const summary=state.receiptOptions.summary||{};
+  $('receiptStatTotal').textContent=summary.total||0;
+  $('receiptStatActive').textContent=summary.active||0;
+  $('receiptStatEvidence').textContent=summary.withEvidence||0;
+  $('receiptStatCancelled').textContent=summary.cancelled||0;
+  renderReceiptEmployees_();
+  if(!$('receiptId').value){
+    const defaults=state.receiptOptions.defaults||{};
+    if(!$('receiptReceiverName').value)$('receiptReceiverName').value=defaults.receiverName||'';
+    if(!$('receiptReceiverUnit').value)$('receiptReceiverUnit').value=defaults.receiverUnit||'';
+  }
+  renderReceiptSenderInfo_();
+  renderReceiptTable_();
+}
+
+function renderReceiptEmployees_(preferredId){
+  const select=$('receiptSenderEmployee');
+  const previous=preferredId||select.value;
+  select.innerHTML='<option value="">Pilih pegawai penyerah</option>';
+  (state.receiptOptions&&state.receiptOptions.employees||[]).forEach(row=>
+    select.add(new Option(row.label,row.id))
+  );
+  if(previous&&(state.receiptOptions.employees||[]).some(row=>row.id===previous))select.value=previous;
+}
+
+function renderReceiptSenderInfo_(){
+  const employee=(state.receiptOptions&&state.receiptOptions.employees||[])
+    .find(row=>row.id===$('receiptSenderEmployee').value);
+  $('receiptSenderInfo').innerHTML=employee
+    ? '<strong>'+escapeHtml(employee.name)+'</strong><br>'+escapeHtml(employee.unit)
+    : 'Pilih pegawai yang menyerahkan arsip.';
+}
+
+function addReceiptItemRow_(item){
+  const sequence=++state.receiptItemSequence;
+  const row=document.createElement('article');
+  row.className='receipt-item-row';
+  row.dataset.receiptItem=String(sequence);
+  row.dataset.receiptItemId=item&&item.id||'';
+  row.dataset.archiveId=item&&item.archiveId||'';
+  row.dataset.filingStatus=item&&item.filingStatus||'';
+  row.dataset.removable='true';
+  row.innerHTML=
+    '<div class="receipt-item-number">Item <span data-receipt-item-number></span>'+
+      '<span class="receipt-item-filing" data-receipt-filing-label></span></div>'+
+    '<label class="field">Nomor surat utama (opsional)'+
+      '<input data-receipt-primary maxlength="250" autocomplete="off"></label>'+
+    '<label class="field">Nomor alternatif/vendor (opsional)'+
+      '<input data-receipt-alternate maxlength="250" autocomplete="off"></label>'+
+    '<label class="field">Tanggal naskah *'+
+      '<input data-receipt-document-date type="date" required></label>'+
+    '<label class="field receipt-description">Uraian informasi arsip *'+
+      '<textarea data-receipt-description rows="3" maxlength="2000" required></textarea></label>'+
+    '<label class="field">Jumlah halaman *'+
+      '<input data-receipt-pages type="number" min="1" step="1" required></label>'+
+    '<label class="field">Tingkat perkembangan *'+
+      '<select data-receipt-development required><option value="ASLI">Asli</option><option value="COPY">Copy</option></select></label>'+
+    '<label class="field">Kondisi *'+
+      '<select data-receipt-condition required>'+
+        '<option value="BAIK">Baik</option>'+
+        '<option value="RUSAK RINGAN">Rusak ringan</option>'+
+        '<option value="RUSAK SEDANG">Rusak sedang</option>'+
+        '<option value="RUSAK BERAT">Rusak berat</option>'+
+      '</select></label>'+
+    '<label class="field">Klasifikasi keamanan dan akses *'+
+      '<select data-receipt-security required>'+
+        '<option value="BIASA/TERBUKA">Biasa/Terbuka</option>'+
+        '<option value="TERBATAS">Terbatas</option>'+
+        '<option value="RAHASIA">Rahasia</option>'+
+        '<option value="SANGAT RAHASIA">Sangat Rahasia</option>'+
+      '</select></label>'+
+    '<label class="field receipt-item-notes">Catatan item (opsional)'+
+      '<textarea data-receipt-notes rows="2" maxlength="1000"></textarea></label>'+
+    '<button type="button" class="receipt-remove-item" data-remove-receipt-item="'+sequence+'">Hapus</button>';
+  $('receiptItems').appendChild(row);
+  if(item){
+    row.querySelector('[data-receipt-primary]').value=item.primaryLetterNumber||'';
+    row.querySelector('[data-receipt-alternate]').value=item.alternateLetterNumber||'';
+    row.querySelector('[data-receipt-document-date]').value=item.documentDate||'';
+    row.querySelector('[data-receipt-description]').value=item.description||'';
+    row.querySelector('[data-receipt-pages]').value=item.pageCount||'';
+    row.querySelector('[data-receipt-development]').value=item.developmentLevel||'ASLI';
+    row.querySelector('[data-receipt-condition]').value=item.condition||'BAIK';
+    row.querySelector('[data-receipt-security]').value=
+      item.securityClassification||'BIASA/TERBUKA';
+    row.querySelector('[data-receipt-notes]').value=item.notes||'';
+    const statusLabel=item.filingStatus==='SUDAH DIBERKASKAN'
+      ?'Sudah diberkaskan '+(item.filedBerkasNumber||'')+'/'+(item.filedItemNumber||'')
+      :item.filingStatus==='PERLU DILENGKAPI'?'Perlu dilengkapi':'Belum diberkaskan';
+    row.querySelector('[data-receipt-filing-label]').textContent=statusLabel;
+    row.querySelector('[data-receipt-filing-label]').classList.toggle(
+      'filed',item.filingStatus==='SUDAH DIBERKASKAN');
+    if(item.canEdit===false){
+      row.querySelectorAll('input,textarea,select').forEach(field=>field.disabled=true);
+      row.dataset.removable='false';
+      row.querySelector('[data-remove-receipt-item]').hidden=true;
+    }
+    if(item._lockPrintedFields){
+      ['description','pages','development','condition','security'].forEach(key=>{
+        row.querySelector('[data-receipt-'+key+']').disabled=true;
+      });
+      row.dataset.removable='false';
+      row.querySelector('[data-remove-receipt-item]').hidden=true;
+    }
+  }
+  renumberReceiptItemRows_();
+  updateReceiptTotals_();
+  if(!item)row.querySelector('[data-receipt-description]').focus();
+}
+
+function removeReceiptItemRow_(sequence){
+  const rows=receiptItemRows_();
+  if(rows.length<=1){toast('Minimal satu item arsip wajib tersedia.',true);return}
+  const row=rows.find(item=>item.dataset.receiptItem===String(sequence));
+  if(row)row.remove();
+  renumberReceiptItemRows_();
+  updateReceiptTotals_();
+}
+
+function receiptItemRows_(){
+  return Array.from($('receiptItems').querySelectorAll('[data-receipt-item]'));
+}
+
+function renumberReceiptItemRows_(){
+  receiptItemRows_().forEach((row,index)=>{
+    row.querySelector('[data-receipt-item-number]').textContent=index+1;
+    const remove=row.querySelector('[data-remove-receipt-item]');
+    remove.hidden=receiptItemRows_().length===1||row.dataset.removable==='false';
+  });
+}
+
+function collectReceiptItems_(){
+  return receiptItemRows_().map((row,index)=>{
+    const description=row.querySelector('[data-receipt-description]').value.trim();
+    const pageCount=Number(row.querySelector('[data-receipt-pages]').value);
+    const documentDate=row.querySelector('[data-receipt-document-date]').value;
+    if(!description)throw new Error('Uraian item '+(index+1)+' wajib diisi.');
+    if(!Number.isInteger(pageCount)||pageCount<1)throw new Error('Jumlah halaman item '+(index+1)+' minimal 1.');
+    if(!documentDate)throw new Error('Tanggal naskah item '+(index+1)+' wajib diisi.');
+    return{
+      receiptItemId:row.dataset.receiptItemId||'',
+      archiveId:row.dataset.archiveId||'',
+      primaryLetterNumber:row.querySelector('[data-receipt-primary]').value.trim(),
+      alternateLetterNumber:row.querySelector('[data-receipt-alternate]').value.trim(),
+      documentDate:documentDate,
+      description:description,
+      pageCount:pageCount,
+      developmentLevel:row.querySelector('[data-receipt-development]').value,
+      condition:row.querySelector('[data-receipt-condition]').value,
+      securityClassification:row.querySelector('[data-receipt-security]').value,
+      notes:row.querySelector('[data-receipt-notes]').value.trim()
+    };
+  });
+}
+
+function updateReceiptTotals_(){
+  const rows=receiptItemRows_();
+  const pages=rows.reduce((sum,row)=>sum+Number(row.querySelector('[data-receipt-pages]').value||0),0);
+  $('receiptTotals').textContent=rows.length+' item · '+pages+' halaman';
+}
+
+async function submitReceipt_(event){
+  event.preventDefault();
+  let items;
+  try{items=collectReceiptItems_()}catch(error){toast(error.message,true);return}
+  if(!$('receiptSenderEmployee').value){toast('Pilih pegawai penyerah.',true);return}
+  const editing=Boolean($('receiptId').value);
+  if(!editing&&!state.receiptSaveRequestId){
+    state.receiptSaveRequestId=newReceiptRequestId_();
+  }
+  const payload={
+    receiptId:$('receiptId').value,
+    requestId:editing?'':state.receiptSaveRequestId,
+    senderEmployeeId:$('receiptSenderEmployee').value,
+    receiverName:$('receiptReceiverName').value.trim(),
+    receiverUnit:$('receiptReceiverUnit').value.trim(),
+    receiptNotes:$('receiptNotes').value.trim(),
+    items:items
+  };
+  const button=$('saveReceipt');
+  button.disabled=true;
+  button.textContent='Menyimpan…';
+  $('receiptFormStatus').textContent='Mencatat penerimaan dan menyiapkan tanda terima…';
+  $('loadingTitle').textContent='Menyimpan penerimaan arsip';
+  $('loadingMessage').textContent='Mencatat identitas penyerah, penerima, dan daftar item…';
+  $('loadingOverlay').hidden=false;
+  $('app').setAttribute('aria-busy','true');
+  try{
+    const startedAt=performance.now();
+    let result;
+    try{
+      result=await runServerWithTimeout_(45000,'apiSaveReceipt',payload);
+    }catch(saveError){
+      if(saveError.code!=='SERVER_TIMEOUT'||editing)throw saveError;
+      $('loadingMessage').textContent='Respons terlambat. Memeriksa apakah data sudah tersimpan…';
+      const recovery=await runServerWithTimeout_(
+        30000,'apiRecoverReceiptSave',payload.requestId
+      );
+      if(!recovery||!recovery.found){
+        const uncertain=new Error(
+          'Status penyimpanan belum dapat dipastikan. Muat ulang halaman dan periksa Riwayat Tanda Terima sebelum mencoba lagi.'
+        );
+        uncertain.code='SAVE_UNCERTAIN';
+        throw uncertain;
+      }
+      result=recovery;
+    }
+    state.receiptSaveRequestId='';
+    const clientDurationMs=Math.round(performance.now()-startedAt);
+    $('loadingMessage').textContent='Menyusun dua rangkap tanda terima A4…';
+    try{
+      await generateReceiptPdf_(result.receiptId);
+    }catch(printError){
+      resetReceiptForm_(false);
+      state.receiptOptions=null;
+      loadReceiptOptions(true).catch(error=>toast(error.message,true));
+      $('receiptFormStatus').textContent=result.message+
+        ' PDF belum terunduh: '+printError.message+
+        '. Gunakan Cetak Ulang pada Riwayat Tanda Terima.';
+      toast('Data sudah tersimpan, tetapi PDF belum berhasil dibuat.',true);
+      return;
+    }
+    resetReceiptForm_(false);
+    state.receiptOptions=null;
+    loadReceiptOptions(true).catch(error=>toast(
+      'Data tersimpan, tetapi riwayat belum tersinkron: '+error.message,true
+    ));
+    const durationMs=Number(result.durationMs||clientDurationMs);
+    const durationSeconds=(durationMs/1000).toFixed(1);
+    const pathLabel=result.path==='SHEETS_API_BATCH'?'jalur batch':'jalur kompatibilitas';
+    const performanceDetail=result.performance&&durationMs>=10000
+      ?' (tunggu '+(Number(result.performance.lockWaitMs||0)/1000).toFixed(1)+
+        ' dtk · baca '+(Number(result.performance.readMs||0)/1000).toFixed(1)+
+        ' dtk · tulis '+(Number(result.performance.writeMs||0)/1000).toFixed(1)+' dtk)'
+      :'';
+    $('receiptFormStatus').textContent=result.message+
+      ' PDF siap dicetak · '+durationSeconds+' detik · '+pathLabel+performanceDetail+'.';
+    toast(result.message+' PDF berhasil diunduh.');
+  }catch(error){
+    $('receiptFormStatus').textContent=(error.code==='SAVE_UNCERTAIN'?
+      'Jangan klik Simpan lagi sebelum memeriksa riwayat: ':
+      'Penerimaan belum tersimpan: ')+error.message;
+    toast(error.message,true);
+  }finally{
+    $('loadingOverlay').hidden=true;
+    $('app').removeAttribute('aria-busy');
+    button.disabled=false;
+    button.textContent='Simpan & Buat PDF';
+  }
+}
+
+async function generateReceiptPdf_(receiptId){
+  const payload=await runServer('apiPrepareReceiptPrint',receiptId);
+  const result=downloadReceiptPdf_(payload);
+  await runServer('apiConfirmReceiptPrint',{
+    receiptId:payload.receiptId,
+    printToken:payload.printToken,
+    fileName:payload.fileName
+  });
+  return result;
+}
+
+async function printReceipt_(receiptId){
+  $('loadingTitle').textContent='Membuat tanda terima';
+  $('loadingMessage').textContent='Mengambil snapshot terbaru dan menyiapkan PDF cetak ulang…';
+  $('loadingOverlay').hidden=false;
+  $('app').setAttribute('aria-busy','true');
+  try{
+    const result=await generateReceiptPdf_(receiptId);
+    toast('PDF tanda terima berhasil diunduh.');
+    state.receiptOptions=null;
+    loadReceiptOptions(true).catch(error=>toast(error.message,true));
+    return result;
+  }catch(error){
+    toast(error.message,true);
+  }finally{
+    $('loadingOverlay').hidden=true;
+    $('app').removeAttribute('aria-busy');
+  }
+}
+
+function resetReceiptForm_(focus=false){
+  state.receiptSaveRequestId='';
+  $('receiptId').value='';
+  $('receiptFormTitle').textContent='Catat Penerimaan Arsip';
+  $('saveReceipt').textContent='Simpan & Buat PDF';
+  $('receiptSenderEmployee').value='';
+  const defaults=state.receiptOptions&&state.receiptOptions.defaults||{};
+  $('receiptReceiverName').value=defaults.receiverName||'';
+  $('receiptReceiverUnit').value=defaults.receiverUnit||'';
+  $('receiptNotes').value='';
+  ['receiptSenderEmployee','receiptReceiverName','receiptReceiverUnit','receiptNotes']
+    .forEach(id=>$(id).disabled=false);
+  $('openEmployeeModal').disabled=false;
+  $('addReceiptItem').hidden=false;
+  $('receiptItems').innerHTML='';
+  addReceiptItemRow_();
+  $('receiptFormStatus').textContent='Lengkapi data penerimaan.';
+  renderReceiptSenderInfo_();
+  if(focus)$('receiptSenderEmployee').focus();
+}
+
+function editReceipt_(receiptId){
+  const receipt=(state.receiptOptions&&state.receiptOptions.receipts||[])
+    .find(row=>row.id===receiptId);
+  if(!receipt){toast('Tanda terima tidak ditemukan.',true);return}
+  if(!receipt.canEdit){toast('Tanda terima ini sudah dikunci dan tidak dapat diedit.',true);return}
+  $('receiptId').value=receipt.id;
+  $('receiptFormTitle').textContent='Edit '+receipt.number;
+  $('saveReceipt').textContent='Simpan Perubahan & Buat PDF';
+  renderReceiptEmployees_(receipt.senderEmployeeId);
+  $('receiptReceiverName').value=receipt.receiverName;
+  $('receiptReceiverUnit').value=receipt.receiverUnit;
+  $('receiptNotes').value=receipt.notes||'';
+  ['receiptSenderEmployee','receiptReceiverName','receiptReceiverUnit','receiptNotes']
+    .forEach(id=>$(id).disabled=!receipt.canEditHeader);
+  $('openEmployeeModal').disabled=!receipt.canEditHeader;
+  $('addReceiptItem').hidden=!receipt.canEditHeader;
+  $('receiptItems').innerHTML='';
+  (receipt.items||[]).forEach(item=>addReceiptItemRow_(Object.assign({},item,{
+    _lockPrintedFields:Boolean(receipt.evidenceUrl)
+  })));
+  renderReceiptSenderInfo_();
+  $('receiptFormStatus').textContent='Tanggal dan jam penerimaan tetap dikunci pada waktu pencatatan pertama.';
+  $('receiptForm').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function visibleReceiptRows_(){
+  const rows=state.receiptOptions&&state.receiptOptions.receipts||[];
+  const query=normalizeFolderLabelFilter_($('receiptSearch').value);
+  const filter=$('receiptStatusFilter').value;
+  return rows.filter(row=>{
+    if(filter==='AKTIF'&&row.status!=='AKTIF')return false;
+    if(filter==='DIBATALKAN'&&row.status!=='DIBATALKAN')return false;
+    if(filter==='WITH_EVIDENCE'&&!row.evidenceUrl)return false;
+    if(filter==='WITHOUT_EVIDENCE'&&row.evidenceUrl)return false;
+    if(!query)return true;
+    const corpus=normalizeFolderLabelFilter_([
+      row.number,row.senderName,row.senderUnit,row.receiverName,row.receiverUnit,
+      row.notes,row.statusLabel,(row.items||[]).map(item=>item.description).join(' ')
+    ].join(' '));
+    return query.split(' ').filter(Boolean).every(token=>corpus.includes(token));
+  });
+}
+
+function renderReceiptTable_(){
+  if(!state.receiptOptions)return;
+  const rows=visibleReceiptRows_();
+  $('receiptResultsBody').innerHTML=rows.map(renderReceiptRow_).join('');
+  $('receiptTableEmpty').hidden=rows.length>0;
+  $('receiptTableWrap').hidden=rows.length===0;
+  $('receiptTableEmpty').textContent=(state.receiptOptions.receipts||[]).length
+    ?'Tidak ada tanda terima yang sesuai dengan filter.'
+    :'Belum ada penerimaan arsip yang dicatat.';
+}
+
+function renderReceiptRow_(row){
+  const itemPreview=(row.items||[]).slice(0,3).map(item=>
+    '<span class="receipt-item-preview"><strong>'+item.number+'.</strong> '+escapeHtml(item.description)+
+    ' <em>('+item.pageCount+' hlm · '+escapeHtml(item.developmentLevel)+' · '+
+      escapeHtml(receiptTitleCase_(item.condition))+' · '+
+      escapeHtml(receiptSecurityLabel_(item.securityClassification))+')</em></span>'
+  ).join('');
+  const more=row.itemCount>3
+    ?'<span class="search-cell-sub">+'+(row.itemCount-3)+' item lainnya</span>':'';
+  const statusClass=row.status==='DIBATALKAN'?'danger':'success';
+  const evidence=row.evidenceUrl
+    ?'<a class="receipt-evidence-link" href="'+escapeHtml(row.evidenceUrl)+'" target="_blank" rel="noopener">Buka bukti tertandatangani</a>'
+    :'<span class="search-cell-sub">Bukti belum diunggah</span>';
+  const cancelProof=row.cancellationProofUrl
+    ?'<a class="receipt-evidence-link" href="'+escapeHtml(row.cancellationProofUrl)+'" target="_blank" rel="noopener">Buka bukti pembatalan</a>':'';
+  const edit=row.canEdit
+    ?'<button type="button" class="receipt-action-button secondary-action" data-receipt-edit="'+escapeHtml(row.id)+'">Edit</button>':'';
+  const upload=!row.evidenceUrl
+    ?'<button type="button" class="receipt-action-button secondary-action" data-receipt-evidence="'+escapeHtml(row.id)+'">Upload Bukti</button>':'';
+  const cancel=row.status==='AKTIF'
+    ?'<button type="button" class="receipt-action-button danger-action" data-receipt-cancel="'+escapeHtml(row.id)+'">Batalkan</button>':'';
+  return '<tr>'+
+    '<td><span class="search-number">'+escapeHtml(row.number)+'</span>'+
+      '<span class="search-cell-main">'+escapeHtml(formatReceiptTimestamp_(row.receivedAt))+'</span>'+
+      '<span class="search-cell-sub">'+row.itemCount+' item · '+row.totalPages+' halaman</span>'+
+      '<span class="search-cell-sub">'+escapeHtml(row.filingProgressLabel||'')+'</span></td>'+
+    '<td><span class="search-cell-main">'+escapeHtml(row.senderName)+'</span>'+
+      '<span class="search-cell-sub">'+escapeHtml(row.senderUnit)+'</span>'+
+      '<span class="receipt-arrow">diterima oleh</span>'+
+      '<span class="search-cell-main">'+escapeHtml(row.receiverName)+'</span>'+
+      '<span class="search-cell-sub">'+escapeHtml(row.receiverUnit)+'</span></td>'+
+    '<td><div class="receipt-item-previews">'+itemPreview+more+'</div></td>'+
+    '<td><span class="status-badge '+statusClass+'">'+escapeHtml(row.statusLabel)+'</span>'+evidence+cancelProof+
+      (row.cancellationReason?'<span class="search-cell-sub receipt-cancel-reason">'+escapeHtml(row.cancellationReason)+'</span>':'')+'</td>'+
+    '<td><div class="receipt-actions">'+
+      '<button type="button" class="receipt-action-button" data-receipt-print="'+escapeHtml(row.id)+'">Cetak Ulang</button>'+
+      edit+upload+cancel+'</div></td>'+
+  '</tr>';
+}
+
+function formatReceiptTimestamp_(value){
+  if(!value)return 'Waktu tidak tersedia';
+  const date=new Date(value);
+  if(isNaN(date))return String(value);
+  return new Intl.DateTimeFormat('id-ID',{
+    day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit',
+    timeZone:'Asia/Jakarta'
+  }).format(date)+' WIB';
+}
+
+function receiptTitleCase_(value){
+  return String(value||'').toLowerCase().replace(/\b\w/g,char=>char.toUpperCase());
+}
+
+function receiptSecurityLabel_(value){
+  const normalized=String(value||'BIASA/TERBUKA').toUpperCase();
+  if(normalized==='SANGAT RAHASIA')return 'Sangat Rahasia';
+  if(normalized==='RAHASIA')return 'Rahasia';
+  if(normalized==='TERBATAS')return 'Terbatas';
+  return 'Biasa/Terbuka';
+}
+
+function securityRankClient_(value){
+  return {'BIASA/TERBUKA':1,'TERBATAS':2,'RAHASIA':3,'SANGAT RAHASIA':4}[
+    String(value||'BIASA/TERBUKA').toUpperCase()
+  ]||1;
+}
+
+function mostRestrictiveSecurityClient_(items){
+  return (items||[]).reduce((highest,item)=>{
+    const value=String(item.securityClassification||item||'BIASA/TERBUKA').toUpperCase();
+    return securityRankClient_(value)>securityRankClient_(highest)?value:highest;
+  },'BIASA/TERBUKA');
+}
+
+function openReceiptEvidence_(receiptId){
+  const row=(state.receiptOptions&&state.receiptOptions.receipts||[]).find(item=>item.id===receiptId);
+  if(!row){toast('Tanda terima tidak ditemukan.',true);return}
+  $('receiptEvidenceId').value=receiptId;
+  $('receiptEvidenceTitle').textContent=row.number+' · '+row.senderName;
+  $('receiptEvidenceFile').value='';
+  $('receiptEvidenceStatus').textContent='';
+  $('receiptEvidenceForm').hidden=false;
+  $('receiptEvidenceForm').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+async function closeReceiptEvidence_(){
+  await resetReceiptUpload_('SIGNED');
+  $('receiptEvidenceForm').hidden=true;
+  $('receiptEvidenceForm').reset();
+}
+
+async function submitReceiptEvidence_(event){
+  event.preventDefault();
+  const receiptId=$('receiptEvidenceId').value;
+  const file=$('receiptEvidenceFile').files[0];
+  if(!file){toast('Pilih PDF tanda terima tertandatangani.',true);return}
+  try{validateReceiptPdfClient_(file)}catch(error){toast(error.message,true);return}
+  const button=$('uploadReceiptEvidence');
+  button.disabled=true;
+  button.textContent='Menyiapkan…';
+  try{
+    const result=await receiptEvidenceUpload_({
+      uploadType:'SIGNED',receiptId:receiptId
+    },file,button,$('receiptEvidenceStatus'),'SIGNED');
+    toast(result.message);
+    await closeReceiptEvidence_();
+    state.receiptOptions=null;
+    await loadReceiptOptions(true);
+  }catch(error){
+    $('receiptEvidenceStatus').textContent='Bukti belum tersimpan: '+error.message;
+    toast(error.message,true);
+  }finally{
+    button.disabled=false;
+    button.textContent='Upload Bukti';
+  }
+}
+
+function openReceiptCancel_(receiptId){
+  const row=(state.receiptOptions&&state.receiptOptions.receipts||[]).find(item=>item.id===receiptId);
+  if(!row){toast('Tanda terima tidak ditemukan.',true);return}
+  $('cancelReceiptId').value=receiptId;
+  $('receiptCancelTitle').textContent=row.number+' · '+row.senderName;
+  $('receiptCancelReason').value='';
+  $('receiptCancelProof').value='';
+  $('receiptCancelConfirmation').value='';
+  $('receiptCancelStatus').textContent='';
+  $('receiptCancelForm').hidden=false;
+  $('receiptCancelForm').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+async function closeReceiptCancel_(){
+  await resetReceiptUpload_('CANCEL');
+  $('receiptCancelForm').hidden=true;
+  $('receiptCancelForm').reset();
+}
+
+async function submitReceiptCancel_(event){
+  event.preventDefault();
+  const reason=$('receiptCancelReason').value.trim();
+  if(reason.length<10){toast('Alasan pembatalan minimal 10 karakter.',true);return}
+  if($('receiptCancelConfirmation').value.trim().toUpperCase()!=='BATALKAN'){
+    toast('Ketik BATALKAN pada kolom konfirmasi.',true);return;
+  }
+  const file=$('receiptCancelProof').files[0];
+  if(file){try{validateReceiptPdfClient_(file)}catch(error){toast(error.message,true);return}}
+  const payload={
+    cancelReceiptId:$('cancelReceiptId').value,
+    cancelReason:reason,
+    cancelConfirmation:'BATALKAN'
+  };
+  const button=$('confirmReceiptCancel');
+  button.disabled=true;
+  button.textContent=file?'Menyiapkan bukti…':'Membatalkan…';
+  $('receiptCancelStatus').textContent=file?'Menyiapkan upload bukti pembatalan…':'Mencatat pembatalan…';
+  try{
+    const result=file
+      ?await receiptEvidenceUpload_(Object.assign({uploadType:'CANCEL',receiptId:payload.cancelReceiptId},payload),
+        file,button,$('receiptCancelStatus'),'CANCEL')
+      :await runServer('apiCancelReceipt',payload);
+    toast(result.message);
+    await closeReceiptCancel_();
+    state.receiptOptions=null;
+    await loadReceiptOptions(true);
+  }catch(error){
+    $('receiptCancelStatus').textContent='Pembatalan belum tersimpan: '+error.message;
+    toast(error.message,true);
+  }finally{
+    button.disabled=false;
+    button.textContent='Batalkan Tanda Terima';
+  }
+}
+
+function validateReceiptPdfClient_(file){
+  if(!file)throw new Error('Pilih file PDF.');
+  const extension=(file.name.split('.').pop()||'').toLowerCase();
+  if(extension!=='pdf')throw new Error('Bukti harus berformat PDF.');
+  if(file.size>10*1024*1024)throw new Error('Ukuran bukti maksimal 10 MB.');
+}
+
+async function receiptEvidenceUpload_(payload,file,button,statusElement,kind){
+  const stateKey=kind==='CANCEL'?'receiptCancelUpload':'receiptUpload';
+  const signature=JSON.stringify(payload)+'|'+file.name+'|'+file.size+'|'+(file.type||'');
+  let upload=state[stateKey];
+  if(upload&&upload.signature!==signature){
+    if(upload.sessionId){try{await runServer('apiCancelReceiptEvidenceUpload',upload.sessionId)}catch(ignore){}}
+    upload=null;
+  }
+  if(!upload){
+    upload={signature:signature,sessionId:'',uploadedBytes:0,chunkSize:512*1024,file:file};
+    state[stateKey]=upload;
+  }
+  try{
+    if(!upload.sessionId){
+      const started=await runServer('apiStartReceiptEvidenceUpload',Object.assign({},payload,{
+        evidenceName:file.name,evidenceSize:file.size,evidenceType:file.type||'application/pdf'
+      }));
+      upload.sessionId=started.sessionId;
+      upload.chunkSize=started.chunkSize||upload.chunkSize;
+      upload.uploadedBytes=started.uploadedBytes||0;
+    }else{
+      const status=await runServer('apiGetReceiptEvidenceUploadStatus',upload.sessionId);
+      if(status.committed&&status.result)return status.result;
+      upload.uploadedBytes=status.uploadedBytes||0;
+    }
+    while(upload.uploadedBytes<file.size){
+      const start=upload.uploadedBytes;
+      const end=Math.min(start+upload.chunkSize,file.size);
+      const base64=await fileSliceToBase64(file.slice(start,end,'application/pdf'));
+      const progress=await runServer('apiUploadReceiptEvidenceChunk',{
+        sessionId:upload.sessionId,start:start,end:end,total:file.size,base64:base64
+      });
+      if(Number(progress.uploadedBytes)<=start)throw new Error('Drive belum menerima potongan bukti. Klik tombol kembali untuk melanjutkan.');
+      upload.uploadedBytes=Number(progress.uploadedBytes);
+      const percent=Math.min(100,Math.floor(upload.uploadedBytes/file.size*100));
+      button.textContent='Upload '+percent+'%';
+      statusElement.textContent='Mengunggah bukti: '+percent+'%.';
+    }
+    button.textContent='Menyelesaikan…';
+    statusElement.textContent='Bukti lengkap. Menghubungkan file dengan tanda terima…';
+    return runServer('apiFinalizeReceiptEvidenceUpload',upload.sessionId);
+  }catch(error){
+    if(/UPLOAD_SESSION_(EXPIRED|NOT_FOUND)/.test(error.message||String(error))){
+      upload.sessionId='';
+      upload.uploadedBytes=0;
+    }
+    throw error;
+  }
+}
+
+async function resetReceiptUpload_(kind){
+  const stateKey=kind==='CANCEL'?'receiptCancelUpload':'receiptUpload';
+  const upload=state[stateKey];
+  state[stateKey]=null;
+  if(upload&&upload.sessionId){
+    try{await runServer('apiCancelReceiptEvidenceUpload',upload.sessionId)}catch(ignore){}
+  }
+}
+
+function openEmployeeModal_(){
+  $('employeeForm').reset();
+  $('employeeFormStatus').textContent='';
+  $('employeeModal').classList.add('open');
+  $('newEmployeeName').focus();
+}
+
+function closeEmployeeModal_(){
+  $('employeeModal').classList.remove('open');
+}
+
+async function submitReceiptEmployee_(event){
+  event.preventDefault();
+  const button=$('saveEmployee');
+  button.disabled=true;
+  button.textContent='Menyimpan…';
+  try{
+    const result=await runServer('apiAddReceiptEmployee',{
+      employeeName:$('newEmployeeName').value.trim(),
+      employeeUnit:$('newEmployeeUnit').value.trim()
+    });
+    if(!state.receiptOptions)state.receiptOptions={employees:[],receipts:[],summary:{},defaults:{}};
+    const index=state.receiptOptions.employees.findIndex(row=>row.id===result.employee.id);
+    if(index===-1)state.receiptOptions.employees.push(result.employee);
+    else state.receiptOptions.employees[index]=result.employee;
+    state.receiptOptions.employees.sort((a,b)=>a.label.localeCompare(b.label,'id'));
+    renderReceiptEmployees_(result.employee.id);
+    renderReceiptSenderInfo_();
+    closeEmployeeModal_();
+    toast(result.message);
+  }catch(error){
+    $('employeeFormStatus').textContent=error.message;
+    toast(error.message,true);
+  }finally{
+    button.disabled=false;
+    button.textContent='Simpan Pegawai';
+  }
+}
+
+function bindSearchForm(){
+  $('searchForm').addEventListener('submit',runArchiveSearch);
+  $('resetSearch').addEventListener('click',resetArchiveSearch);
+}
+
+async function runArchiveSearch(event){
+  event.preventDefault();
+  const button=$('runSearch');
+  button.disabled=true;
+  button.textContent='Mencari…';
+  $('searchStatus').textContent='Mencocokkan data arsip aktif…';
+  try{
+    const criteria={
+      query:$('searchQuery').value.trim(),
+      dateFrom:$('searchDateFrom').value,
+      dateTo:$('searchDateTo').value,
+      classification:$('searchClassification').value.trim(),
+      development:$('searchDevelopment').value,
+      fileStatus:$('searchFileStatus').value,
+      limit:200
+    };
+    state.searchResults=await runServer('apiSearchArchive',criteria);
+    renderArchiveSearchResults();
+  }catch(error){
+    $('searchStatus').textContent='Pencarian gagal.';
+    toast(error.message,true);
+  }finally{
+    button.disabled=false;
+    button.textContent='Cari Arsip';
+  }
+}
+
+function resetArchiveSearch(){
+  $('searchForm').reset();
+  state.searchResults=null;
+  $('searchResultsBody').innerHTML='';
+  $('searchTableWrap').hidden=true;
+  $('searchEmpty').hidden=false;
+  $('searchEmpty').innerHTML='Masukkan kata kunci atau filter, lalu tekan <strong>Cari Arsip</strong>.';
+  $('searchSummary').textContent='Belum ada pencarian.';
+  $('searchStatus').textContent='Masukkan kata kunci atau gunakan filter.';
+  $('searchQuery').focus();
+}
+
+function renderArchiveSearchResults(){
+  const response=state.searchResults;
+  const rows=response&&response.results||[];
+  $('searchStatus').textContent=response.totalMatches+' item ditemukan.';
+  $('searchSummary').textContent=response.truncated
+    ? 'Menampilkan '+response.returnedCount+' dari '+response.totalMatches+' item paling relevan. Persempit kata kunci atau filter untuk hasil lebih spesifik.'
+    : response.totalMatches+' item arsip aktif ditemukan.';
+  $('searchResultsBody').innerHTML='';
+  $('searchEmpty').hidden=rows.length>0;
+  $('searchTableWrap').hidden=rows.length===0;
+  if(!rows.length){
+    $('searchEmpty').textContent='Tidak ada arsip aktif yang sesuai. Coba kata kunci yang lebih singkat atau bersihkan sebagian filter.';
+    return;
+  }
+  $('searchResultsBody').innerHTML=rows.map(renderArchiveSearchRow).join('');
+}
+
+function renderArchiveSearchRow(row){
+  const pdfClass=row.fileUrl?'search-link':'search-link disabled';
+  const pdfLabel=row.fileUrl?'Buka PDF':'Belum Ada PDF';
+  const folderClass=row.folderUrl?'search-link secondary-link':'search-link secondary-link disabled';
+  const fileBadge=row.fileStatus==='TERSEDIA'
+    ? '<span class="status-badge success">PDF tersedia</span>'
+    : '<span class="status-badge warning">Belum diunggah</span>';
+  const loanBadge=String(row.loanStatus||'TERSEDIA').toUpperCase()==='TERSEDIA'
+    ? '<span class="status-badge">Tersedia</span>'
+    : '<span class="status-badge loan">'+escapeHtml(row.loanStatus)+'</span>';
+  return '<tr>'+
+    '<td><span class="search-number">'+escapeHtml(row.berkasNumber)+' / '+escapeHtml(row.itemNumber)+'</span><span class="search-cell-sub">'+escapeHtml(row.title)+'</span></td>'+
+    '<td><span class="search-cell-main">'+escapeHtml(formatArchiveDate(row.documentDate))+'</span><span class="search-cell-sub">'+escapeHtml(row.letterNumber||'Tanpa nomor surat')+'</span></td>'+
+    '<td><div class="search-description">'+escapeHtml(row.description)+'</div><span class="search-cell-sub">'+escapeHtml(row.pageCount)+' lembar · '+escapeHtml(row.developmentLevel)+(row.condition?' · '+escapeHtml(receiptTitleCase_(row.condition)):'')+'</span></td>'+
+    '<td><span class="search-cell-main">'+escapeHtml(row.classificationCode||'–')+'</span><span class="search-cell-sub">'+escapeHtml(row.location)+'</span></td>'+
+    '<td><div class="search-badges">'+fileBadge+loanBadge+'</div></td>'+
+    '<td><div class="search-actions"><a class="'+pdfClass+'" href="'+escapeHtml(row.fileUrl||'#')+'" target="_blank" rel="noopener">'+pdfLabel+'</a><a class="'+folderClass+'" href="'+escapeHtml(row.folderUrl||'#')+'" target="_blank" rel="noopener">Buka Folder</a></div></td>'+
+  '</tr>';
+}
+
+function formatArchiveDate(value){
+  if(!value)return 'Tanpa tanggal';
+  const parts=String(value).split('-');
+  if(parts.length!==3)return value;
+  const date=new Date(Number(parts[0]),Number(parts[1])-1,Number(parts[2]));
+  return new Intl.DateTimeFormat('id-ID',{day:'2-digit',month:'short',year:'numeric'}).format(date);
+}
+
+function bindFolderLabelPage(){
+  const start=$('labelStartSlot');
+  for(let slot=1;slot<=14;slot++)start.add(new Option(slot+' — '+folderLabelSlotName_(slot),String(slot)));
+  $('labelSearch').addEventListener('input',renderFolderLabelTable);
+  $('labelPrintStatus').addEventListener('change',renderFolderLabelTable);
+  $('labelStartSlot').addEventListener('change',renderFolderLabelPreview);
+  $('refreshFolderLabels').addEventListener('click',()=>loadFolderLabelOptions(true));
+  $('selectVisibleLabels').addEventListener('click',selectVisibleFolderLabels);
+  $('clearSelectedLabels').addEventListener('click',clearSelectedFolderLabels);
+  $('toggleVisibleLabels').addEventListener('change',event=>{
+    visibleFolderLabels_().forEach(row=>{
+      if(event.target.checked)state.selectedLabelIds.add(row.id);
+      else state.selectedLabelIds.delete(row.id);
+    });
+    renderFolderLabelTable();
+  });
+  $('labelResultsBody').addEventListener('change',event=>{
+    const checkbox=event.target.closest('[data-label-id]');
+    if(!checkbox)return;
+    if(checkbox.checked)state.selectedLabelIds.add(checkbox.dataset.labelId);
+    else state.selectedLabelIds.delete(checkbox.dataset.labelId);
+    updateFolderLabelSelection_();
+  });
+  $('generateFolderLabels').addEventListener('click',generateFolderLabels);
+  renderFolderLabelPreview();
+}
+
+async function loadFolderLabelOptions(force=false){
+  if(state.labelOptions&&!force){renderFolderLabelTable();return}
+  $('labelTableEmpty').hidden=false;
+  $('labelTableEmpty').textContent='Memuat daftar berkas aktif…';
+  $('labelTableWrap').hidden=true;
+  $('refreshFolderLabels').disabled=true;
+  try{
+    state.labelOptions=await runServer('apiGetFolderLabelOptions');
+    const activeIds=new Set((state.labelOptions.berkas||[]).map(row=>row.id));
+    state.selectedLabelIds.forEach(id=>{if(!activeIds.has(id))state.selectedLabelIds.delete(id)});
+    renderFolderLabelTable();
+  }catch(error){
+    $('labelTableEmpty').textContent='Daftar berkas gagal dimuat.';
+    toast(error.message,true);
+  }finally{
+    $('refreshFolderLabels').disabled=false;
+  }
+}
+
+function visibleFolderLabels_(){
+  const rows=state.labelOptions&&state.labelOptions.berkas||[];
+  const query=normalizeFolderLabelFilter_($('labelSearch').value);
+  const status=$('labelPrintStatus').value;
+  return rows.filter(row=>{
+    if(status!=='ALL'&&row.printStatus!==status)return false;
+    if(!query)return true;
+    const corpus=normalizeFolderLabelFilter_([row.number,row.classificationCode,row.title,row.location].join(' '));
+    return query.split(' ').filter(Boolean).every(token=>corpus.includes(token));
+  });
+}
+
+function normalizeFolderLabelFilter_(value){
+  return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').replace(/\s+/g,' ').trim();
+}
+
+function renderFolderLabelTable(){
+  if(!state.labelOptions)return;
+  const rows=visibleFolderLabels_();
+  $('labelResultsBody').innerHTML=rows.map(row=>{
+    const checked=state.selectedLabelIds.has(row.id)?' checked':'';
+    const statusClass=row.printStatus==='PERLU_CETAK_ULANG'?'warning':row.printStatus==='SUDAH_DICETAK'?'success':'';
+    const printed=row.lastPrintedAt?'<span class="search-cell-sub">Terakhir '+escapeHtml(formatFolderLabelTimestamp_(row.lastPrintedAt))+'</span>':'';
+    return '<tr>'+
+      '<td class="label-check-column"><input type="checkbox" data-label-id="'+escapeHtml(row.id)+'" aria-label="Pilih berkas '+escapeHtml(row.number)+'"'+checked+'></td>'+
+      '<td><span class="search-number">'+escapeHtml(row.number)+'</span></td>'+
+      '<td><span class="search-cell-main">'+escapeHtml(row.classificationCode||'–')+'</span></td>'+
+      '<td><span class="search-cell-main">'+escapeHtml(row.title)+'</span></td>'+
+      '<td><span class="search-cell-sub label-location">'+escapeHtml(row.location)+'</span></td>'+
+      '<td><span class="status-badge '+statusClass+'">'+escapeHtml(row.printStatusLabel)+'</span>'+printed+'</td>'+
+    '</tr>';
+  }).join('');
+  $('labelTableEmpty').hidden=rows.length>0;
+  $('labelTableWrap').hidden=rows.length===0;
+  $('labelTableEmpty').textContent=state.labelOptions.total
+    ? 'Tidak ada berkas yang sesuai dengan pencarian atau status cetak.'
+    : 'Belum ada berkas aktif yang memiliki nomor definitif.';
+  const allVisibleSelected=rows.length>0&&rows.every(row=>state.selectedLabelIds.has(row.id));
+  $('toggleVisibleLabels').checked=allVisibleSelected;
+  $('toggleVisibleLabels').indeterminate=!allVisibleSelected&&rows.some(row=>state.selectedLabelIds.has(row.id));
+  updateFolderLabelSelection_();
+}
+
+function selectVisibleFolderLabels(){
+  visibleFolderLabels_().forEach(row=>state.selectedLabelIds.add(row.id));
+  renderFolderLabelTable();
+}
+
+function clearSelectedFolderLabels(){
+  state.selectedLabelIds.clear();
+  renderFolderLabelTable();
+}
+
+function updateFolderLabelSelection_(){
+  const selected=selectedFolderLabels_();
+  const startSlot=Number($('labelStartSlot').value)||1;
+  const pages=selected.length?Math.ceil((startSlot-1+selected.length)/14):0;
+  $('labelSelectionSummary').textContent=selected.length
+    ? selected.length+' berkas dipilih · '+pages+' halaman A4'
+    : 'Belum ada berkas dipilih.';
+  $('labelStatus').textContent=selected.length
+    ? 'PDF akan berisi '+selected.length+' label dalam '+pages+' halaman.'
+    : 'Pilih minimal satu berkas.';
+  $('generateFolderLabels').disabled=selected.length===0;
+  renderFolderLabelPreview();
+}
+
+function selectedFolderLabels_(){
+  const byId={};
+  (state.labelOptions&&state.labelOptions.berkas||[]).forEach(row=>byId[row.id]=row);
+  return Array.from(state.selectedLabelIds).map(id=>byId[id]).filter(Boolean)
+    .sort((a,b)=>String(a.number).localeCompare(String(b.number),'id',{numeric:true,sensitivity:'base'}));
+}
+
+function renderFolderLabelPreview(){
+  const selected=selectedFolderLabels_();
+  const startSlot=Number($('labelStartSlot').value)||1;
+  const slots=[];
+  for(let slot=1;slot<=14;slot++){
+    const labelIndex=slot-startSlot;
+    const row=labelIndex>=0?selected[labelIndex]:null;
+    slots.push(row
+      ? '<div class="folder-label-sample filled"><strong>'+escapeHtml(row.classificationCode||'TANPA KODE')+' | '+escapeHtml(row.number)+'</strong><span>'+escapeHtml(row.title)+'</span><em>UINSA</em></div>'
+      : '<div class="folder-label-sample empty"><span>Posisi '+slot+'</span></div>');
+  }
+  $('folderLabelPreview').innerHTML=slots.join('');
+}
+
+async function generateFolderLabels(){
+  const selected=selectedFolderLabels_();
+  if(!selected.length){toast('Pilih minimal satu berkas.',true);return}
+  const button=$('generateFolderLabels');
+  button.disabled=true;
+  button.textContent='Menyiapkan PDF…';
+  $('loadingTitle').textContent='Membuat lidah folder';
+  $('loadingMessage').textContent='Mengambil nomor definitif terbaru dan menyusun halaman A4…';
+  $('loadingOverlay').hidden=false;
+  $('app').setAttribute('aria-busy','true');
+  try{
+    const response=await runServer('apiPrepareFolderLabels',{
+      berkasIds:selected.map(row=>row.id),
+      startSlot:Number($('labelStartSlot').value)||1
+    });
+    $('loadingMessage').textContent='Menggambar label dan logo UINSA ke dalam PDF…';
+    await new Promise(resolve=>setTimeout(resolve,20));
+    const result=downloadFolderLabelsPdf_(response);
+    toast('PDF lidah folder berhasil diunduh.');
+    state.selectedLabelIds.clear();
+    state.labelOptions=null;
+    await loadFolderLabelOptions(true);
+    $('labelStatus').textContent='PDF berhasil dibuat: '+response.fileName+' · '+result.pageCount+' halaman.';
+  }catch(error){
+    $('labelStatus').textContent='PDF belum dapat dibuat.';
+    toast(error.message,true);
+  }finally{
+    $('loadingOverlay').hidden=true;
+    $('app').removeAttribute('aria-busy');
+    button.disabled=state.selectedLabelIds.size===0;
+    button.textContent='Buat PDF Lidah Folder';
+  }
+}
+
+function folderLabelSlotName_(slot){
+  const row=Math.ceil(slot/2);
+  return 'baris '+row+' '+(slot%2?'kiri':'kanan');
+}
+
+function formatFolderLabelTimestamp_(value){
+  if(!value)return '';
+  const date=new Date(value);
+  if(isNaN(date))return String(value);
+  return new Intl.DateTimeFormat('id-ID',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(date);
+}
+
+function bindRetentionPage(){
+  $('retentionSearch').addEventListener('input',renderRetentionTable);
+  $('retentionStatusFilter').addEventListener('change',renderRetentionTable);
+  $('refreshRetention').addEventListener('click',()=>loadRetentionOptions(true));
+  $('retentionResultsBody').addEventListener('click',event=>{
+    const button=event.target.closest('[data-retention-action]');
+    if(button)startRetentionTransfer(button.dataset.retentionAction);
+  });
+  $('cancelRetentionTransfer').addEventListener('click',cancelRetentionTransfer);
+  $('retentionTransferForm').addEventListener('submit',submitRetentionTransfer);
+}
+
+async function loadRetentionOptions(force=false){
+  if(state.retentionOptions&&!force){renderRetentionPage();return}
+  $('retentionTableEmpty').hidden=false;
+  $('retentionTableEmpty').textContent='Memuat data retensi…';
+  $('retentionTableWrap').hidden=true;
+  $('refreshRetention').disabled=true;
+  try{
+    state.retentionOptions=await runServer('apiGetRetentionOptions');
+    renderRetentionPage();
+  }catch(error){
+    $('retentionTableEmpty').textContent='Data retensi gagal dimuat.';
+    toast(error.message,true);
+  }finally{
+    $('refreshRetention').disabled=false;
+  }
+}
+
+function renderRetentionPage(){
+  if(!state.retentionOptions)return;
+  const summary=state.retentionOptions.summary||{};
+  $('retentionStatActive').textContent=summary.active||0;
+  $('retentionStatDue').textContent=summary.dueSoon||0;
+  $('retentionStatExpired').textContent=summary.expired||0;
+  $('retentionStatTransferred').textContent=summary.transferred||0;
+  renderRetentionTable();
+}
+
+function visibleRetentionRows_(){
+  const rows=state.retentionOptions&&state.retentionOptions.berkas||[];
+  const query=normalizeFolderLabelFilter_($('retentionSearch').value);
+  const status=$('retentionStatusFilter').value;
+  return rows.filter(row=>{
+    if(status!=='ALL'&&row.statusCode!==status)return false;
+    if(!query)return true;
+    const corpus=normalizeFolderLabelFilter_([
+      row.number,row.title,row.classificationCode,row.location,row.statusLabel,row.approvedBy
+    ].join(' '));
+    return query.split(' ').filter(Boolean).every(token=>corpus.includes(token));
+  });
+}
+
+function renderRetentionTable(){
+  if(!state.retentionOptions)return;
+  const rows=visibleRetentionRows_();
+  $('retentionResultsBody').innerHTML=rows.map(renderRetentionRow_).join('');
+  $('retentionTableEmpty').hidden=rows.length>0;
+  $('retentionTableWrap').hidden=rows.length===0;
+  $('retentionTableEmpty').textContent=state.retentionOptions.total
+    ? 'Tidak ada berkas yang sesuai dengan pencarian atau filter status.'
+    : 'Belum ada berkas yang memiliki perhitungan retensi.';
+}
+
+function renderRetentionRow_(row){
+  const statusClass=row.statusCode==='EXPIRED'?'danger':row.statusCode==='DUE'?'warning':row.statusCode==='TRANSFERRED'?'success':'';
+  const loanBadge=row.loanStatus==='TERSEDIA'
+    ? ''
+    : '<span class="status-badge loan">'+escapeHtml(row.loanStatus)+'</span>';
+  let action='';
+  if(row.statusCode==='TRANSFERRED'){
+    action=(row.evidenceUrl
+      ? '<a class="search-link" href="'+escapeHtml(row.evidenceUrl)+'" target="_blank" rel="noopener">Buka Bukti</a>'
+      : '<span class="search-cell-sub">Tanpa bukti file</span>');
+  }else if(row.eligibleToMove){
+    action='<button type="button" class="retention-action-button" data-retention-action="'+escapeHtml(row.id)+'">Proses Pemindahan</button>';
+  }else{
+    action='<button type="button" class="retention-action-button" disabled title="'+escapeHtml(row.blockingReason)+'">Belum Dapat Dipindahkan</button>';
+  }
+  const folderLink=row.folderUrl
+    ? '<a class="retention-folder-link" href="'+escapeHtml(row.folderUrl)+'" target="_blank" rel="noopener">Buka folder</a>'
+    : '';
+  const transferDetail=row.statusCode==='TRANSFERRED'
+    ? '<span class="search-cell-sub">Dipindahkan '+escapeHtml(formatArchiveDate(row.transferDate))+
+      (row.approvedBy?' · '+escapeHtml(row.approvedBy):'')+'</span>'
+    : '';
+  return '<tr>'+
+    '<td><span class="search-number">'+escapeHtml(row.number||'–')+'</span><span class="search-cell-main">'+escapeHtml(row.title)+'</span><span class="search-cell-sub">'+escapeHtml(row.classificationCode||'–')+'</span></td>'+
+    '<td><span class="search-cell-main">Aktif '+escapeHtml(row.activeRetention)+'</span><span class="search-cell-sub">Inaktif '+escapeHtml(row.inactiveRetention)+' · '+escapeHtml(row.finalDisposition||'–')+'</span></td>'+
+    '<td><span class="search-cell-main">Acuan '+escapeHtml(formatArchiveDate(row.referenceDate))+'</span><span class="search-cell-sub">Aktif s.d. '+escapeHtml(formatArchiveDate(row.activeLimit))+' · Inaktif s.d. '+escapeHtml(formatArchiveDate(row.inactiveLimit))+'</span></td>'+
+    '<td><span class="status-badge '+statusClass+'">'+escapeHtml(row.statusLabel)+'</span>'+loanBadge+transferDetail+'</td>'+
+    '<td><span class="search-cell-main">'+escapeHtml(row.location)+'</span>'+folderLink+'</td>'+
+    '<td><div class="retention-actions">'+action+'</div></td>'+
+  '</tr>';
+}
+
+function startRetentionTransfer(berkasId){
+  const row=(state.retentionOptions&&state.retentionOptions.berkas||[]).find(item=>item.id===berkasId);
+  if(!row||!row.eligibleToMove){toast(row&&row.blockingReason||'Berkas belum dapat dipindahkan.',true);return}
+  state.selectedRetentionId=berkasId;
+  $('retentionBerkasId').value=berkasId;
+  $('retentionTransferTitle').textContent=(row.number||'–')+' – '+row.title;
+  $('retentionTransferImpact').innerHTML='<strong>Masa aktif telah habis.</strong><br>'+
+    'Tanggal acuan '+escapeHtml(formatArchiveDate(row.referenceDate))+
+    ' · Batas aktif '+escapeHtml(formatArchiveDate(row.activeLimit))+
+    ' · '+escapeHtml(row.activeRetention)+
+    ' · Nasib akhir '+escapeHtml(row.finalDisposition||'–')+'.';
+  const today=state.retentionOptions.today||new Date().toISOString().slice(0,10);
+  $('transferApprovedBy').value='Kasubbag TU & RT';
+  $('transferApprovalDate').value=today;
+  $('transferDate').value=today;
+  $('transferNotes').value='';
+  $('transferEvidence').value='';
+  $('transferConfirmation').value='';
+  $('retentionTransferStatus').textContent='';
+  $('retentionTransferForm').hidden=false;
+  $('retentionTransferForm').scrollIntoView({behavior:'smooth',block:'start'});
+  $('transferApprovedBy').focus();
+}
+
+async function cancelRetentionTransfer(){
+  if(state.retentionUpload&&state.retentionUpload.sessionId){
+    try{await runServer('apiCancelRetentionTransferEvidenceUpload',state.retentionUpload.sessionId)}catch(ignore){}
+  }
+  state.retentionUpload=null;
+  state.selectedRetentionId='';
+  $('retentionTransferForm').hidden=true;
+  $('retentionTransferForm').reset();
+}
+
+async function submitRetentionTransfer(event){
+  event.preventDefault();
+  const file=$('transferEvidence').files[0];
+  if($('transferConfirmation').value.trim().toUpperCase()!=='PINDAHKAN'){
+    toast('Ketik PINDAHKAN pada kolom konfirmasi.',true);return;
+  }
+  if(file){
+    const extension=(file.name.split('.').pop()||'').toLowerCase();
+    if(!['pdf','jpg','jpeg','png'].includes(extension)){toast('Bukti pemindahan harus PDF, JPG, JPEG, atau PNG.',true);return}
+    if(file.size>25*1024*1024){toast('Ukuran bukti pemindahan maksimal 25 MB.',true);return}
+  }
+  const button=$('markTransferred');
+  button.disabled=true;
+  button.textContent=file?'Menyiapkan bukti…':'Menyimpan…';
+  $('retentionTransferStatus').textContent=file?'Menyiapkan upload bukti pemindahan…':'Mencatat persetujuan dan pemindahan…';
+  try{
+    const payload=formPayloadWithoutFiles($('retentionTransferForm'));
+    let result;
+    if(file)result=await transferWithEvidenceUpload_(payload,file,button);
+    else{
+      if(state.retentionUpload&&state.retentionUpload.sessionId){
+        try{await runServer('apiCancelRetentionTransferEvidenceUpload',state.retentionUpload.sessionId)}catch(ignore){}
+      }
+      state.retentionUpload=null;
+      // Pertahanan tambahan untuk kode UI lama yang dipertahankan demi cache.
+      // Endpoint ini sengaja tidak ada; CF-04 hanya memakai draft usul di bawah.
+      result=await runServer('apiDisabledLegacyTransfer',payload);
+    }
+    $('retentionTransferStatus').textContent=result.message;
+    toast(result.message);
+    state.retentionUpload=null;
+    state.selectedRetentionId='';
+    $('retentionTransferForm').hidden=true;
+    $('retentionTransferForm').reset();
+    await loadBootstrap();
+    await loadRetentionOptions(true);
+  }catch(error){
+    $('retentionTransferStatus').textContent='Pemindahan belum dicatat: '+error.message;
+    toast(error.message,true);
+  }finally{
+    button.disabled=false;
+    button.textContent='Tandai Sudah Dipindahkan';
+  }
+}
+
+async function transferWithEvidenceUpload_(payload,file,button){
+  const signature=JSON.stringify(payload)+'|'+file.name+'|'+file.size+'|'+(file.type||'');
+  let upload=state.retentionUpload;
+  if(upload&&upload.signature!==signature){
+    if(upload.sessionId){try{await runServer('apiCancelRetentionTransferEvidenceUpload',upload.sessionId)}catch(ignore){}}
+    upload=null;
+  }
+  if(!upload){
+    upload={signature:signature,sessionId:'',uploadedBytes:0,chunkSize:512*1024,file:file,payload:payload};
+    state.retentionUpload=upload;
+  }
+  if(!upload.sessionId){
+    const started=await runServer('apiStartRetentionTransferEvidenceUpload',Object.assign({},payload,{
+      evidenceName:file.name,evidenceSize:file.size,evidenceType:file.type||''
+    }));
+    upload.sessionId=started.sessionId;
+    upload.chunkSize=started.chunkSize||upload.chunkSize;
+    upload.uploadedBytes=started.uploadedBytes||0;
+  }else{
+    const status=await runServer('apiGetRetentionTransferEvidenceUploadStatus',upload.sessionId);
+    if(status.committed&&status.result)return status.result;
+    upload.uploadedBytes=status.uploadedBytes||0;
+  }
+  while(upload.uploadedBytes<file.size){
+    const start=upload.uploadedBytes;
+    const end=Math.min(start+upload.chunkSize,file.size);
+    const base64=await fileSliceToBase64(file.slice(start,end,file.type||'application/octet-stream'));
+    const progress=await runServer('apiUploadRetentionTransferEvidenceChunk',{
+      sessionId:upload.sessionId,start:start,end:end,total:file.size,base64:base64
+    });
+    if(Number(progress.uploadedBytes)<=start)throw new Error('Drive belum menerima potongan bukti pemindahan. Klik kembali tombol pemindahan.');
+    upload.uploadedBytes=Number(progress.uploadedBytes);
+    const percent=Math.min(100,Math.floor(upload.uploadedBytes/file.size*100));
+    button.textContent='Upload bukti '+percent+'%';
+    $('retentionTransferStatus').textContent='Mengunggah bukti pemindahan: '+percent+'%. Status berkas belum diubah.';
+  }
+  button.textContent='Menyelesaikan…';
+  $('retentionTransferStatus').textContent='Bukti lengkap. Mencatat persetujuan dan pemindahan…';
+  return runServer('apiFinalizeRetentionTransferEvidenceUpload',upload.sessionId);
+}
+
+// CF-04 overrides the legacy direct-transfer interface above. Cached tabs may
+// still contain the old controls, but server endpoints reject direct phase changes.
+function bindRetentionPage(){
+  $('retentionSearch').addEventListener('input',renderRetentionTable);
+  $('retentionStatusFilter').addEventListener('change',renderRetentionTable);
+  $('refreshRetention').addEventListener('click',()=>loadRetentionOptions(true));
+  $('retentionResultsBody').addEventListener('change',event=>{
+    const checkbox=event.target.closest('[data-retention-candidate]');
+    if(!checkbox)return;
+    if(checkbox.checked)state.selectedRetentionIds.add(checkbox.dataset.retentionCandidate);
+    else state.selectedRetentionIds.delete(checkbox.dataset.retentionCandidate);
+    updateRetentionSelection_();
+  });
+  $('retentionResultsBody').addEventListener('click',event=>{
+    const button=event.target.closest('[data-verify-retention-metadata]');
+    if(button)verifyRetentionMetadataClient_(button.dataset.verifyRetentionMetadata,button);
+  });
+  $('selectAllRetentionCandidates').addEventListener('change',event=>{
+    visibleRetentionRows_().filter(row=>row.eligibleToPropose).forEach(row=>{
+      if(event.target.checked)state.selectedRetentionIds.add(row.id);
+      else state.selectedRetentionIds.delete(row.id);
+    });
+    renderRetentionTable();
+  });
+  $('openTransferProposalDraft').addEventListener('click',openTransferProposalDraft_);
+  $('closeTransferProposalDraft').addEventListener('click',closeTransferProposalDraft_);
+  $('transferProposalDraftForm').addEventListener('submit',submitTransferProposalDraft_);
+  $('closeTransferSubmission').addEventListener('click',closeTransferSubmission_);
+  $('transferSubmissionForm').addEventListener('submit',submitTransferSubmission_);
+  $('transferProposalResultsBody').addEventListener('click',event=>{
+    const generateButton=event.target.closest('[data-generate-transfer-documents]');
+    if(generateButton){
+      generateTransferProposalDocumentsClient_(generateButton.dataset.generateTransferDocuments,generateButton);
+      return;
+    }
+    const submitButton=event.target.closest('[data-submit-transfer-proposal]');
+    if(submitButton){openTransferSubmission_(submitButton.dataset.submitTransferProposal);return}
+    const retryButton=event.target.closest('[data-retry-transfer-submission]');
+    if(retryButton){retryTransferSubmissionClient_(retryButton.dataset.retryTransferSubmission,retryButton);return}
+    const cancelButton=event.target.closest('[data-cancel-transfer-proposal]');
+    if(cancelButton)cancelTransferProposalDraft_(cancelButton.dataset.cancelTransferProposal);
+  });
+}
+
+async function loadRetentionOptions(force=false){
+  if(state.retentionOptions&&!force){renderRetentionPage();return}
+  $('retentionTableEmpty').hidden=false;
+  $('retentionTableEmpty').textContent='Memuat data retensi…';
+  $('retentionTableWrap').hidden=true;
+  $('refreshRetention').disabled=true;
+  try{
+    state.retentionOptions=await runServer('apiGetRetentionOptions');
+    const eligibleIds=new Set((state.retentionOptions.berkas||[])
+      .filter(row=>row.eligibleToPropose).map(row=>row.id));
+    state.selectedRetentionIds.forEach(id=>{if(!eligibleIds.has(id))state.selectedRetentionIds.delete(id)});
+    renderRetentionPage();
+  }catch(error){
+    $('retentionTableEmpty').textContent='Data retensi gagal dimuat.';
+    toast(error.message,true);
+  }finally{
+    $('refreshRetention').disabled=false;
+  }
+}
+
+function renderRetentionPage(){
+  if(!state.retentionOptions)return;
+  const summary=state.retentionOptions.summary||{};
+  $('retentionStatActive').textContent=summary.active||0;
+  $('retentionStatDue').textContent=summary.dueSoon||0;
+  $('retentionStatExpired').textContent=summary.expired||0;
+  $('retentionStatProposed').textContent=summary.proposed||0;
+  renderRetentionTable();
+  renderTransferProposalHistory_();
+}
+
+function visibleRetentionRows_(){
+  const rows=state.retentionOptions&&state.retentionOptions.berkas||[];
+  const query=normalizeFolderLabelFilter_($('retentionSearch').value);
+  const status=$('retentionStatusFilter').value;
+  return rows.filter(row=>{
+    if(status!=='ALL'&&row.statusCode!==status)return false;
+    if(!query)return true;
+    const corpus=normalizeFolderLabelFilter_([
+      row.number,row.title,row.classificationCode,row.creatorUnit,row.location,
+      row.statusLabel,row.proposalNumber
+    ].join(' '));
+    return query.split(' ').filter(Boolean).every(token=>corpus.includes(token));
+  });
+}
+
+function renderRetentionTable(){
+  if(!state.retentionOptions)return;
+  const rows=visibleRetentionRows_();
+  $('retentionResultsBody').innerHTML=rows.map(renderRetentionRow_).join('');
+  $('retentionTableEmpty').hidden=rows.length>0;
+  $('retentionTableWrap').hidden=rows.length===0;
+  $('retentionTableEmpty').textContent=state.retentionOptions.total
+    ? 'Tidak ada berkas yang sesuai dengan pencarian atau filter status.'
+    : 'Belum ada berkas yang memiliki perhitungan retensi.';
+  updateRetentionSelection_();
+}
+
+function renderRetentionRow_(row){
+  const statusClass=row.statusCode==='EXPIRED'?'danger':
+    row.statusCode==='DUE'?'warning':row.statusCode==='PROPOSED'?'success':'';
+  const checked=state.selectedRetentionIds.has(row.id)?' checked':'';
+  const selector=row.eligibleToPropose
+    ? '<input type="checkbox" data-retention-candidate="'+escapeHtml(row.id)+'" aria-label="Pilih berkas '+escapeHtml(row.number||row.title)+'"'+checked+'>'
+    : row.canVerifyMetadata
+      ? '<button type="button" class="retention-verify-button" data-verify-retention-metadata="'+escapeHtml(row.id)+'">Verifikasi Metadata</button>'
+      : '<input type="checkbox" disabled title="'+escapeHtml(row.blockingReason)+'">';
+  const loanBadge=row.loanStatus==='TERSEDIA'?'':
+    '<span class="status-badge loan">DIPINJAM</span>';
+  const verificationBadge=row.metadataVerified?'':
+    '<span class="status-badge warning">PERLU VERIFIKASI</span>';
+  const folderLink=row.folderUrl
+    ? '<a class="retention-folder-link" href="'+escapeHtml(row.folderUrl)+'" target="_blank" rel="noopener">Buka folder</a>'
+    : '';
+  const proposalDetail=row.proposalNumber
+    ? '<span class="search-cell-sub">'+escapeHtml(row.proposalNumber)+'</span>' : '';
+  return '<tr>'+ 
+    '<td class="retention-select-cell">'+selector+'</td>'+ 
+    '<td><span class="search-number">'+escapeHtml(row.number||'–')+'</span><span class="search-cell-main">'+escapeHtml(row.title)+'</span><span class="search-cell-sub">'+escapeHtml(row.classificationCode||'–')+' · '+escapeHtml(row.creatorUnit||'–')+' · '+escapeHtml(String(row.itemCount||0))+' item</span></td>'+ 
+    '<td><span class="search-cell-main">Aktif '+escapeHtml(row.activeRetention)+'</span><span class="search-cell-sub">Inaktif '+escapeHtml(row.inactiveRetention)+' · '+escapeHtml(row.finalDisposition||'–')+'</span></td>'+ 
+    '<td><span class="search-cell-main">Acuan '+escapeHtml(formatArchiveDate(row.referenceDate))+'</span><span class="search-cell-sub">Aktif s.d. '+escapeHtml(formatArchiveDate(row.activeLimit))+'</span></td>'+ 
+    '<td><span class="status-badge '+statusClass+'">'+escapeHtml(row.statusLabel)+'</span>'+loanBadge+verificationBadge+proposalDetail+'</td>'+ 
+    '<td><span class="search-cell-main">'+escapeHtml(row.location)+'</span>'+folderLink+'</td>'+ 
+  '</tr>';
+}
+
+async function verifyRetentionMetadataClient_(berkasId,button){
+  const row=(state.retentionOptions&&state.retentionOptions.berkas||[])
+    .find(entry=>entry.id===berkasId);
+  if(!row){toast('Data kandidat tidak ditemukan. Segarkan halaman lalu coba kembali.',true);return}
+  const confirmed=window.confirm(
+    'Verifikasi metadata kandidat usul pindah?\n\n'+
+    'Berkas: '+(row.number||'–')+' · '+row.title+'\n'+
+    'Pencipta: '+(row.archiveCreator||'–')+'\n'+
+    'Unit: '+(row.creatorUnit||'–')+'\n'+
+    'Keamanan: '+(row.securityClassification||'–')+'\n'+
+    'Media: '+(row.archiveMedia||'–')+'\n'+
+    'Jumlah: '+Number(row.itemCount||0)+' item\n\n'+
+    'Dengan melanjutkan, Anda menyatakan metadata berkas dan item lama tersebut telah diperiksa.'
+  );
+  if(!confirmed)return;
+  const original=button.textContent;
+  button.disabled=true;
+  button.textContent='Memverifikasi…';
+  try{
+    const result=await runServer('apiVerifyRetentionCandidateMetadata',berkasId);
+    toast(result.message||'Metadata berhasil diverifikasi.');
+    await loadRetentionOptions(true);
+  }catch(error){
+    toast(error.message,true);
+    button.disabled=false;
+    button.textContent=original;
+  }
+}
+
+function updateRetentionSelection_(){
+  const selectedRows=(state.retentionOptions&&state.retentionOptions.berkas||[])
+    .filter(row=>state.selectedRetentionIds.has(row.id)&&row.eligibleToPropose);
+  const itemCount=selectedRows.reduce((sum,row)=>sum+Number(row.itemCount||0),0);
+  $('retentionSelectionSummary').textContent=selectedRows.length
+    ? selectedRows.length+' berkas · '+itemCount+' item akan disnapshot.'
+    : 'Belum ada kandidat dipilih.';
+  $('openTransferProposalDraft').disabled=selectedRows.length===0;
+  const visibleEligible=visibleRetentionRows_().filter(row=>row.eligibleToPropose);
+  const selectedVisible=visibleEligible.filter(row=>state.selectedRetentionIds.has(row.id));
+  $('selectAllRetentionCandidates').checked=visibleEligible.length>0&&selectedVisible.length===visibleEligible.length;
+  $('selectAllRetentionCandidates').indeterminate=selectedVisible.length>0&&selectedVisible.length<visibleEligible.length;
+}
+
+function openTransferProposalDraft_(){
+  const selectedRows=(state.retentionOptions&&state.retentionOptions.berkas||[])
+    .filter(row=>state.selectedRetentionIds.has(row.id)&&row.eligibleToPropose);
+  if(!selectedRows.length){toast('Pilih minimal satu berkas kandidat.',true);return}
+  const itemCount=selectedRows.reduce((sum,row)=>sum+Number(row.itemCount||0),0);
+  $('transferProposalDraftImpact').innerHTML='<strong>'+selectedRows.length+' berkas dipilih.</strong><br>'+itemCount+' item akan disimpan sebagai snapshot. Data sumber dan fase berkas tidak diubah.';
+  $('transferProposalTitle').value='Usul Pemindahan Arsip Inaktif';
+  $('transferProposalNotes').value='';
+  $('transferProposalDraftStatus').textContent='';
+  $('transferProposalDraftForm').hidden=false;
+  $('transferProposalDraftForm').scrollIntoView({behavior:'smooth',block:'start'});
+  $('transferProposalTitle').focus();
+}
+
+function closeTransferProposalDraft_(){
+  $('transferProposalDraftForm').hidden=true;
+  $('transferProposalDraftForm').reset();
+  $('transferProposalDraftStatus').textContent='';
+}
+
+async function submitTransferProposalDraft_(event){
+  event.preventDefault();
+  const ids=Array.from(state.selectedRetentionIds);
+  if(!ids.length){toast('Pilih minimal satu berkas kandidat.',true);return}
+  const button=$('saveTransferProposalDraft');
+  button.disabled=true;
+  button.textContent='Menyimpan snapshot…';
+  $('transferProposalDraftStatus').textContent='Memvalidasi retensi, status pinjam, metadata, dan benturan usul…';
+  try{
+    const payload=formPayloadWithoutFiles($('transferProposalDraftForm'));
+    payload.berkasIds=JSON.stringify(ids);
+    const result=await runServer('apiCreateTransferProposalDraft',payload);
+    toast(result.message);
+    $('transferProposalDraftStatus').textContent=result.message;
+    state.selectedRetentionIds.clear();
+    $('transferProposalDraftForm').hidden=true;
+    $('transferProposalDraftForm').reset();
+    await loadBootstrap();
+    await loadRetentionOptions(true);
+  }catch(error){
+    $('transferProposalDraftStatus').textContent='Draft belum dibuat: '+error.message;
+    toast(error.message,true);
+  }finally{
+    button.disabled=false;
+    button.textContent='Simpan Draft & Snapshot JRA';
+  }
+}
+
+function renderTransferProposalHistory_(){
+  const proposals=state.retentionOptions&&state.retentionOptions.proposals||[];
+  $('transferProposalResultsBody').innerHTML=proposals.map(proposal=>{
+    const statusClass=['DIBATALKAN','DITOLAK'].includes(proposal.status)?'danger':
+      ['DRAFT','DIAJUKAN'].includes(proposal.status)?'warning':'success';
+    const documentActions=proposal.hasDocuments
+      ? '<div class="table-actions"><a class="secondary button-link" href="'+escapeHtml(proposal.pdfUrl)+'" target="_blank" rel="noopener">PDF</a><a class="secondary button-link" href="'+escapeHtml(proposal.xlsxUrl)+'" target="_blank" rel="noopener">XLSX</a><a class="secondary button-link" href="'+escapeHtml(proposal.jraUrl)+'" target="_blank" rel="noopener">Riwayat JRA</a></div><span class="search-cell-sub">Dibuat '+escapeHtml(formatFolderLabelTimestamp_(proposal.documentsCreatedAt))+'</span>'
+      : proposal.canGenerateDocuments
+        ? '<button type="button" class="primary" data-generate-transfer-documents="'+escapeHtml(proposal.id)+'">Buat PDF/XLSX &amp; JRA</button>'
+        : '';
+    let submissionAction='';
+    if(proposal.canSubmit){
+      submissionAction='<button type="button" class="primary" data-submit-transfer-proposal="'+escapeHtml(proposal.id)+'">Ajukan ke Record Center</button>';
+    }else if(proposal.status==='DIAJUKAN'){
+      const outboxClass=proposal.outboxStatus==='SENT'?'success':
+        proposal.outboxStatus==='FAILED'?'danger':'warning';
+      const links='<div class="table-actions">'+
+        (proposal.notaDinasUrl?'<a class="secondary button-link" href="'+escapeHtml(proposal.notaDinasUrl)+'" target="_blank" rel="noopener">Nota Dinas</a>':'')+
+        (proposal.payloadUrl?'<a class="secondary button-link" href="'+escapeHtml(proposal.payloadUrl)+'" target="_blank" rel="noopener">Paket JSON</a>':'')+
+        '</div>';
+      const retry=proposal.canRetrySubmission
+        ?'<button type="button" class="secondary" data-retry-transfer-submission="'+escapeHtml(proposal.id)+'">Kirim Ulang ke Record Center</button>':'';
+      submissionAction=links+'<span class="status-badge '+outboxClass+'">OUTBOX '+escapeHtml(proposal.outboxStatus||'PENDING')+'</span>'+retry+
+        (proposal.outboxLastError?'<span class="search-cell-sub">'+escapeHtml(proposal.outboxLastError)+'</span>':'');
+    }
+    const cancelAction=proposal.canCancel
+      ? '<button type="button" class="secondary" data-cancel-transfer-proposal="'+escapeHtml(proposal.id)+'">'+(proposal.status==='DIAJUKAN'?'Batalkan Pengajuan':'Batalkan Draft')+'</button>'
+      : '<span class="search-cell-sub">'+escapeHtml(proposal.cancelReason||'–')+'</span>';
+    const action='<div class="table-action-stack">'+documentActions+submissionAction+cancelAction+'</div>';
+    return '<tr>'+ 
+      '<td><span class="search-number">'+escapeHtml(proposal.number||'–')+'</span><span class="search-cell-main">'+escapeHtml(proposal.title||'–')+'</span><span class="search-cell-sub">'+escapeHtml(proposal.notes||'')+'</span></td>'+ 
+      '<td><span class="status-badge '+statusClass+'">'+escapeHtml(proposal.status||'–')+'</span>'+
+        (proposal.submittedAt?'<span class="search-cell-sub">Diajukan '+escapeHtml(formatFolderLabelTimestamp_(proposal.submittedAt))+'</span>':'')+
+        (proposal.recordCenterName?'<span class="search-cell-sub">'+escapeHtml(proposal.recordCenterName)+'</span>':'')+'</td>'+ 
+      '<td><span class="search-cell-main">'+escapeHtml(String(proposal.berkasCount||0))+' berkas</span><span class="search-cell-sub">'+escapeHtml(String(proposal.itemCount||0))+' item</span></td>'+ 
+      '<td><span class="search-cell-main">'+escapeHtml(formatFolderLabelTimestamp_(proposal.createdAt))+'</span><span class="search-cell-sub">'+escapeHtml(proposal.createdBy||'')+'</span></td>'+ 
+      '<td>'+action+'</td>'+ 
+    '</tr>';
+  }).join('');
+  $('transferProposalEmpty').hidden=proposals.length>0;
+  $('transferProposalTableWrap').hidden=proposals.length===0;
+}
+
+function openTransferSubmission_(proposalId){
+  const proposal=(state.retentionOptions&&state.retentionOptions.proposals||[])
+    .find(row=>row.id===proposalId);
+  if(!proposal||!proposal.canSubmit){toast('Draft belum siap diajukan. Pastikan tiga dokumen CF-05 sudah dibuat.',true);return}
+  state.transferSubmissionUpload=null;
+  $('transferSubmissionForm').reset();
+  $('transferSubmissionProposalId').value=proposal.id;
+  $('transferRecordCenterName').value=proposal.recordCenterName||'Record Center Rektorat / Unit Kearsipan I';
+  $('transferRecordCenterEmail').value=proposal.recordCenterEmail||'';
+  $('transferSubmissionTitle').textContent=proposal.number+' · '+proposal.title;
+  $('transferSubmissionPackage').innerHTML=
+    '<div><strong>Nota Dinas berdisposisi</strong><span>Wajib diunggah sekarang · PDF &lt; 10 MB</span></div>'+ 
+    '<div><strong>Daftar Arsip Usul Pindah XLSX</strong><span>Siap · '+escapeHtml(String(proposal.berkasCount||0))+' berkas</span></div>'+ 
+    '<div><strong>Riwayat JRA</strong><span>Siap · snapshot saat draft dibuat</span></div>'+ 
+    '<div><strong>Daftar Usul PDF</strong><span>Tersimpan sebagai lampiran Nota Dinas</span></div>';
+  $('transferSubmissionStatus').textContent='Periksa paket lalu ketik AJUKAN.';
+  $('transferSubmissionForm').hidden=false;
+  $('transferSubmissionForm').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+async function closeTransferSubmission_(){
+  const upload=state.transferSubmissionUpload;
+  state.transferSubmissionUpload=null;
+  if(upload&&upload.sessionId&&!upload.committed){
+    try{await runServer('apiCancelTransferSubmissionUpload',upload.sessionId)}catch(ignore){}
+  }
+  $('transferSubmissionForm').hidden=true;
+  $('transferSubmissionForm').reset();
+  $('transferSubmissionStatus').textContent='';
+}
+
+async function submitTransferSubmission_(event){
+  event.preventDefault();
+  const proposalId=$('transferSubmissionProposalId').value;
+  const file=$('transferNotaDinasFile').files[0];
+  const confirmation=$('transferSubmissionConfirmation').value.trim().toUpperCase();
+  if(!proposalId){toast('ID draft usul tidak ditemukan.',true);return}
+  if(!file){toast('Pilih PDF Nota Dinas yang telah mendapat disposisi.',true);return}
+  if(!file.name.toLowerCase().endsWith('.pdf')){toast('Nota Dinas harus berupa PDF.',true);return}
+  if(file.size>=10*1024*1024){toast('Ukuran Nota Dinas harus kurang dari 10 MB.',true);return}
+  if(confirmation!=='AJUKAN'){toast('Ketik AJUKAN untuk mengonfirmasi.',true);return}
+  const signature=[proposalId,file.name,file.size,file.lastModified,
+    $('transferRecordCenterName').value,$('transferRecordCenterEmail').value].join('|');
+  let upload=state.transferSubmissionUpload;
+  if(upload&&upload.signature!==signature){
+    if(upload.sessionId){try{await runServer('apiCancelTransferSubmissionUpload',upload.sessionId)}catch(ignore){}}
+    upload=null;
+  }
+  if(!upload){
+    upload={signature:signature,sessionId:'',uploadedBytes:0,chunkSize:512*1024,file:file,committed:false};
+    state.transferSubmissionUpload=upload;
+  }
+  const button=$('submitTransferProposal');
+  button.disabled=true;
+  try{
+    if(!upload.sessionId){
+      $('transferSubmissionStatus').textContent='Memulai upload Nota Dinas…';
+      const started=await runServer('apiStartTransferSubmissionUpload',{
+        proposalId:proposalId,
+        recordCenterName:$('transferRecordCenterName').value,
+        recordCenterEmail:$('transferRecordCenterEmail').value,
+        confirmation:confirmation,
+        fileName:file.name,fileSize:file.size,mimeType:file.type
+      });
+      upload.sessionId=started.sessionId;
+      upload.chunkSize=started.chunkSize||upload.chunkSize;
+      upload.uploadedBytes=started.uploadedBytes||0;
+    }else{
+      const status=await runServer('apiGetTransferSubmissionUploadStatus',upload.sessionId);
+      if(status.committed&&status.result){
+        upload.committed=true;
+        await finishTransferSubmission_(status.result);
+        return;
+      }
+      upload.uploadedBytes=status.uploadedBytes||0;
+    }
+    while(upload.uploadedBytes<file.size){
+      const start=upload.uploadedBytes;
+      const end=Math.min(start+upload.chunkSize,file.size);
+      const base64=await fileSliceToBase64(file.slice(start,end,'application/pdf'));
+      const progress=await runServer('apiUploadTransferSubmissionChunk',{
+        sessionId:upload.sessionId,start:start,end:end,total:file.size,base64:base64
+      });
+      if(Number(progress.uploadedBytes)<=start)throw new Error('Drive belum menerima potongan Nota Dinas. Klik Upload & Ajukan kembali.');
+      upload.uploadedBytes=Number(progress.uploadedBytes);
+      const percent=Math.min(100,Math.floor(upload.uploadedBytes/file.size*100));
+      $('transferSubmissionStatus').textContent='Mengunggah Nota Dinas… '+percent+'%';
+    }
+    $('transferSubmissionStatus').textContent='Mengunci paket dan mencatat pengajuan…';
+    const result=await runServer('apiFinalizeTransferSubmissionUpload',upload.sessionId);
+    upload.committed=true;
+    await finishTransferSubmission_(result);
+  }catch(error){
+    $('transferSubmissionStatus').textContent='Pengajuan belum selesai: '+error.message;
+    if(/UPLOAD_SESSION_(EXPIRED|NOT_FOUND)/.test(error.message)){
+      upload.sessionId='';upload.uploadedBytes=0;
+    }
+    toast(error.message,true);
+  }finally{
+    button.disabled=false;
+    button.textContent='Upload & Ajukan';
+  }
+}
+
+async function finishTransferSubmission_(result){
+  toast(result.message);
+  $('transferSubmissionStatus').textContent=result.message;
+  state.transferSubmissionUpload=null;
+  $('transferSubmissionForm').hidden=true;
+  $('transferSubmissionForm').reset();
+  await loadBootstrap();
+  await loadRetentionOptions(true);
+}
+
+async function retryTransferSubmissionClient_(proposalId,button){
+  const original=button.textContent;
+  button.disabled=true;
+  button.textContent='Mengirim…';
+  try{
+    const result=await runServer('apiRetryTransferSubmission',proposalId);
+    toast(result.message,!result.ok);
+    await loadRetentionOptions(true);
+  }catch(error){toast(error.message,true)}
+  finally{button.disabled=false;button.textContent=original}
+}
+
+async function generateTransferProposalDocumentsClient_(proposalId,button){
+  const originalText=button.textContent;
+  button.disabled=true;
+  button.textContent='Membuat dokumen…';
+  try{
+    const result=await runServer('apiGenerateTransferProposalDocuments',proposalId);
+    toast(result.message);
+    await loadRetentionOptions(true);
+  }catch(error){
+    toast(error.message,true);
+    button.disabled=false;
+    button.textContent=originalText;
+  }
+}
+
+async function cancelTransferProposalDraft_(proposalId){
+  const proposal=(state.retentionOptions&&state.retentionOptions.proposals||[])
+    .find(row=>row.id===proposalId);
+  const label=proposal&&proposal.status==='DIAJUKAN'?'pengajuan':'draft usul';
+  const reason=window.prompt('Tuliskan alasan pembatalan '+label+':','');
+  if(reason===null)return;
+  if(!reason.trim()){toast('Alasan pembatalan wajib diisi.',true);return}
+  try{
+    const result=await runServer('apiCancelTransferProposalDraft',{proposalId:proposalId,cancelReason:reason.trim()});
+    toast(result.message);
+    await loadBootstrap();
+    await loadRetentionOptions(true);
+  }catch(error){toast(error.message,true)}
+}
+
+function bindLoanPage(){
+  $('loanObjectType').addEventListener('change',()=>{
+    resetLoanUpload_();
+    state.selectedLoanItemIds.clear();
+    renderLoanBerkasOptions_();
+  });
+  $('loanBerkasId').addEventListener('change',()=>{
+    resetLoanUpload_();
+    state.selectedLoanItemIds.clear();
+    renderLoanItems_();
+    renderLoanObjectInfo_();
+  });
+  $('loanItemSearch').addEventListener('input',renderLoanItems_);
+  $('selectAllLoanItems').addEventListener('click',selectAllVisibleLoanItems_);
+  $('clearLoanItems').addEventListener('click',()=>{
+    state.selectedLoanItemIds.clear();
+    resetLoanUpload_();
+    renderLoanItems_();
+    renderLoanObjectInfo_();
+  });
+  $('loanItemPicker').addEventListener('change',event=>{
+    const checkbox=event.target.closest('[data-loan-item-id]');
+    if(!checkbox)return;
+    if(checkbox.checked)state.selectedLoanItemIds.add(checkbox.dataset.loanItemId);
+    else state.selectedLoanItemIds.delete(checkbox.dataset.loanItemId);
+    resetLoanUpload_();
+    renderLoanObjectInfo_();
+    updateLoanItemSelectionSummary_();
+  });
+  $('loanEvidence').addEventListener('change',resetLoanUpload_);
+  $('loanForm').addEventListener('submit',submitLoan_);
+  $('clearLoanForm').addEventListener('click',()=>resetLoanForm_(true));
+  $('refreshLoans').addEventListener('click',()=>loadLoanOptions(true));
+  $('loanSearch').addEventListener('input',renderLoanTable_);
+  $('loanStatusFilter').addEventListener('change',renderLoanTable_);
+  $('loanResultsBody').addEventListener('click',event=>{
+    const printButton=event.target.closest('[data-print-out-indicator]');
+    if(printButton){prepareAndDownloadLoanOutIndicator_(printButton.dataset.printOutIndicator);return}
+    const button=event.target.closest('[data-return-loan]');
+    if(button)startLoanReturn_(button.dataset.returnLoan);
+  });
+  $('cancelLoanReturn').addEventListener('click',cancelLoanReturn_);
+  $('loanReturnForm').addEventListener('submit',submitLoanReturn_);
+}
+
+async function loadLoanOptions(force=false,quiet=false,preserveForm=false){
+  if(state.loanOptions&&!force){renderLoanPage_();return}
+  if(!quiet){
+    $('loanTableEmpty').hidden=false;
+    $('loanTableEmpty').textContent='Memuat transaksi peminjaman…';
+    $('loanTableWrap').hidden=true;
+    $('loanFormStatus').textContent='Memuat daftar arsip aktif…';
+  }
+  try{
+    state.loanOptions=await runServer('apiGetLoanOptions');
+    if(preserveForm){
+      renderLoanStats_();
+      renderLoanTable_();
+    }else renderLoanPage_();
+    if(!quiet)$('loanFormStatus').textContent='Lengkapi data peminjaman.';
+  }catch(error){
+    if(!quiet){
+      $('loanTableEmpty').textContent='Data peminjaman gagal dimuat.';
+      $('loanFormStatus').textContent='Gagal memuat daftar arsip.';
+      toast(error.message,true);
+    }else{
+      throw error;
+    }
+  }
+}
+
+function renderLoanPage_(){
+  if(!state.loanOptions)return;
+  renderLoanStats_();
+  renderLoanBerkasOptions_();
+  renderLoanTable_();
+  if(!$('loanDate').value)setDefaultLoanDates_();
+  if(!$('loanPreviewId').value)$('loanPreviewId').value=newClientId('LOAN');
+}
+
+function renderLoanStats_(){
+  if(!state.loanOptions)return;
+  const summary=state.loanOptions.summary||{};
+  $('loanStatActive').textContent=summary.active||0;
+  $('loanStatOverdue').textContent=summary.overdue||0;
+  $('loanStatBerkas').textContent=summary.borrowedBerkas||0;
+  $('loanStatItems').textContent=summary.borrowedItems||0;
+}
+
+function renderLoanBerkasOptions_(){
+  const select=$('loanBerkasId');
+  const previous=select.value;
+  const objectType=$('loanObjectType').value;
+  $('loanItemField').hidden=objectType!=='ITEM';
+  if(!state.loanOptions){
+    $('loanObjectInfo').textContent='Menyinkronkan ulang daftar arsip…';
+    recoverLoanOptions_();
+    return;
+  }
+  select.innerHTML='<option value="">Pilih berkas induk</option>';
+  (state.loanOptions.berkas||[]).forEach(row=>{
+    const option=new Option(row.label,row.id);
+    option.disabled=objectType==='BERKAS'
+      ? Boolean(row.fullLoanBlocked)
+      : row.loanStatus==='DIPINJAM';
+    if(option.disabled)option.text=row.label+' · '+row.loanStatus;
+    select.add(option);
+  });
+  if(previous&&[...select.options].some(option=>option.value===previous&&!option.disabled))select.value=previous;
+  renderLoanItems_();
+  renderLoanObjectInfo_();
+}
+
+function renderLoanItems_(){
+  const picker=$('loanItemPicker');
+  const berkasId=$('loanBerkasId').value;
+  if(!state.loanOptions){
+    picker.innerHTML='<span class="helper">Menyinkronkan ulang data item…</span>';
+    recoverLoanOptions_();
+    return;
+  }
+  if(!berkasId){
+    state.selectedLoanItemIds.clear();
+    picker.innerHTML='<span class="helper">Pilih berkas terlebih dahulu.</span>';
+    updateLoanItemSelectionSummary_();
+    return;
+  }
+  const items=(state.loanOptions.itemsByBerkas||{})[berkasId]||[];
+  const validIds=new Set(items.map(row=>row.id));
+  state.selectedLoanItemIds.forEach(id=>{if(!validIds.has(id))state.selectedLoanItemIds.delete(id)});
+  const query=normalizeFolderLabelFilter_($('loanItemSearch').value);
+  const visible=items.filter(row=>{
+    if(!query)return true;
+    return normalizeFolderLabelFilter_([row.number,row.documentDate,row.description].join(' '))
+      .includes(query);
+  });
+  picker.innerHTML=visible.length?visible.map(row=>{
+    const available=String(row.loanStatus||'TERSEDIA').toUpperCase()==='TERSEDIA';
+    const checked=state.selectedLoanItemIds.has(row.id)?' checked':'';
+    return '<label class="loan-item-choice'+(available?'':' disabled')+'">'+
+      '<input type="checkbox" data-loan-item-id="'+escapeHtml(row.id)+'"'+checked+(available?'':' disabled')+'>'+
+      '<span><strong>Item '+escapeHtml(row.number||'–')+'</strong> · '+escapeHtml(row.description)+
+      '<small>'+escapeHtml((row.documentDate||'Tanggal tidak tersedia')+' · '+row.pageCount+' lembar · '+row.loanStatus)+'</small></span></label>';
+  }).join(''):'<span class="helper">Tidak ada item yang sesuai pencarian.</span>';
+  updateLoanItemSelectionSummary_();
+}
+
+function visibleAvailableLoanItems_(){
+  const berkasId=$('loanBerkasId').value;
+  const query=normalizeFolderLabelFilter_($('loanItemSearch').value);
+  return ((state.loanOptions&&state.loanOptions.itemsByBerkas||{})[berkasId]||[])
+    .filter(row=>String(row.loanStatus||'TERSEDIA').toUpperCase()==='TERSEDIA')
+    .filter(row=>!query||normalizeFolderLabelFilter_([row.number,row.documentDate,row.description].join(' ')).includes(query));
+}
+
+function selectAllVisibleLoanItems_(){
+  visibleAvailableLoanItems_().forEach(row=>state.selectedLoanItemIds.add(row.id));
+  resetLoanUpload_();
+  renderLoanItems_();
+  renderLoanObjectInfo_();
+}
+
+function updateLoanItemSelectionSummary_(){
+  const selected=selectedLoanItems_();
+  const totalPages=selected.reduce((sum,row)=>sum+Number(row.pageCount||0),0);
+  $('loanItemSelectionSummary').textContent=selected.length
+    ? selected.length+' item dipilih · '+totalPages+' lembar.'
+    : 'Belum ada item dipilih.';
+}
+
+function selectedLoanItems_(){
+  const berkasId=$('loanBerkasId').value;
+  const byId={};
+  (((state.loanOptions&&state.loanOptions.itemsByBerkas)||{})[berkasId]||[])
+    .forEach(row=>byId[row.id]=row);
+  return Array.from(state.selectedLoanItemIds).map(id=>byId[id]).filter(Boolean)
+    .sort((a,b)=>String(a.number||'').localeCompare(String(b.number||''),'id',{numeric:true}));
+}
+
+function recoverLoanOptions_(){
+  if(state.loanOptionsPromise)return state.loanOptionsPromise;
+  state.loanOptionsPromise=loadLoanOptions(true,true,false)
+    .catch(error=>toast('Data Peminjaman gagal disinkronkan ulang: '+error.message,true))
+    .finally(()=>state.loanOptionsPromise=null);
+  return state.loanOptionsPromise;
+}
+
+function renderLoanObjectInfo_(){
+  if(!state.loanOptions){
+    $('loanObjectInfo').textContent='Pilih berkas atau item yang akan dipinjam.';
+    return;
+  }
+  const objectType=$('loanObjectType').value;
+  const berkas=(state.loanOptions.berkas||[]).find(row=>row.id===$('loanBerkasId').value);
+  if(!berkas){
+    $('loanObjectInfo').textContent='Pilih berkas atau item yang akan dipinjam.';
+    $('loanPageCount').value='';
+    return;
+  }
+  if(objectType==='BERKAS'){
+    $('loanPageCount').value=berkas.pageCount||'';
+    $('loanObjectInfo').innerHTML='<strong>'+escapeHtml((berkas.number||'DRAFT')+' – '+berkas.title)+'</strong><br>'+
+      escapeHtml(berkas.itemCount+' item · '+berkas.pageCount+' lembar · '+berkas.location)+
+      (berkas.loanStatus!=='TERSEDIA'?'<br><span class="loan-warning">Status: '+escapeHtml(berkas.loanStatus)+'</span>':'');
+    return;
+  }
+  const items=selectedLoanItems_();
+  if(!items.length){
+    $('loanPageCount').value='';
+    $('loanObjectInfo').innerHTML='<strong>'+escapeHtml((berkas.number||'DRAFT')+' – '+berkas.title)+'</strong><br>Pilih satu atau beberapa item arsip.';
+    return;
+  }
+  const totalPages=items.reduce((sum,row)=>sum+Number(row.pageCount||0),0);
+  $('loanPageCount').value=totalPages||'';
+  const numbers=items.map(item=>item.number||'–').join(', ');
+  $('loanObjectInfo').innerHTML='<strong>'+escapeHtml(items.length+' item dipilih: '+numbers)+'</strong><br>'+
+    escapeHtml(totalPages+' lembar · lokasi asal '+berkas.location)+
+    '<br><span class="search-cell-sub">Out Indicator A5 akan dibuat setelah transaksi inti tersimpan.</span>';
+}
+
+function setDefaultLoanDates_(){
+  const today=(state.loanOptions&&state.loanOptions.today)||new Date().toISOString().slice(0,10);
+  $('loanDate').value=today;
+  const due=new Date(today+'T12:00:00');
+  due.setDate(due.getDate()+7);
+  $('loanDueDate').value=[
+    due.getFullYear(),
+    String(due.getMonth()+1).padStart(2,'0'),
+    String(due.getDate()).padStart(2,'0')
+  ].join('-');
+}
+
+async function resetLoanUpload_(){
+  if(state.loanUpload&&state.loanUpload.sessionId){
+    try{await runServer('apiCancelLoanEvidenceUpload',state.loanUpload.sessionId)}catch(ignore){}
+  }
+  state.loanUpload=null;
+}
+
+async function resetLoanForm_(focus=false){
+  await resetLoanUpload_();
+  $('loanForm').reset();
+  state.selectedLoanItemIds.clear();
+  $('loanObjectType').value='BERKAS';
+  $('loanPreviewId').value=newClientId('LOAN');
+  setDefaultLoanDates_();
+  $('loanFormStatus').textContent='Lengkapi data peminjaman.';
+  renderLoanBerkasOptions_();
+  if(focus)$('loanBerkasId').focus();
+}
+
+function applyLoanCreateOptimistically_(payload,result){
+  if(!state.loanOptions)return;
+  const parent=(state.loanOptions.berkas||[]).find(row=>row.id===payload.loanBerkasId);
+  const items=((state.loanOptions.itemsByBerkas||{})[payload.loanBerkasId]||[]);
+  let selectedIds=[];
+  try{selectedIds=JSON.parse(payload.loanItemIdsJson||'[]')}catch(ignore){}
+  if(!selectedIds.length&&payload.loanItemId)selectedIds=[payload.loanItemId];
+  const selectedItems=selectedIds.map(id=>items.find(row=>row.id===id)).filter(Boolean);
+  const item=selectedItems[0];
+  let loan=result.loan;
+  if(!loan){
+    const objectType=String(payload.loanObjectType||'BERKAS').toUpperCase();
+    const dueDate=payload.loanDueDate||'';
+    const overdue=dueDate&&dueDate<(state.loanOptions.today||'');
+    loan={
+      id:result.loanId||payload.loanPreviewId,
+      objectType:objectType,
+      berkasId:payload.loanBerkasId,
+      itemId:objectType==='ITEM'?payload.loanItemId:'',
+      itemIds:objectType==='ITEM'?selectedIds:[],
+      itemCount:objectType==='ITEM'?selectedIds.length:0,
+      berkasNumber:parent&&parent.number||'',
+      itemNumber:item&&item.number||'',
+      title:objectType==='ITEM'&&selectedIds.length>1
+        ?selectedIds.length+' item arsip dalam berkas '+(parent&&parent.number||'–')
+        :objectType==='ITEM'?(item&&item.description||'Item arsip'):(parent&&parent.title||'Berkas arsip'),
+      borrowerName:payload.borrowerName||'',
+      borrowerIdentity:payload.borrowerIdentity||'',
+      borrowerUnit:payload.borrowerUnit||'',
+      whatsapp:payload.borrowerWhatsapp||'',
+      purpose:payload.loanPurpose||'',
+      borrowDate:payload.loanDate||'',
+      dueDate:dueDate,
+      returnedDate:'',
+      pageCount:Number(payload.loanPageCount||0),
+      evidenceUrl:result.evidenceUrl||'',
+      notes:payload.loanNotes||'',
+      statusCode:overdue?'OVERDUE':'ACTIVE',
+      statusLabel:overdue?'TERLAMBAT':'DIPINJAM',
+      overdueDays:0
+    };
+  }
+  const existingIndex=(state.loanOptions.loans||[]).findIndex(row=>row.id===loan.id);
+  if(existingIndex===-1)state.loanOptions.loans.unshift(loan);
+  else state.loanOptions.loans[existingIndex]=loan;
+  recalculateLoanClientState_();
+}
+
+function applyLoanReturnOptimistically_(loanId,returnedDate){
+  if(!state.loanOptions)return;
+  const loan=(state.loanOptions.loans||[]).find(row=>row.id===loanId);
+  if(!loan)return;
+  loan.statusCode='RETURNED';
+  loan.statusLabel='SUDAH KEMBALI';
+  loan.returnedDate=returnedDate;
+  loan.overdueDays=0;
+  recalculateLoanClientState_();
+}
+
+function recalculateLoanClientState_(){
+  if(!state.loanOptions)return;
+  const loans=state.loanOptions.loans||[];
+  const active=loans.filter(row=>row.statusCode==='ACTIVE'||row.statusCode==='OVERDUE');
+  const summary=state.loanOptions.summary||{};
+  summary.active=active.length;
+  summary.overdue=active.filter(row=>row.statusCode==='OVERDUE').length;
+  summary.borrowedBerkas=active.filter(row=>row.objectType==='BERKAS').length;
+  summary.borrowedItems=active.filter(row=>row.objectType==='ITEM')
+    .reduce((sum,row)=>sum+Number(row.itemCount||1),0);
+  summary.returned=loans.filter(row=>row.statusCode==='RETURNED').length;
+  (state.loanOptions.berkas||[]).forEach(parent=>{
+    const whole=active.some(row=>row.objectType==='BERKAS'&&row.berkasId===parent.id);
+    const partial=active.some(row=>row.objectType==='ITEM'&&row.berkasId===parent.id);
+    parent.loanStatus=whole?'DIPINJAM':partial?'SEBAGIAN DIPINJAM':'TERSEDIA';
+    parent.fullLoanBlocked=whole||partial;
+    parent.fullLoanBlockingReason=whole?'Berkas sudah mempunyai peminjaman aktif.':
+      partial?'Satu atau lebih item dalam berkas sedang dipinjam.':'';
+    const items=((state.loanOptions.itemsByBerkas||{})[parent.id]||[]);
+    items.forEach(item=>{
+      const borrowed=active.some(row=>row.objectType==='ITEM'&&
+        (row.itemId===item.id||(row.itemIds||[]).includes(item.id)));
+      item.loanStatus=whole?'DIPINJAM DALAM BERKAS':borrowed?'DIPINJAM':'TERSEDIA';
+    });
+  });
+  renderLoanStats_();
+  if(state.bootstrap&&state.bootstrap.dashboard){
+    state.bootstrap.dashboard.activeLoans=summary.active||0;
+    renderDashboard();
+  }
+  renderLoanTable_();
+}
+
+function refreshLoanViewsInBackground_(successMessage){
+  const optimisticOptions=state.loanOptions;
+  loadLoanOptions(true,true,true)
+    .then(()=>{
+      $('loanFormStatus').textContent=successMessage+' Data dashboard dan tabel sudah diperbarui.';
+    })
+    .catch(error=>{
+      state.loanOptions=optimisticOptions;
+      $('loanFormStatus').textContent=successMessage+' Penyegaran otomatis tertunda; tekan Segarkan Data bila diperlukan.';
+      toast(error.message,true);
+    });
+}
+
+async function submitLoan_(event){
+  event.preventDefault();
+  const objectType=$('loanObjectType').value;
+  const selectedItems=selectedLoanItems_();
+  if(objectType==='ITEM'&&!selectedItems.length){toast('Pilih minimal satu item arsip yang dipinjam.',true);return}
+  if($('loanDueDate').value<$('loanDate').value){toast('Tanggal wajib kembali tidak boleh lebih awal daripada tanggal pinjam.',true);return}
+  const file=$('loanEvidence').files[0];
+  if(file){
+    const extension=(file.name.split('.').pop()||'').toLowerCase();
+    if(!['pdf','jpg','jpeg','png'].includes(extension)){toast('Bukti persetujuan harus PDF, JPG, JPEG, atau PNG.',true);return}
+    if(file.size>25*1024*1024){toast('Ukuran bukti persetujuan maksimal 25 MB.',true);return}
+  }
+  if(!$('loanPreviewId').value)$('loanPreviewId').value=newClientId('LOAN');
+  const payload=formPayloadWithoutFiles($('loanForm'));
+  payload.loanItemIdsJson=objectType==='ITEM'
+    ?JSON.stringify(selectedItems.map(row=>row.id)):'[]';
+  payload.loanItemId=objectType==='ITEM'&&selectedItems.length?selectedItems[0].id:'';
+  const button=$('saveLoan');
+  button.disabled=true;
+  button.textContent=file?'Menyiapkan bukti…':'Menyimpan…';
+  $('loanFormStatus').textContent=file?'Menyiapkan upload bukti persetujuan…':'Mencatat peminjaman…';
+  try{
+    let result;
+    if(file)result=await loanWithEvidenceUpload_(payload,file,button);
+    else{
+      await resetLoanUpload_();
+      result=await runServer('apiCreateLoan',payload);
+    }
+    applyLoanCreateOptimistically_(payload,result);
+    toast(result.message);
+    state.loanUpload=null;
+    await resetLoanForm_(false);
+    const duration=result.durationMs?Math.max(.1,result.durationMs/1000).toFixed(1)+' detik':'';
+    const performance=result.performance||{};
+    const pathLabel=performance.path==='SHEETS_API_BATCH'?' · jalur batch':
+      performance.path==='SPREADSHEET_FALLBACK'?' · jalur kompatibilitas':'';
+    const slowDetail=result.durationMs>=10000
+      ?' [tunggu '+Math.round(Number(performance.lockWaitMs||0)/100)/10+
+        ' dtk; baca '+Math.round(Number(performance.readMs||0)/100)/10+
+        ' dtk; tulis '+Math.round(Number(performance.writeMs||0)/100)/10+' dtk]'
+      :'';
+    const successMessage='Peminjaman tersimpan'+(duration?' dalam '+duration:'')+
+      pathLabel+slowDetail+'.';
+    $('loanFormStatus').textContent=successMessage+' Menyiapkan Out Indicator A5 dan menyegarkan data di latar belakang…';
+    prepareAndDownloadLoanOutIndicator_(result.loanGroupId||result.loanId,true)
+      .catch(()=>{});
+    refreshLoanViewsInBackground_(successMessage);
+  }catch(error){
+    $('loanFormStatus').textContent='Peminjaman belum tersimpan: '+error.message;
+    toast(error.message,true);
+  }finally{
+    button.disabled=false;
+    button.textContent='Simpan Peminjaman';
+  }
+}
+
+async function loanWithEvidenceUpload_(payload,file,button){
+  const signature=JSON.stringify(payload)+'|'+file.name+'|'+file.size+'|'+(file.type||'');
+  let upload=state.loanUpload;
+  if(upload&&upload.signature!==signature){
+    if(upload.sessionId){try{await runServer('apiCancelLoanEvidenceUpload',upload.sessionId)}catch(ignore){}}
+    upload=null;
+  }
+  if(!upload){
+    upload={signature:signature,sessionId:'',uploadedBytes:0,chunkSize:512*1024,file:file,payload:payload};
+    state.loanUpload=upload;
+  }
+  if(!upload.sessionId){
+    const started=await runServer('apiStartLoanEvidenceUpload',Object.assign({},payload,{
+      evidenceName:file.name,evidenceSize:file.size,evidenceType:file.type||''
+    }));
+    upload.sessionId=started.sessionId;
+    upload.chunkSize=started.chunkSize||upload.chunkSize;
+    upload.uploadedBytes=started.uploadedBytes||0;
+  }else{
+    const status=await runServer('apiGetLoanEvidenceUploadStatus',upload.sessionId);
+    if(status.committed&&status.result)return status.result;
+    upload.uploadedBytes=status.uploadedBytes||0;
+  }
+  while(upload.uploadedBytes<file.size){
+    const start=upload.uploadedBytes;
+    const end=Math.min(start+upload.chunkSize,file.size);
+    const base64=await fileSliceToBase64(file.slice(start,end,file.type||'application/octet-stream'));
+    const progress=await runServer('apiUploadLoanEvidenceChunk',{
+      sessionId:upload.sessionId,start:start,end:end,total:file.size,base64:base64
+    });
+    if(Number(progress.uploadedBytes)<=start)throw new Error('Drive belum menerima potongan bukti. Tekan kembali Simpan Peminjaman.');
+    upload.uploadedBytes=Number(progress.uploadedBytes);
+    const percent=Math.min(100,Math.floor(upload.uploadedBytes/file.size*100));
+    button.textContent='Upload bukti '+percent+'%';
+    $('loanFormStatus').textContent='Mengunggah bukti persetujuan: '+percent+'%. Peminjaman belum dicatat.';
+  }
+  button.textContent='Menyelesaikan…';
+  $('loanFormStatus').textContent='Bukti lengkap. Mencatat peminjaman dan memperbarui status arsip…';
+  return runServer('apiFinalizeLoanEvidenceUpload',upload.sessionId);
+}
+
+async function prepareAndDownloadLoanOutIndicator_(loanGroupId,automatic=false){
+  if(!loanGroupId)throw new Error('ID transaksi peminjaman tidak tersedia.');
+  if(!automatic)toast('Menyiapkan Out Indicator A5…');
+  try{
+    const payload=await runServer('apiPrepareLoanOutIndicator',loanGroupId);
+    const result=downloadLoanOutIndicatorPdf_(payload);
+    const message='Out Indicator A5 berhasil dibuat'+
+      (payload.isReprint?' (cetak ulang ke-'+payload.printSequence+')':'')+
+      ' · '+result.pageCount+' halaman.';
+    $('loanFormStatus').textContent=message;
+    toast(message);
+    return result;
+  }catch(error){
+    const message='Out Indicator belum dapat dibuat: '+error.message+
+      '. Peminjaman tetap sudah tersimpan; gunakan tombol Cetak Out Indicator pada tabel.';
+    $('loanFormStatus').textContent=message;
+    toast(message,true);
+    throw error;
+  }
+}
+
+function renderLoanTable_(){
+  if(!state.loanOptions)return;
+  const query=normalizeFolderLabelFilter_($('loanSearch').value);
+  const filter=$('loanStatusFilter').value;
+  const rows=(state.loanOptions.loans||[]).filter(row=>{
+    const statusMatch=filter==='ALL' ||
+      filter==='ACTIVE'&&(row.statusCode==='ACTIVE'||row.statusCode==='OVERDUE') ||
+      row.statusCode===filter;
+    if(!statusMatch)return false;
+    if(!query)return true;
+    const haystack=normalizeFolderLabelFilter_([
+      row.berkasNumber,row.itemNumber,row.title,row.borrowerName,row.borrowerIdentity,
+      (row.itemTitles||[]).join(' '),row.borrowerUnit,row.whatsapp,row.purpose,row.notes
+    ].join(' '));
+    return query.split(' ').every(token=>haystack.includes(token));
+  });
+  $('loanResultsBody').innerHTML=rows.map(renderLoanRow_).join('');
+  $('loanTableEmpty').hidden=rows.length>0;
+  $('loanTableWrap').hidden=rows.length===0;
+  $('loanTableEmpty').textContent=(state.loanOptions.loans||[]).length
+    ? 'Tidak ada transaksi yang sesuai dengan filter.'
+    : 'Belum ada transaksi peminjaman.';
+}
+
+function renderLoanRow_(row){
+  const objectNumber=row.objectType==='BERKAS'
+    ? 'Berkas '+(row.berkasNumber||'DRAFT')
+    : row.itemCount>1
+      ? 'Berkas '+(row.berkasNumber||'–')+' / '+row.itemCount+' item ('+(row.itemNumbers||[]).join(', ')+')'
+      : 'Berkas '+(row.berkasNumber||'–')+' / Item '+(row.itemNumber||'–');
+  const borrowerContact=[
+    row.borrowerIdentity?'NIP/NIK '+row.borrowerIdentity:'',
+    row.whatsapp?'WA '+row.whatsapp:''
+  ].filter(Boolean).join(' · ');
+  const schedule=row.returnedDate
+    ? 'Kembali '+formatIndonesianDate_(row.returnedDate)
+    : 'Wajib kembali '+formatIndonesianDate_(row.dueDate);
+  const statusClass=row.statusCode==='OVERDUE'?'danger':row.statusCode==='ACTIVE'?'warning':'success';
+  const overdue=row.statusCode==='OVERDUE'
+    ? '<span class="search-cell-sub loan-overdue">'+row.overdueDays+' hari terlambat</span>' : '';
+  const evidence=row.evidenceUrl
+    ? '<a class="loan-evidence-link" href="'+escapeHtml(row.evidenceUrl)+'" target="_blank" rel="noopener">Buka bukti</a>'
+    : '<span class="search-cell-sub">Tanpa bukti digital</span>';
+  const returnAction=row.statusCode==='RETURNED'
+    ? '<button type="button" class="loan-action-button" disabled>Selesai</button>'
+    : '<button type="button" class="loan-action-button" data-return-loan="'+escapeHtml(row.id)+'">Catat Kembali</button>';
+  const printAction='<button type="button" class="loan-action-button secondary" data-print-out-indicator="'+
+    escapeHtml(row.groupId||row.id)+'">'+(row.statusCode==='RETURNED'?'Cetak Riwayat':'Cetak Out Indicator')+'</button>';
+  const itemDetail=row.itemCount>1
+    ?'<span class="search-cell-sub">'+escapeHtml((row.itemTitles||[]).join(' · '))+'</span>':'';
+  return '<tr>'+
+    '<td><span class="search-number">'+escapeHtml(objectNumber)+'</span><span class="search-cell-main">'+escapeHtml(row.title)+'</span>'+itemDetail+'<span class="search-cell-sub">'+escapeHtml(row.objectType)+'</span></td>'+
+    '<td><span class="search-cell-main">'+escapeHtml(row.borrowerName)+'</span><span class="search-cell-sub">'+escapeHtml(row.borrowerUnit)+'</span><span class="search-cell-sub">'+escapeHtml(borrowerContact)+'</span><span class="search-cell-sub">'+escapeHtml(row.purpose)+'</span></td>'+
+    '<td><span class="search-cell-main">Pinjam '+formatIndonesianDate_(row.borrowDate)+'</span><span class="search-cell-sub">'+escapeHtml(schedule)+'</span>'+overdue+'</td>'+
+    '<td><span class="search-cell-main">'+escapeHtml(row.pageCount)+' lembar/item</span></td>'+
+    '<td><span class="status-badge '+statusClass+'">'+escapeHtml(row.statusLabel)+'</span>'+evidence+'</td>'+
+    '<td><div class="loan-actions">'+printAction+returnAction+'</div></td>'+
+  '</tr>';
+}
+
+function formatIndonesianDate_(value){
+  if(!value)return '–';
+  const match=String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!match)return escapeHtml(value);
+  const months=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  return Number(match[3])+' '+months[Number(match[2])-1]+' '+match[1];
+}
+
+async function startLoanReturn_(loanId){
+  let row=(state.loanOptions&&state.loanOptions.loans||[]).find(item=>item.id===loanId);
+  if(!row){
+    toast('Menyinkronkan ulang data transaksi…');
+    try{
+      await loadLoanOptions(true,true,true);
+      row=(state.loanOptions&&state.loanOptions.loans||[]).find(item=>item.id===loanId);
+    }catch(error){
+      toast('Data transaksi gagal dimuat ulang: '+error.message,true);
+      return;
+    }
+  }
+  if(!row){
+    toast('Transaksi tidak ditemukan setelah data disegarkan.',true);
+    return;
+  }
+  if(row.statusCode==='RETURNED'){
+    toast('Transaksi ini memang sudah selesai.',true);
+    return;
+  }
+  state.selectedReturnLoanId=loanId;
+  $('returnLoanId').value=loanId;
+  $('returnDate').value=(state.loanOptions&&state.loanOptions.today)||new Date().toISOString().slice(0,10);
+  $('returnNotes').value='';
+  $('returnConfirmation').value='';
+  $('loanReturnTitle').textContent=(row.objectType==='BERKAS'?'Berkas ':'Item ')+
+    (row.objectType==='BERKAS'?(row.berkasNumber||'DRAFT'):
+      row.itemCount>1?(row.itemCount+' item dalam berkas '+(row.berkasNumber||'–')):
+      (row.berkasNumber||'–')+'/'+(row.itemNumber||'–'))+
+    ' · '+row.borrowerName;
+  $('loanReturnImpact').innerHTML='<strong>'+escapeHtml(row.title)+'</strong><br>'+
+    escapeHtml('Dipinjam '+formatIndonesianDate_(row.borrowDate)+' · wajib kembali '+formatIndonesianDate_(row.dueDate)+' · '+row.pageCount+' lembar/item');
+  $('loanReturnStatus').textContent='';
+  $('loanReturnForm').hidden=false;
+  $('loanReturnForm').scrollIntoView({behavior:'smooth',block:'start'});
+  $('returnNotes').focus();
+}
+
+function cancelLoanReturn_(){
+  state.selectedReturnLoanId='';
+  $('loanReturnForm').hidden=true;
+  $('loanReturnForm').reset();
+}
+
+async function submitLoanReturn_(event){
+  event.preventDefault();
+  if($('returnConfirmation').value.trim().toUpperCase()!=='KEMBALIKAN'){
+    toast('Ketik KEMBALIKAN pada kolom konfirmasi.',true);return;
+  }
+  const button=$('completeLoanReturn');
+  button.disabled=true;
+  button.textContent='Menyimpan…';
+  $('loanReturnStatus').textContent='Mencatat pengembalian dan memperbarui ketersediaan arsip…';
+  try{
+    const result=await runServer('apiReturnLoan',formPayloadWithoutFiles($('loanReturnForm')));
+    applyLoanReturnOptimistically_(result.loanId,result.returnedDate||$('returnDate').value);
+    toast(result.message);
+    cancelLoanReturn_();
+    const duration=result.durationMs?Math.max(.1,result.durationMs/1000).toFixed(1)+' detik':'';
+    refreshLoanViewsInBackground_('Pengembalian tersimpan'+(duration?' dalam '+duration:'')+'.');
+  }catch(error){
+    $('loanReturnStatus').textContent='Pengembalian belum tersimpan: '+error.message;
+    toast(error.message,true);
+  }finally{
+    button.disabled=false;
+    button.textContent='Catat Pengembalian';
+  }
+}
+
+function bindMediaForm(){
+  $('mediaBerkasId').addEventListener('change',()=>{resetMediaUpload();renderMediaItems()});
+  $('mediaItemId').addEventListener('change',()=>{resetMediaUpload();renderMediaItemInfo()});
+  $('mediaPdf').addEventListener('change',resetMediaUpload);
+  $('mediaForm').addEventListener('submit',submitMediaUpload);
+}
+
+async function loadMediaOptions(force=false,preferredBerkasId=''){
+  if(state.mediaOptions&&!force){renderMediaOptions(preferredBerkasId);return}
+  $('mediaStatus').textContent='Memuat item yang belum memiliki PDF…';
+  try{
+    state.mediaOptions=await runServer('apiGetMediaUploadOptions');
+    renderMediaOptions(preferredBerkasId);
+    $('mediaStatus').textContent=state.mediaOptions.totalMissing?'':'Semua item aktif sudah memiliki PDF alih media.';
+  }catch(error){$('mediaStatus').textContent='Gagal memuat data.';toast(error.message,true)}
+}
+
+function renderMediaOptions(preferredBerkasId=''){
+  const select=$('mediaBerkasId');
+  const previous=preferredBerkasId||select.value;
+  select.innerHTML='<option value="">Pilih berkas</option>';
+  (state.mediaOptions&&state.mediaOptions.berkas||[]).forEach(row=>select.add(new Option(row.label,row.id)));
+  if(previous&&(state.mediaOptions.berkas||[]).some(row=>row.id===previous))select.value=previous;
+  renderMediaItems();
+}
+
+function renderMediaItems(){
+  const select=$('mediaItemId');
+  const rows=state.mediaOptions&&state.mediaOptions.itemsByBerkas[$('mediaBerkasId').value]||[];
+  select.innerHTML='<option value="">Pilih item tanpa PDF</option>';
+  rows.forEach(row=>select.add(new Option(row.label,row.id)));
+  renderMediaItemInfo();
+}
+
+function selectedMediaItem(){
+  const rows=state.mediaOptions&&state.mediaOptions.itemsByBerkas[$('mediaBerkasId').value]||[];
+  return rows.find(row=>row.id===$('mediaItemId').value);
+}
+
+function renderMediaItemInfo(){
+  const item=selectedMediaItem();
+  $('mediaItemInfo').textContent=item
+    ? 'Item '+item.number+' · '+item.documentDate+' · '+item.pageCount+' lembar · Status: '+item.fileStatus
+    : 'Pilih item yang akan dilengkapi alih medianya.';
+}
+
+function resetMediaUpload(){
+  const current=state.mediaUpload;
+  state.mediaUpload=null;
+  if(current&&current.sessionId)runServer('apiCancelMediaUpload',current.sessionId).catch(()=>{});
+  $('uploadMedia').disabled=false;
+  $('uploadMedia').textContent='Upload Alih Media';
+}
+
+async function submitMediaUpload(event){
+  event.preventDefault();
+  const berkasId=$('mediaBerkasId').value;
+  const itemId=$('mediaItemId').value;
+  const file=$('mediaPdf').files[0];
+  if(!berkasId||!itemId){toast('Pilih berkas dan item yang akan dilengkapi.',true);return}
+  if(!file){toast('Pilih PDF alih media.',true);return}
+  if(file.type&&file.type!=='application/pdf'){toast('File alih media harus PDF.',true);return}
+  if(file.size>=ARCHIVE_MEDIA_MAX_BYTES){toast('Ukuran PDF harus kurang dari 100 MB.',true);return}
+  const button=$('uploadMedia');
+  button.disabled=true;
+  try{
+    let upload=state.mediaUpload;
+    if(!upload||upload.itemId!==itemId||upload.file!==file){
+      upload={berkasId:berkasId,itemId:itemId,file:file,sessionId:'',uploadedBytes:0,chunkSize:512*1024};
+      state.mediaUpload=upload;
+    }
+    if(!upload.sessionId){
+      button.textContent='Memulai upload…';
+      const started=await runServer('apiStartMediaUpload',{berkasId:berkasId,itemId:itemId,fileName:file.name,fileSize:file.size,mimeType:file.type||'application/pdf'});
+      upload.sessionId=started.sessionId;
+      upload.uploadedBytes=started.uploadedBytes||0;
+      upload.chunkSize=started.chunkSize||upload.chunkSize;
+    }else{
+      const status=await runServer('apiGetMediaUploadStatus',upload.sessionId);
+      if(status.committed&&status.result){await finishMediaUpload(status.result);return}
+      upload.uploadedBytes=status.uploadedBytes||0;
+    }
+    while(upload.uploadedBytes<file.size){
+      const start=upload.uploadedBytes;
+      const end=Math.min(start+upload.chunkSize,file.size);
+      const base64=await fileSliceToBase64(file.slice(start,end,'application/pdf'));
+      const progress=await runServer('apiUploadMediaChunk',{sessionId:upload.sessionId,start:start,end:end,total:file.size,base64:base64});
+      if(Number(progress.uploadedBytes)<=start)throw new Error('Drive belum menerima potongan PDF. Tekan Upload Alih Media untuk melanjutkan.');
+      upload.uploadedBytes=Number(progress.uploadedBytes);
+      const percent=Math.min(100,Math.floor(upload.uploadedBytes/file.size*100));
+      button.textContent='Upload '+percent+'%';
+      $('mediaStatus').textContent='Mengunggah PDF: '+percent+'%.';
+    }
+    button.textContent='Menyelesaikan…';
+    $('mediaStatus').textContent='PDF lengkap. Menghubungkan file ke item arsip…';
+    const result=await runServer('apiFinalizeMediaUpload',upload.sessionId);
+    await finishMediaUpload(result);
+  }catch(error){
+    const message=error.message||String(error);
+    if(/UPLOAD_SESSION_(EXPIRED|NOT_FOUND)/.test(message)&&state.mediaUpload){state.mediaUpload.sessionId='';state.mediaUpload.uploadedBytes=0}
+    button.disabled=false;
+    button.textContent='Lanjutkan Upload';
+    $('mediaStatus').textContent='Upload terhenti. Tekan tombol untuk melanjutkan: '+message;
+    toast(message,true);
+  }
+}
+
+async function finishMediaUpload(result){
+  const berkasId=result.berkasId;
+  state.mediaUpload=null;
+  $('mediaPdf').value='';
+  $('uploadMedia').disabled=false;
+  $('uploadMedia').textContent='Upload Alih Media';
+  $('mediaStatus').textContent=result.message;
+  state.mediaOptions=null;
+  state.editOptions=null;
+  await Promise.all([loadMediaOptions(true,berkasId),loadBootstrap()]);
+  toast(result.message);
+}
+
+function bindEditForm(){
+  $('editBerkasId').addEventListener('change',renderEditItems);
+  $('editItemId').addEventListener('change',populateEditFields);
+  $('editForm').addEventListener('submit',submitEdit);
+  clearEditFields();
+}
+
+async function loadEditOptions(force=false){
+  if(state.editOptions&&!force){renderEditOptions();return}
+  $('editStatus').textContent='Memuat data arsip…';
+  try{
+    state.editOptions=await runServer('apiGetEditOptions');
+    renderEditOptions();
+    $('editStatus').textContent='';
+  }catch(error){$('editStatus').textContent='Gagal memuat data.';toast(error.message,true)}
+}
+
+function renderEditOptions(){
+  const select=$('editBerkasId');
+  const previous=select.value;
+  select.innerHTML='<option value="">Pilih berkas</option>';
+  (state.editOptions.berkas||[]).forEach(row=>select.add(new Option(row.label,row.id)));
+  if(previous&&(state.editOptions.berkas||[]).some(row=>row.id===previous))select.value=previous;
+  renderEditItems();
+}
+
+function renderEditItems(){
+  const select=$('editItemId');
+  const previous=select.value;
+  const rows=state.editOptions&&state.editOptions.itemsByBerkas[$('editBerkasId').value]||[];
+  select.innerHTML='<option value="">Pilih item arsip</option>';
+  rows.forEach(row=>select.add(new Option(row.label,row.id)));
+  if(previous&&rows.some(row=>row.id===previous))select.value=previous;
+  populateEditFields();
+}
+
+function selectedEditItem(){
+  const rows=state.editOptions&&state.editOptions.itemsByBerkas[$('editBerkasId').value]||[];
+  return rows.find(row=>row.id===$('editItemId').value);
+}
+
+function populateEditFields(){
+  const item=selectedEditItem();
+  if(!item){clearEditFields();return}
+  $('editDocumentDate').value=item.documentDate||'';
+  $('editPageCount').value=item.pageCount||'';
+  $('editDevelopmentLevel').value=item.developmentLevel||'ASLI';
+  $('editCondition').value=item.condition||'';
+  $('editSecurityClassification').value=
+    item.securityClassification||'BIASA/TERBUKA';
+  $('editDescription').value=item.description||'';
+  $('replacementPdf').value='';
+  $('editReason').value='';
+  $('editCurrentFile').textContent=item.fileName||'Buka PDF saat ini';
+  $('editCurrentFile').href=item.fileUrl||'#';
+  $('editCurrentFile').classList.toggle('disabled',!item.fileUrl);
+  $('editStatus').textContent=item.loanStatus&&item.loanStatus!=='TERSEDIA'?'Item sedang dipinjam dan tidak dapat diedit.':'';
+}
+
+function clearEditFields(){
+  ['editDocumentDate','editPageCount','editDescription','replacementPdf','editReason'].forEach(id=>$(id).value='');
+  $('editDevelopmentLevel').value='ASLI';
+  $('editCondition').value='';
+  $('editSecurityClassification').value='BIASA/TERBUKA';
+  $('editCurrentFile').textContent='Pilih item untuk melihat file';
+  $('editCurrentFile').href='#';
+  $('editCurrentFile').classList.add('disabled');
+}
+
+async function submitEdit(event){
+  event.preventDefault();
+  if(!$('editBerkasId').value||!$('editItemId').value){toast('Pilih berkas dan item arsip.',true);return}
+  if($('editReason').value.trim().length<10){toast('Alasan perubahan minimal 10 karakter.',true);return}
+  const file=$('replacementPdf').files[0];
+  if(file){
+    if(file.type&&file.type!=='application/pdf'){toast('File pengganti harus PDF.',true);return}
+    if(file.size>=ARCHIVE_MEDIA_MAX_BYTES){toast('Ukuran PDF pengganti harus kurang dari 100 MB.',true);return}
+  }
+  const button=$('saveEdit');
+  button.disabled=true;
+  button.textContent=file?'Menyiapkan PDF…':'Menyimpan…';
+  $('editStatus').textContent=file?'Menyiapkan upload PDF pengganti…':'Memperbarui metadata, penomoran, Drive, dan laporan…';
+  try{
+    const payload=formPayloadWithoutFiles($('editForm'));
+    let result;
+    if(file){
+      result=await editWithReplacementUpload(payload,file,button);
+    }else{
+      if(state.editUpload&&state.editUpload.sessionId){
+        try{await runServer('apiCancelEditReplacementUpload',state.editUpload.sessionId)}catch(ignore){}
+      }
+      state.editUpload=null;
+      result=await runServer('apiUpdateArchiveItem',payload);
+    }
+    $('replacementPdf').value='';
+    $('editReason').value='';
+    state.editUpload=null;
+    state.editOptions=null;
+    state.deletionOptions=null;
+    await loadBootstrap();
+    await loadEditOptions(true);
+    const warning=result.warnings&&result.warnings.length?' Peringatan: '+result.warnings.join(' | '):'';
+    $('editStatus').textContent=result.message+warning;
+    toast(result.message,Boolean(result.warnings&&result.warnings.length));
+  }catch(error){$('editStatus').textContent='Perubahan dibatalkan: '+error.message;toast(error.message,true)}
+  finally{button.disabled=false;button.textContent='Simpan Perubahan'}
+}
+
+async function editWithReplacementUpload(payload,file,button){
+  const signature=JSON.stringify(payload)+'|'+file.name+'|'+file.size+'|'+(file.type||'');
+  let upload=state.editUpload;
+  if(upload&&upload.signature!==signature){
+    if(upload.sessionId){try{await runServer('apiCancelEditReplacementUpload',upload.sessionId)}catch(ignore){}}
+    upload=null;
+  }
+  if(!upload){
+    upload={signature:signature,sessionId:'',uploadedBytes:0,chunkSize:512*1024};
+    state.editUpload=upload;
+  }
+  try{
+    if(!upload.sessionId){
+      const request=Object.assign({},payload,{
+        replacementName:file.name,
+        replacementSize:file.size,
+        replacementType:file.type||'application/pdf'
+      });
+      const started=await runServer('apiStartEditReplacementUpload',request);
+      upload.sessionId=started.sessionId;
+      upload.chunkSize=started.chunkSize||upload.chunkSize;
+      upload.uploadedBytes=started.uploadedBytes||0;
+    }else{
+      const status=await runServer('apiGetEditReplacementUploadStatus',upload.sessionId);
+      if(status.committed&&status.result)return status.result;
+      upload.uploadedBytes=status.uploadedBytes||0;
+    }
+    while(upload.uploadedBytes<file.size){
+      const start=upload.uploadedBytes;
+      const end=Math.min(start+upload.chunkSize,file.size);
+      const base64=await fileSliceToBase64(file.slice(start,end,'application/pdf'));
+      const progress=await runServer('apiUploadEditReplacementChunk',{
+        sessionId:upload.sessionId,start:start,end:end,total:file.size,base64:base64
+      });
+      if(Number(progress.uploadedBytes)<=start)throw new Error('Drive belum menerima potongan PDF pengganti. Klik Simpan Perubahan kembali.');
+      upload.uploadedBytes=Number(progress.uploadedBytes);
+      const percent=Math.min(100,Math.floor(upload.uploadedBytes/file.size*100));
+      button.textContent='Upload PDF '+percent+'%';
+      $('editStatus').textContent='Mengunggah PDF pengganti: '+percent+'%. Data lama masih aman.';
+    }
+    button.textContent='Menyelesaikan…';
+    $('editStatus').textContent='PDF lengkap. Memperbarui metadata, penomoran, dan laporan…';
+    return await runServer('apiFinalizeEditReplacementUpload',upload.sessionId);
+  }catch(error){
+    const message=error.message||String(error);
+    if(/UPLOAD_SESSION_(EXPIRED|NOT_FOUND)/.test(message)){
+      upload.sessionId='';upload.uploadedBytes=0;
+    }
+    throw error;
+  }
+}
+
+function bindDeletionForm(){
+  $('deletionScope').addEventListener('change',renderDeletionMode);
+  $('deletionBerkasId').addEventListener('change',()=>{renderDeletionItems();renderDeletionImpact()});
+  $('deletionItemId').addEventListener('change',renderDeletionImpact);
+  $('deletionForm').addEventListener('submit',submitDeletion);
+  renderDeletionMode();
+}
+
+async function loadDeletionOptions(force=false){
+  if(state.deletionOptions&&!force){renderDeletionOptions();return}
+  $('deletionStatus').textContent='Memuat data arsip…';
+  try{
+    state.deletionOptions=await runServer('apiGetDeletionOptions');
+    renderDeletionOptions();
+    $('deletionStatus').textContent='';
+  }catch(error){$('deletionStatus').textContent='Gagal memuat data.';toast(error.message,true)}
+}
+
+function renderDeletionOptions(){
+  const select=$('deletionBerkasId');
+  const previous=select.value;
+  select.innerHTML='<option value="">Pilih berkas</option>';
+  (state.deletionOptions.berkas||[]).forEach(row=>select.add(new Option(row.label,row.id)));
+  if(previous&&(state.deletionOptions.berkas||[]).some(row=>row.id===previous))select.value=previous;
+  renderDeletionItems();
+  renderDeletionImpact();
+}
+
+function renderDeletionMode(){
+  const itemMode=$('deletionScope').value==='ITEM';
+  $('deletionItemField').hidden=!itemMode;
+  $('deletionItemId').required=itemMode;
+  renderDeletionImpact();
+}
+
+function renderDeletionItems(){
+  const select=$('deletionItemId');
+  const previous=select.value;
+  const rows=state.deletionOptions&&state.deletionOptions.itemsByBerkas[$('deletionBerkasId').value]||[];
+  select.innerHTML='<option value="">Pilih item arsip</option>';
+  rows.forEach(row=>select.add(new Option(row.label,row.id)));
+  if(previous&&rows.some(row=>row.id===previous))select.value=previous;
+}
+
+function renderDeletionImpact(){
+  const impact=$('deletionImpact');
+  if(!state.deletionOptions){impact.textContent='Pilih objek untuk melihat dampak pembatalan.';return}
+  const parent=state.deletionOptions.berkas.find(row=>row.id===$('deletionBerkasId').value);
+  if(!parent){impact.textContent='Pilih berkas induk terlebih dahulu.';return}
+  if($('deletionScope').value==='BERKAS'){
+    impact.innerHTML='<strong>Seluruh berkas akan dikeluarkan dari arsip aktif.</strong><br>'+escapeHtml(parent.label)+' · '+parent.itemCount+' item · '+parent.pageCount+' lembar. Folder dan seluruh PDF dipindahkan ke karantina aplikasi.';
+    return;
+  }
+  const items=state.deletionOptions.itemsByBerkas[parent.id]||[];
+  const item=items.find(row=>row.id===$('deletionItemId').value);
+  if(!item){impact.textContent='Pilih item arsip yang akan dibatalkan.';return}
+  impact.innerHTML='<strong>Satu item akan dikeluarkan dari arsip aktif.</strong><br>Item '+escapeHtml(String(item.number||'–'))+' · '+escapeHtml(item.documentDate||'tanpa tanggal')+' · '+item.pageCount+' lembar. Item setelahnya akan dinomori ulang.';
+}
+
+async function submitDeletion(event){
+  event.preventDefault();
+  const scope=$('deletionScope').value;
+  const parentId=$('deletionBerkasId').value;
+  if(!parentId){toast('Pilih berkas induk.',true);return}
+  if(scope==='ITEM'&&!$('deletionItemId').value){toast('Pilih item arsip.',true);return}
+  if($('deletionReason').value.trim().length<10){toast('Alasan pembatalan minimal 10 karakter.',true);return}
+  if($('deletionConfirmation').value.trim().toUpperCase()!=='HAPUS'){toast('Ketik HAPUS pada kolom konfirmasi.',true);return}
+  const evidenceFile=$('dispositionFile').files[0];
+  if(evidenceFile){
+    const extension=(evidenceFile.name.split('.').pop()||'').toLowerCase();
+    if(!['pdf','jpg','jpeg','png'].includes(extension)){toast('Bukti disposisi harus PDF, JPG, JPEG, atau PNG.',true);return}
+    if(evidenceFile.size>25*1024*1024){toast('Ukuran bukti disposisi maksimal 25 MB.',true);return}
+  }
+  const button=$('deleteArchive');
+  button.disabled=true;
+  button.textContent=evidenceFile?'Menyiapkan bukti…':'Menghapus…';
+  $('deletionStatus').textContent=evidenceFile?'Menyiapkan upload bukti disposisi…':'Memperbarui database, Drive, nomor, dan laporan…';
+  try{
+    const payload=formPayloadWithoutFiles($('deletionForm'));
+    let result;
+    if(evidenceFile){
+      result=await deleteWithEvidenceUpload(payload,evidenceFile,button);
+    }else{
+      if(state.deletionUpload&&state.deletionUpload.sessionId){
+        try{await runServer('apiCancelDeletionEvidenceUpload',state.deletionUpload.sessionId)}catch(ignore){}
+      }
+      state.deletionUpload=null;
+      result=await runServer('apiDeleteArchive',payload);
+    }
+    if(state.lockedBerkasId===result.berkasId){
+      state.lockedBerkasId='';state.lockedBerkasLabel='';
+      setBerkasMode('EXISTING');
+    }
+    $('deletionReason').value='';
+    $('dispositionFile').value='';
+    $('deletionConfirmation').value='';
+    state.deletionUpload=null;
+    state.deletionOptions=null;
+    await loadBootstrap();
+    await loadDeletionOptions(true);
+    const warning=result.warnings&&result.warnings.length?' Peringatan: '+result.warnings.join(' | '):'';
+    $('deletionStatus').textContent=result.message+warning;
+    toast(result.message,Boolean(result.warnings&&result.warnings.length));
+  }catch(error){$('deletionStatus').textContent='Pembatalan belum diproses: '+error.message;toast(error.message,true)}
+  finally{button.disabled=false;button.textContent='Batalkan dari Arsip Aktif'}
+}
+
+async function deleteWithEvidenceUpload(payload,file,button){
+  const signature=JSON.stringify(payload)+'|'+file.name+'|'+file.size+'|'+(file.type||'');
+  let upload=state.deletionUpload;
+  if(upload&&upload.signature!==signature){
+    if(upload.sessionId){try{await runServer('apiCancelDeletionEvidenceUpload',upload.sessionId)}catch(ignore){}}
+    upload=null;
+  }
+  if(!upload){
+    upload={signature:signature,sessionId:'',uploadedBytes:0,chunkSize:512*1024,file:file,payload:payload};
+    state.deletionUpload=upload;
+  }
+  try{
+    if(!upload.sessionId){
+      const request=Object.assign({},payload,{
+        evidenceName:file.name,
+        evidenceSize:file.size,
+        evidenceType:file.type||''
+      });
+      const started=await runServer('apiStartDeletionEvidenceUpload',request);
+      upload.sessionId=started.sessionId;
+      upload.chunkSize=started.chunkSize||upload.chunkSize;
+      upload.uploadedBytes=started.uploadedBytes||0;
+    }else{
+      const status=await runServer('apiGetDeletionEvidenceUploadStatus',upload.sessionId);
+      if(status.committed&&status.result)return status.result;
+      upload.uploadedBytes=status.uploadedBytes||0;
+    }
+
+    while(upload.uploadedBytes<file.size){
+      const start=upload.uploadedBytes;
+      const end=Math.min(start+upload.chunkSize,file.size);
+      const base64=await fileSliceToBase64(file.slice(start,end,file.type||'application/octet-stream'));
+      const progress=await runServer('apiUploadDeletionEvidenceChunk',{
+        sessionId:upload.sessionId,
+        start:start,
+        end:end,
+        total:file.size,
+        base64:base64
+      });
+      if(Number(progress.uploadedBytes)<=start)throw new Error('Drive belum menerima potongan bukti disposisi. Klik kembali tombol pembatalan.');
+      upload.uploadedBytes=Number(progress.uploadedBytes);
+      const percent=Math.min(100,Math.floor(upload.uploadedBytes/file.size*100));
+      button.textContent='Upload bukti '+percent+'%';
+      $('deletionStatus').textContent='Mengunggah bukti disposisi: '+percent+'%. Data arsip belum dibatalkan.';
+    }
+    button.textContent='Menyelesaikan…';
+    $('deletionStatus').textContent='Bukti lengkap. Menjalankan pembatalan, penomoran ulang, dan pembaruan laporan…';
+    return await runServer('apiFinalizeDeletionEvidenceUpload',upload.sessionId);
+  }catch(error){
+    const message=error.message||String(error);
+    if(/UPLOAD_SESSION_(EXPIRED|NOT_FOUND)/.test(message)){
+      upload.sessionId='';
+      upload.uploadedBytes=0;
+    }
+    throw error;
+  }
+}
+
+function bindArchiveForm(){
+  $('chooseReceiptSource').addEventListener('click',()=>setInputSourceMode_('RECEIPT'));
+  $('chooseManualSource').addEventListener('click',()=>setInputSourceMode_('MANUAL'));
+  $('refreshReceiptFiling').addEventListener('click',()=>loadReceiptFilingOptions(true));
+  $('receiptFilingSearch').addEventListener('input',renderReceiptFilingQueue_);
+  $('receiptFilingBody').addEventListener('change',event=>{
+    const checkbox=event.target.closest('[data-receipt-filing-id]');
+    if(!checkbox)return;
+    const id=checkbox.dataset.receiptFilingId;
+    if(checkbox.checked){
+      if(state.selectedReceiptItemIds.size>=100){
+        checkbox.checked=false;
+        toast('Satu transaksi maksimal memuat 100 item.',true);
+        return;
+      }
+      state.selectedReceiptItemIds.add(id);
+    }else state.selectedReceiptItemIds.delete(id);
+    state.receiptFilingRequestId='';
+    renderReceiptFilingSelection_();
+  });
+  $('chooseExisting').addEventListener('click',()=>setBerkasMode('EXISTING'));
+  $('chooseNew').addEventListener('click',()=>setBerkasMode('NEW'));
+  $('changeBerkas').addEventListener('click',unlockBerkasChoice);
+  $('itemBerkasId').addEventListener('change',onBerkasChanged);
+  $('primaryClass').addEventListener('change',e=>{renderClassification(e.target.value||'NONE','secondaryClass');renderClassification('NONE','tertiaryClass');updateClassificationId()});
+  $('secondaryClass').addEventListener('change',e=>{renderClassification(e.target.value||'NONE','tertiaryClass');updateClassificationId()});
+  $('tertiaryClass').addEventListener('change',updateClassificationId);
+  $('clearItemFields').addEventListener('click',()=>clearItemOnly(true));
+  $('archiveForm').addEventListener('submit',event=>{
+    if(state.inputSourceMode==='RECEIPT')saveReceiptFiling_(event);
+    else saveItemDirect(event);
+  });
+  $('retryUpload').addEventListener('click',retryPendingUpload);
+  setBerkasMode('EXISTING');
+  setInputSourceMode_('RECEIPT');
+}
+
+function setInputSourceMode_(mode){
+  state.inputSourceMode=mode==='MANUAL'?'MANUAL':'RECEIPT';
+  $('inputSourceMode').value=state.inputSourceMode;
+  $('chooseReceiptSource').classList.toggle('active',state.inputSourceMode==='RECEIPT');
+  $('chooseManualSource').classList.toggle('active',state.inputSourceMode==='MANUAL');
+  $('receiptFilingSection').hidden=state.inputSourceMode!=='RECEIPT';
+  $('manualItemSection').hidden=state.inputSourceMode!=='MANUAL';
+  $('refreshReceiptFiling').hidden=state.inputSourceMode!=='RECEIPT';
+  const manual=state.inputSourceMode==='MANUAL';
+  ['documentDate','pageCount','developmentLevel','securityClassification','itemDescription']
+    .forEach(id=>$(id).required=manual);
+  $('saveItem').textContent=manual?'Simpan Item':'Berkaskan Item Terpilih';
+  $('formStatus').textContent=manual
+    ?'Isi metadata item arsip.'
+    :'Pilih satu atau beberapa item penerimaan, lalu tentukan berkas tujuan.';
+  if(!manual)loadReceiptFilingOptions();
+}
+
+async function loadReceiptFilingOptions(force=false){
+  if(state.receiptFilingOptions&&!force){
+    renderReceiptFilingQueue_();
+    return;
+  }
+  $('receiptFilingEmpty').hidden=false;
+  $('receiptFilingEmpty').textContent='Memuat item penerimaan yang belum diberkaskan…';
+  $('receiptFilingTableWrap').hidden=true;
+  $('refreshReceiptFiling').disabled=true;
+  try{
+    state.receiptFilingOptions=await runServer('apiGetReceiptFilingOptions');
+    const available=new Set((state.receiptFilingOptions.items||[]).map(item=>item.id));
+    state.selectedReceiptItemIds=new Set(
+      [...state.selectedReceiptItemIds].filter(id=>available.has(id))
+    );
+    renderReceiptFilingQueue_();
+  }catch(error){
+    $('receiptFilingEmpty').textContent='Antrean belum dapat dimuat: '+error.message;
+    toast(error.message,true);
+  }finally{
+    $('refreshReceiptFiling').disabled=false;
+  }
+}
+
+function visibleReceiptFilingItems_(){
+  const query=normalizeFolderLabelFilter_($('receiptFilingSearch').value);
+  return (state.receiptFilingOptions&&state.receiptFilingOptions.items||[])
+    .filter(item=>{
+      if(!query)return true;
+      const corpus=normalizeFolderLabelFilter_([
+        item.receiptNumber,item.senderName,item.senderUnit,
+        item.primaryLetterNumber,item.alternateLetterNumber,
+        item.documentDate,item.description,item.condition,
+        item.securityClassification
+      ].join(' '));
+      return query.split(' ').filter(Boolean).every(token=>corpus.includes(token));
+    });
+}
+
+function renderReceiptFilingQueue_(){
+  const options=state.receiptFilingOptions;
+  if(!options)return;
+  const rows=visibleReceiptFilingItems_();
+  const summary=options.summary||{};
+  $('receiptFilingStats').textContent=
+    (summary.pending||0)+' siap · '+(summary.incomplete||0)+
+    ' perlu dilengkapi · '+(summary.filed||0)+' sudah diberkaskan'+
+    (options.truncated?' · menampilkan 500 antrean terlama':'');
+  $('receiptFilingBody').innerHTML=rows.map(item=>{
+    const checked=state.selectedReceiptItemIds.has(item.id)?' checked':'';
+    const disabled=item.selectable?'':' disabled';
+    const status=item.selectable
+      ?'<span class="status-badge success">Siap</span>'
+      :'<span class="status-badge warning">Lengkapi metadata</span>';
+    const number=item.primaryLetterNumber||item.alternateLetterNumber||'Tanpa nomor surat';
+    return '<tr>'+
+      '<td><input type="checkbox" data-receipt-filing-id="'+escapeHtml(item.id)+'"'+checked+disabled+' aria-label="Pilih item"></td>'+
+      '<td><span class="search-number">'+escapeHtml(item.receiptNumber)+' · '+escapeHtml(item.receiptItemNumber)+'</span>'+
+        '<span class="search-cell-sub">'+escapeHtml(item.senderName)+' — '+escapeHtml(item.senderUnit)+'</span></td>'+
+      '<td><span class="search-cell-main">'+escapeHtml(formatArchiveDate(item.documentDate))+'</span>'+
+        '<span class="search-cell-sub">'+escapeHtml(number)+'</span></td>'+
+      '<td><div class="search-description">'+escapeHtml(item.description)+'</div>'+
+        '<span class="search-cell-sub">'+escapeHtml(item.notes||'')+'</span></td>'+
+      '<td>'+status+'<span class="search-cell-sub">'+escapeHtml(item.pageCount)+' hlm · '+
+        escapeHtml(item.developmentLevel)+' · '+escapeHtml(receiptTitleCase_(item.condition))+' · '+
+        escapeHtml(receiptSecurityLabel_(item.securityClassification))+'</span></td>'+
+    '</tr>';
+  }).join('');
+  $('receiptFilingTableWrap').hidden=rows.length===0;
+  $('receiptFilingEmpty').hidden=rows.length>0;
+  $('receiptFilingEmpty').textContent=(options.items||[]).length
+    ?'Tidak ada item yang sesuai dengan pencarian.'
+    :'Tidak ada item penerimaan yang menunggu pemberkasan.';
+  renderReceiptFilingSelection_();
+}
+
+function renderReceiptFilingSelection_(){
+  const selected=(state.receiptFilingOptions&&state.receiptFilingOptions.items||[])
+    .filter(item=>state.selectedReceiptItemIds.has(item.id));
+  const pages=selected.reduce((sum,item)=>sum+Number(item.pageCount||0),0);
+  const security=mostRestrictiveSecurityClient_(selected);
+  $('receiptFilingSelected').textContent=selected.length
+    ?selected.length+' item terpilih · '+pages+' halaman · keamanan berkas '+
+      receiptSecurityLabel_(security)
+    :'Belum ada item dipilih.';
+}
+
+async function saveReceiptFiling_(event){
+  event.preventDefault();
+  try{validateBeforeSave()}catch(error){toast(error.message,true);return}
+  const button=$('saveItem');
+  if(!state.receiptFilingRequestId){
+    state.receiptFilingRequestId='RBF-'+Date.now().toString(36).toUpperCase()+'-'+
+      Math.random().toString(36).slice(2,10).toUpperCase();
+  }
+  updateClassificationId();
+  const mode=$('berkasMode').value;
+  if(mode==='NEW'&&!$('newBerkasId').value)$('newBerkasId').value=newClientId('BRK');
+  const payload=formPayloadWithoutFiles($('archiveForm'));
+  payload.requestId=state.receiptFilingRequestId;
+  payload.receiptItemIds=[...state.selectedReceiptItemIds];
+  button.disabled=true;
+  button.textContent='Memberkaskan…';
+  showItemSavingOverlay();
+  $('loadingTitle').textContent='Memberkaskan item penerimaan';
+  $('loadingMessage').textContent='Memvalidasi item terpilih dan menghitung nomor kronologis…';
+  try{
+    let result;
+    try{
+      result=await runServerWithTimeout_(60000,'apiCommitReceiptFiling',payload);
+    }catch(error){
+      if(error.code!=='SERVER_TIMEOUT')throw error;
+      $('loadingMessage').textContent='Respons terlambat. Memverifikasi hasil penyimpanan…';
+      const recovery=await runServerWithTimeout_(
+        30000,'apiRecoverReceiptFiling',payload.requestId,payload.receiptItemIds);
+      if(!recovery||!recovery.found)throw error;
+      result=recovery;
+    }
+    const selectedCount=state.selectedReceiptItemIds.size;
+    state.selectedReceiptItemIds.clear();
+    state.receiptFilingRequestId='';
+    state.receiptFilingOptions=null;
+    state.receiptOptions=null;
+    state.editOptions=null;
+    state.deletionOptions=null;
+    state.mediaOptions=null;
+    resetNewBerkasFields();
+    runServer('apiRefreshReceiptFilingReports',result.requestId)
+      .catch(error=>toast(
+        'Data utama tersimpan, tetapi laporan belum tersinkron: '+error.message,
+        true
+      ));
+    await Promise.all([
+      loadBootstrap(result.berkasId),
+      loadReceiptFilingOptions(true)
+    ]);
+    lockBerkas(result.berkasId,
+      'Berkas '+(result.berkasNumber||'')+' – '+(result.berkasTitle||''));
+    const duration=result.durationMs
+      ?' · '+Math.max(.1,result.durationMs/1000).toFixed(1)+' detik':'';
+    const warning=result.warnings&&result.warnings.length
+      ?' Peringatan: '+result.warnings.join(' | '):'';
+    $('formStatus').textContent=selectedCount+' item berhasil diberkaskan'+duration+
+      '. Laporan sedang disegarkan di latar belakang.'+warning;
+    toast(result.message,Boolean(result.warnings&&result.warnings.length));
+  }catch(error){
+    $('formStatus').textContent='Pemberkasan belum berhasil: '+error.message;
+    toast(error.message,true);
+  }finally{
+    hideItemSavingOverlay();
+    button.disabled=false;
+    button.textContent='Berkaskan Item Terpilih';
+  }
+}
+
+function setParentRequirements(mode,locked){
+  const isNew=mode==='NEW'&&!locked;
+  $('itemBerkasId').required=mode==='EXISTING'&&!locked;
+  $('title').required=isNew;
+  $('activeRetentionValue').required=isNew;
+  $('inactiveRetentionValue').required=isNew;
+  $('finalDisposition').required=isNew;
+}
+
+function setBerkasMode(mode){
+  $('berkasMode').value=mode;
+  $('chooseExisting').classList.toggle('active',mode==='EXISTING');
+  $('chooseNew').classList.toggle('active',mode==='NEW');
+  $('existingBerkasSection').hidden=mode!=='EXISTING';
+  $('newBerkasSection').hidden=mode!=='NEW';
+  setParentRequirements(mode,false);
+  state.lockedBerkasId='';
+  state.lockedBerkasLabel='';
+  $('lockedBerkasSummary').hidden=true;
+  $('changeBerkas').hidden=true;
+  $('formStatus').textContent='';
+  if(mode==='NEW')$('title').focus();else $('itemBerkasId').focus();
+}
+
+function unlockBerkasChoice(){
+  if(state.pendingUpload)return;
+  state.lockedBerkasId='';
+  state.lockedBerkasLabel='';
+  $('berkasModeSwitch').hidden=false;
+  $('lockedBerkasSummary').hidden=true;
+  $('changeBerkas').hidden=true;
+  clearItemOnly(false);
+  setBerkasMode('EXISTING');
+}
+
+function lockBerkas(berkasId,fallbackLabel){
+  const option=state.bootstrap.berkasOptions.find(row=>row.id===berkasId);
+  state.lockedBerkasId=berkasId;
+  state.lockedBerkasLabel=option?option.label:(fallbackLabel||berkasId);
+  $('berkasMode').value='EXISTING';
+  $('itemBerkasId').value=berkasId;
+  setParentRequirements('EXISTING',true);
+  $('existingBerkasSection').hidden=true;
+  $('newBerkasSection').hidden=true;
+  $('berkasModeSwitch').hidden=true;
+  $('lockedBerkasSummary').hidden=false;
+  $('lockedBerkasSummary').innerHTML='<strong>Berkas aktif</strong><span>'+escapeHtml(state.lockedBerkasLabel)+'</span><small>Keamanan berkas saat ini: '+
+    escapeHtml(receiptSecurityLabel_(option&&option.securityClassification))+'. Item berikutnya akan masuk ke berkas ini.</small>';
+  $('changeBerkas').hidden=false;
+  $('itemSequenceHint').textContent='Berkas induk tetap dipilih. Simpan item berikutnya tanpa mengisi ulang klasifikasi, retensi, dan lokasi.';
+}
+
+function onBerkasChanged(){
+  const selected=state.bootstrap&&state.bootstrap.berkasOptions.find(row=>row.id===$('itemBerkasId').value);
+  $('berkasInfo').textContent=selected
+    ?'Klasifikasi '+selected.classificationCode+' · Keamanan '+
+      receiptSecurityLabel_(selected.securityClassification)+' · '+selected.title
+    :'';
+}
+
+function updateClassificationId(){
+  $('classificationId').value=$('tertiaryClass').value||$('secondaryClass').value||$('primaryClass').value||'';
+}
+
+function validateBeforeSave(){
+  const mode=$('berkasMode').value;
+  if(state.pendingUpload)throw new Error('Tunggu upload item sebelumnya selesai. Anda tetap dapat mengetik item berikutnya.');
+  if(mode==='EXISTING'&&!(state.lockedBerkasId||$('itemBerkasId').value))throw new Error('Pilih berkas induk terlebih dahulu.');
+  if(mode==='NEW'){
+    if(!$('title').value.trim())throw new Error('Judul berkas wajib diisi.');
+    if(!$('classificationId').value)throw new Error('Kode klasifikasi wajib dipilih.');
+    if($('activeRetentionValue').value===''||$('inactiveRetentionValue').value==='')throw new Error('Retensi aktif dan inaktif wajib diisi.');
+    if(!$('finalDisposition').value)throw new Error('Nasib akhir wajib dipilih.');
+  }
+  if(state.inputSourceMode==='RECEIPT'){
+    if(!state.selectedReceiptItemIds.size)throw new Error('Pilih minimal satu item dari Penerimaan Arsip.');
+    if(state.selectedReceiptItemIds.size>100)throw new Error('Satu transaksi maksimal memuat 100 item.');
+    return;
+  }
+  const file=$('pdfFile').files[0];
+  if(file&&file.type&&file.type!=='application/pdf')throw new Error('Berkas utama harus PDF.');
+  if(file&&file.size>=ARCHIVE_MEDIA_MAX_BYTES)throw new Error('Ukuran PDF harus kurang dari 100 MB.');
+}
+
+function newClientId(prefix){
+  const id=window.crypto&&crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random().toString(16).slice(2);
+  return prefix+'-'+id;
+}
+
+function showItemSavingOverlay(){
+  loadingStageTimers.forEach(clearTimeout);
+  loadingStageTimers=[];
+  $('loadingTitle').textContent='Menyimpan item arsip';
+  $('loadingMessage').textContent='Memvalidasi metadata dan menyiapkan penyimpanan…';
+  $('loadingOverlay').hidden=false;
+  $('app').setAttribute('aria-busy','true');
+  loadingStageTimers.push(setTimeout(()=>$('loadingMessage').textContent='Menghitung urutan kronologis dan nomor definitif…',1200));
+  loadingStageTimers.push(setTimeout(()=>$('loadingMessage').textContent='Memperbarui database dan laporan arsip…',3500));
+  loadingStageTimers.push(setTimeout(()=>$('loadingMessage').textContent='Proses masih berjalan normal. Mohon tetap menunggu…',8000));
+}
+
+function hideItemSavingOverlay(){
+  loadingStageTimers.forEach(clearTimeout);
+  loadingStageTimers=[];
+  $('loadingOverlay').hidden=true;
+  $('app').removeAttribute('aria-busy');
+}
+
+async function saveItemDirect(event){
+  event.preventDefault();
+  try{validateBeforeSave()}catch(error){toast(error.message,true);return}
+  const button=$('saveItem');
+  const savingWithoutPdf=!$('pdfFile').files[0];
+  button.disabled=true;
+  button.textContent='Menyimpan…';
+  if(savingWithoutPdf)showItemSavingOverlay();
+  try{
+    updateClassificationId();
+    const mode=$('berkasMode').value;
+    if(mode==='NEW'&&!$('newBerkasId').value)$('newBerkasId').value=newClientId('BRK');
+    $('previewItemId').value=newClientId('ITM');
+    $('previewCreatedAt').value='';
+    const pdfFile=$('pdfFile').files[0];
+    const queuedMetadata=formPayloadWithoutFiles($('archiveForm'));
+    const berkasId=mode==='NEW'?$('newBerkasId').value:(state.lockedBerkasId||$('itemBerkasId').value);
+    const selected=state.bootstrap.berkasOptions.find(row=>row.id===berkasId);
+    const label=mode==='NEW'?$('title').value:(selected?selected.label:state.lockedBerkasLabel);
+    if(!pdfFile){
+      $('formStatus').textContent='Menyimpan metadata tanpa PDF…';
+      const result=await runServer('apiCommitItemMetadata',queuedMetadata);
+      clearItemOnly(false);
+      resetNewBerkasFields();
+      lockBerkas(result.berkasId,label);
+      button.disabled=false;
+      button.textContent='Simpan Item';
+      const duration=result.durationMs?Math.max(.1,result.durationMs/1000).toFixed(1)+' detik':'';
+      $('formStatus').textContent='Tersimpan tanpa PDF: '+result.itemId+(duration?' · '+duration:'');
+      state.mediaOptions=null;
+      state.editOptions=null;
+      toast(result.message);
+      loadBootstrap(result.berkasId).then(()=>{
+        if(state.lockedBerkasId===result.berkasId)lockBerkas(result.berkasId,label);
+      });
+      return;
+    }
+    queuedMetadata.pdfName=pdfFile.name;
+    queuedMetadata.pdfSize=pdfFile.size;
+    queuedMetadata.pdfType=pdfFile.type||'application/pdf';
+    state.pendingUpload={metadata:queuedMetadata,file:pdfFile,berkasId,label,running:true,sessionId:'',uploadedBytes:0,chunkSize:512*1024};
+    lockBerkas(berkasId,label);
+    clearItemOnly(false);
+    resetNewBerkasFields();
+    setUploadState('running','PDF item sebelumnya sedang diunggah. Anda dapat mengetik item berikutnya; jangan tutup halaman.');
+    sendPendingUpload();
+  }catch(error){
+    button.disabled=false;
+    button.textContent='Simpan Item';
+    toast('Item belum dapat disimpan: '+error.message,true);
+    $('formStatus').textContent='Penyimpanan belum berhasil.';
+  }finally{
+    if(savingWithoutPdf)hideItemSavingOverlay();
+  }
+}
+
+function fileSliceToBase64(blob){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>{
+      const value=String(reader.result||'');
+      resolve(value.includes(',')?value.substring(value.indexOf(',')+1):value);
+    };
+    reader.onerror=()=>reject(new Error('Potongan PDF tidak dapat dibaca oleh browser.'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function sendPendingUpload(){
+  const upload=state.pendingUpload;
+  if(!upload||upload.running!==true)return;
+  try{
+    if(!upload.sessionId){
+      const started=await runServer('apiStartItemUpload',upload.metadata);
+      upload.sessionId=started.sessionId;
+      upload.chunkSize=started.chunkSize||upload.chunkSize;
+      upload.uploadedBytes=started.uploadedBytes||0;
+    }else{
+      const status=await runServer('apiGetItemUploadStatus',upload.sessionId);
+      if(status.committed&&status.result){
+        await finishPendingUpload(upload,status.result);
+        return;
+      }
+      upload.uploadedBytes=status.uploadedBytes||0;
+    }
+
+    while(upload.uploadedBytes<upload.file.size){
+      const start=upload.uploadedBytes;
+      const end=Math.min(start+upload.chunkSize,upload.file.size);
+      const base64=await fileSliceToBase64(upload.file.slice(start,end,'application/pdf'));
+      const progress=await runServer('apiUploadItemChunk',{
+        sessionId:upload.sessionId,
+        start:start,
+        end:end,
+        total:upload.file.size,
+        base64:base64
+      });
+      if(Number(progress.uploadedBytes)<=start)throw new Error('Drive belum menerima potongan PDF. Klik Coba Upload Lagi.');
+      upload.uploadedBytes=Number(progress.uploadedBytes);
+      const percent=Math.min(100,Math.floor(upload.uploadedBytes/upload.file.size*100));
+      setUploadState('running','Mengunggah PDF item sebelumnya: '+percent+'%. Anda dapat mengetik item berikutnya; jangan tutup halaman.');
+    }
+
+    setUploadState('running','PDF sudah lengkap. Menyimpan metadata dan memperbarui nomor definitif…');
+    const result=await runServer('apiFinalizeItemUpload',upload.sessionId);
+    await finishPendingUpload(upload,result);
+  }catch(error){
+    const message=error.message||String(error);
+    if(/UPLOAD_SESSION_(EXPIRED|NOT_FOUND)/.test(message)){
+      upload.sessionId='';
+      upload.uploadedBytes=0;
+    }
+    upload.running=false;
+    setUploadState('error','Upload item sebelumnya terhenti: '+message);
+    $('formStatus').textContent='Item berikutnya ditahan sampai upload sebelumnya berhasil.';
+    toast(message,true);
+  }
+}
+
+async function finishPendingUpload(upload,result){
+  state.pendingUpload=null;
+  state.mediaOptions=null;
+  state.editOptions=null;
+  await loadBootstrap(result.berkasId);
+  lockBerkas(result.berkasId,upload.label);
+  setUploadState('success','Item sebelumnya berhasil disimpan. Anda dapat menyimpan item berikutnya.');
+  $('formStatus').textContent='Tersimpan: '+result.itemId;
+  toast(result.message);
+  setTimeout(()=>{if(!state.pendingUpload)$('uploadBanner').hidden=true},5000);
+}
+
+function retryPendingUpload(){
+  if(!state.pendingUpload||state.pendingUpload.running)return;
+  state.pendingUpload.running=true;
+  setUploadState('running','Mencoba mengunggah kembali item sebelumnya…');
+  sendPendingUpload();
+}
+
+function setUploadState(kind,message){
+  $('uploadBanner').hidden=false;
+  $('uploadBanner').className='upload-banner'+(kind==='success'?' success':kind==='error'?' error':'');
+  $('uploadMessage').textContent=message;
+  $('retryUpload').hidden=kind!=='error';
+  $('saveItem').disabled=kind!=='success';
+  $('changeBerkas').disabled=kind!=='success';
+  $('saveItem').textContent=kind==='running'?'Menunggu upload sebelumnya…':'Simpan Item';
+}
+
+function clearItemOnly(clearStatus=true){
+  ['primaryLetterNumber','alternateLetterNumber','documentDate','pageCount','itemDescription','pdfFile','itemNotes','previewItemId','previewCreatedAt'].forEach(id=>$(id).value='');
+  $('developmentLevel').value='ASLI';
+  $('securityClassification').value='BIASA/TERBUKA';
+  if(clearStatus)$('formStatus').textContent='';
+  $('itemDescription').focus();
+}
+
+function resetNewBerkasFields(){
+  ['title','classificationId','activeRetentionValue','inactiveRetentionValue','filingCabinet','drawer','berkasNotes','newBerkasId'].forEach(id=>$(id).value='');
+  $('activeRetentionUnit').value='TAHUN';
+  $('inactiveRetentionUnit').value='TAHUN';
+  $('finalDisposition').value='';
+  renderClassification('ROOT','primaryClass');
+  renderClassification('NONE','secondaryClass');
+  renderClassification('NONE','tertiaryClass');
+}
+
+function escapeHtml(value){return String(value).replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]))}
+function toast(message,error=false){const el=$('toast');el.textContent=message;el.className='toast show'+(error?' error':'');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.className='toast',4000)}
+</script>

@@ -1,0 +1,204 @@
+
+<script>
+function downloadLoanOutIndicatorPdf_(payload){
+  const result=buildLoanOutIndicatorPdf_(payload||{});
+  const blob=new Blob([result.bytes],{type:'application/pdf'});
+  const url=URL.createObjectURL(blob);
+  const anchor=document.createElement('a');
+  anchor.href=url;
+  anchor.download=payload.fileName||'Out_Indicator.pdf';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),30000);
+  return {pageCount:result.pageCount,sizeBytes:blob.size};
+}
+
+function buildLoanOutIndicatorPdf_(payload){
+  const items=Array.isArray(payload.items)&&payload.items.length?payload.items:[{
+    number:'–',description:payload.berkasTitle||'Arsip dipinjam',pageCount:payload.pageCount||0
+  }];
+  const pageWidth=419.528;
+  const pageHeight=595.276;
+  const margin=24;
+  const tableWidth=pageWidth-margin*2;
+  const itemRows=items.map((item,index)=>loanOutItemLayout_(item,index,tableWidth));
+  const pages=paginateLoanOutItems_(itemRows,132,438);
+  const objects=[null,null,null];
+  const addObject=value=>{objects.push(typeof value==='string'?pdfAsciiBytes_(value):value);return objects.length-1};
+  const regularFont=addObject('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
+  const boldFont=addObject('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
+  const logoBytes=pdfBase64Bytes_(FOLDER_LABEL_LOGO_HD_JPEG_);
+  const logoObject=addObject(pdfStreamObjectBytes_('/Type /XObject /Subtype /Image /Name /Im1 /Width 319 /Height 315 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Interpolate true',logoBytes));
+  const pageObjects=[];
+
+  pages.forEach((rows,pageIndex)=>{
+    const commands=[];
+    if(pageIndex===0)commands.push(drawLoanOutFirstHeader_(payload,pageWidth,pageHeight,margin));
+    else commands.push(drawLoanOutContinuationHeader_(payload,pageIndex+1,pages.length,pageWidth,pageHeight,margin));
+    const tableTop=pageIndex===0?228:508;
+    commands.push(drawLoanOutItemsTable_(rows,tableTop,margin,tableWidth));
+    commands.push(drawLoanOutFooter_(payload,pageIndex+1,pages.length,pageWidth,margin));
+    const contentObject=addObject(pdfStreamObjectBytes_('',pdfAsciiBytes_(commands.join('\n'))));
+    const pageObject=addObject('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+
+      pdfNumber_(pageWidth)+' '+pdfNumber_(pageHeight)+'] /Resources << /ProcSet [/PDF /Text /ImageC] '+
+      '/Font << /F1 '+regularFont+' 0 R /F2 '+boldFont+' 0 R >> /XObject << /Im1 '+logoObject+
+      ' 0 R >> >> /Contents '+contentObject+' 0 R >>');
+    pageObjects.push(pageObject);
+  });
+  objects[1]=pdfAsciiBytes_('<< /Type /Catalog /Pages 2 0 R >>');
+  objects[2]=pdfAsciiBytes_('<< /Type /Pages /Count '+pageObjects.length+' /Kids ['+
+    pageObjects.map(number=>number+' 0 R').join(' ')+'] >>');
+  return {bytes:assemblePdfObjects_(objects),pageCount:pageObjects.length};
+}
+
+function loanOutItemLayout_(item,index,tableWidth){
+  const description=normalizeFolderLabelPdfText_(item.description||'Item arsip');
+  const descriptionWidth=tableWidth-28-42-40-22;
+  const lines=wrapFolderLabelPdfText_(description,descriptionWidth,6.5,false);
+  const limited=lines.slice(0,5);
+  if(lines.length>5){
+    let last=limited[4]||'';
+    while(last&&measureFolderLabelPdfText_(last+'...',6.5,false)>descriptionWidth)last=last.slice(0,-1);
+    limited[4]=last+'...';
+  }
+  return {
+    index:index+1,
+    number:normalizeFolderLabelPdfText_(item.number||'–'),
+    descriptionLines:limited,
+    pageCount:Number(item.pageCount||0),
+    height:Math.max(28,13+limited.length*7.4)
+  };
+}
+
+function paginateLoanOutItems_(rows,firstBudget,nextBudget){
+  const pages=[];
+  let page=[];
+  let used=0;
+  let budget=firstBudget;
+  rows.forEach(row=>{
+    if(page.length&&used+row.height>budget){
+      pages.push(page);
+      page=[];
+      used=0;
+      budget=nextBudget;
+    }
+    page.push(row);
+    used+=row.height;
+  });
+  if(page.length)pages.push(page);
+  return pages.length?pages:[[]];
+}
+
+function drawLoanOutFirstHeader_(payload,pageWidth,pageHeight,margin){
+  const commands=[];
+  commands.push('q 0.055 0.231 0.365 rg '+pdfNumber_(margin)+' '+pdfNumber_(pageHeight-82)+' '+
+    pdfNumber_(pageWidth-margin*2)+' 58 re f Q');
+  commands.push('q 34 0 0 34 '+pdfNumber_(margin+10)+' '+pdfNumber_(pageHeight-70)+' cm /Im1 Do Q');
+  commands.push(loanOutText_(payload.unitName||'UIN SUNAN AMPEL SURABAYA',margin+52,pageHeight-45,10,true,270,1,'1 1 1'));
+  commands.push(loanOutText_('CENTRAL FILE · ARSIP AKTIF',margin+52,pageHeight-61,7,false,270,1,'0.82 0.91 0.96'));
+  commands.push(loanOutText_('OUT INDICATOR',margin,pageHeight-108,18,true,pageWidth-margin*2,1,'0.055 0.231 0.365'));
+  commands.push(loanOutText_('PENANDA KELUAR ARSIP',margin,pageHeight-124,8.5,true,pageWidth-margin*2,1,'0.12 0.43 0.60'));
+  if(payload.isReprint)commands.push(loanOutText_('CETAK ULANG KE-'+payload.printSequence,pageWidth-margin-112,pageHeight-109,7,true,112,1,'0.75 0.18 0.12'));
+
+  const statusColor=payload.statusCode==='OVERDUE'?'0.78 0.16 0.12':
+    payload.statusCode==='RETURNED'?'0.20 0.48 0.29':'0.91 0.48 0.10';
+  commands.push('q '+statusColor+' rg '+pdfNumber_(margin)+' '+pdfNumber_(pageHeight-159)+' '+
+    pdfNumber_(pageWidth-margin*2)+' 22 re f Q');
+  commands.push(loanOutText_(payload.statusLabel||'DIPINJAM',margin+9,pageHeight-151,8.5,true,120,1,'1 1 1'));
+  commands.push(loanOutText_('Letakkan penanda ini pada lokasi asal arsip',margin+125,pageHeight-151,7.5,false,230,1,'1 1 1'));
+
+  const left=margin;
+  const mid=214;
+  let y=pageHeight-181;
+  commands.push(drawLoanOutMeta_(left,y,'ID TRANSAKSI',payload.loanGroupId,174));
+  commands.push(drawLoanOutMeta_(mid,y,'LOKASI ASAL',payload.originalLocation,181));
+  y-=32;
+  commands.push(drawLoanOutMeta_(left,y,'NOMOR BERKAS',payload.berkasNumber||'DRAFT',174));
+  commands.push(drawLoanOutMeta_(mid,y,'KODE KLASIFIKASI',payload.classificationCode||'–',181));
+  y-=32;
+  commands.push(drawLoanOutMeta_(left,y,'PEMINJAM',payload.borrowerName,174));
+  commands.push(drawLoanOutMeta_(mid,y,'UNIT KERJA',payload.borrowerUnit,181));
+  y-=32;
+  commands.push(drawLoanOutMeta_(left,y,'TANGGAL PINJAM',formatLoanOutDate_(payload.borrowDate),174));
+  commands.push(drawLoanOutMeta_(mid,y,'WAJIB KEMBALI',formatLoanOutDate_(payload.dueDate),181));
+  y-=35;
+  commands.push('q 0.93 0.96 0.98 rg '+pdfNumber_(left)+' '+pdfNumber_(y-31)+' '+
+    pdfNumber_(pageWidth-margin*2)+' 36 re f Q');
+  commands.push(loanOutText_('KEPERLUAN',left+7,y-8,6.5,true,80,1,'0.12 0.43 0.60'));
+  commands.push(loanOutText_(payload.purpose||'–',left+7,y-20,7.2,false,pageWidth-margin*2-14,2,'0.10 0.18 0.24'));
+  commands.push(loanOutText_('DAFTAR ARSIP YANG KELUAR',left,242,8,true,pageWidth-margin*2,1,'0.055 0.231 0.365'));
+  return commands.join('\n');
+}
+
+function drawLoanOutContinuationHeader_(payload,pageNumber,pageCount,pageWidth,pageHeight,margin){
+  const commands=[];
+  commands.push('q 0.055 0.231 0.365 rg '+pdfNumber_(margin)+' '+pdfNumber_(pageHeight-66)+' '+
+    pdfNumber_(pageWidth-margin*2)+' 42 re f Q');
+  commands.push(loanOutText_('OUT INDICATOR · '+(payload.loanGroupId||''),margin+10,pageHeight-43,10,true,270,1,'1 1 1'));
+  commands.push(loanOutText_('Lanjutan '+pageNumber+'/'+pageCount,pageWidth-margin-95,pageHeight-43,7.5,true,85,1,'1 1 1'));
+  commands.push(loanOutText_('Lokasi asal: '+(payload.originalLocation||'–'),margin,pageHeight-82,8,false,pageWidth-margin*2,2,'0.10 0.18 0.24'));
+  commands.push(loanOutText_('DAFTAR ARSIP YANG KELUAR (LANJUTAN)',margin,522,8,true,pageWidth-margin*2,1,'0.055 0.231 0.365'));
+  return commands.join('\n');
+}
+
+function drawLoanOutMeta_(x,y,label,value,width){
+  return [
+    loanOutText_(label,x,y,6.2,true,width,1,'0.35 0.45 0.52'),
+    loanOutText_(value||'–',x,y-13,8,false,width,2,'0.08 0.15 0.20'),
+    'q 0.80 0.86 0.89 RG 0.5 w '+pdfNumber_(x)+' '+pdfNumber_(y-24)+' m '+pdfNumber_(x+width)+' '+pdfNumber_(y-24)+' l S Q'
+  ].join('\n');
+}
+
+function drawLoanOutItemsTable_(rows,top,left,width){
+  const columns=[28,42,width-110,40];
+  const x=[left,left+columns[0],left+columns[0]+columns[1],left+columns[0]+columns[1]+columns[2],left+width];
+  const commands=[];
+  commands.push('q 0.12 0.43 0.60 rg '+pdfNumber_(left)+' '+pdfNumber_(top-20)+' '+pdfNumber_(width)+' 20 re f Q');
+  ['NO','ITEM','URAIAN INFORMASI ARSIP','HAL.'].forEach((label,index)=>
+    commands.push(loanOutText_(label,x[index]+4,top-13,5.9,true,columns[index]-8,1,'1 1 1')));
+  let y=top-20;
+  rows.forEach(row=>{
+    const bottom=y-row.height;
+    commands.push('q 0.75 0.82 0.86 RG 0.45 w '+pdfNumber_(left)+' '+pdfNumber_(bottom)+' '+pdfNumber_(width)+' '+pdfNumber_(row.height)+' re S Q');
+    x.slice(1,-1).forEach(value=>commands.push('q 0.75 0.82 0.86 RG 0.45 w '+pdfNumber_(value)+' '+pdfNumber_(bottom)+' m '+pdfNumber_(value)+' '+pdfNumber_(y)+' l S Q'));
+    commands.push(loanOutText_(row.index,x[0]+4,y-13,7,false,columns[0]-8,1,'0.08 0.15 0.20'));
+    commands.push(loanOutText_(row.number,x[1]+4,y-13,7,true,columns[1]-8,2,'0.08 0.15 0.20'));
+    row.descriptionLines.forEach((line,index)=>commands.push(loanOutText_(line,x[2]+4,y-12-index*7.4,6.5,false,columns[2]-12,1,'0.08 0.15 0.20')));
+    commands.push(loanOutText_(row.pageCount,x[3]+4,y-13,7,false,columns[3]-8,1,'0.08 0.15 0.20'));
+    y=bottom;
+  });
+  return commands.join('\n');
+}
+
+function drawLoanOutFooter_(payload,pageNumber,pageCount,pageWidth,margin){
+  const commands=[];
+  commands.push('q 0.93 0.96 0.98 rg '+pdfNumber_(margin)+' 24 '+pdfNumber_(pageWidth-margin*2)+' 43 re f Q');
+  commands.push(loanOutText_('SIMPAN DI LOKASI ASAL',margin+8,53,8,true,150,1,'0.78 0.16 0.12'));
+  commands.push(loanOutText_('Jangan pindahkan penanda sampai seluruh arsip pada transaksi ini dikembalikan.',margin+8,40,6.7,false,285,2,'0.20 0.30 0.36'));
+  commands.push(loanOutText_('A5 · '+pageNumber+'/'+pageCount,pageWidth-margin-55,40,6.5,true,55,1,'0.35 0.45 0.52'));
+  return commands.join('\n');
+}
+
+function loanOutText_(value,x,y,size,bold,maxWidth,maxLines,color){
+  const normalized=normalizeFolderLabelPdfText_((value===undefined||value===null?'':String(value))
+    .replace(/[·•]/g,' - ').replace(/[–—]/g,'-'));
+  let lines=wrapFolderLabelPdfText_(normalized,maxWidth,size,bold).slice(0,maxLines||1);
+  if(!lines.length)lines=[''];
+  if(wrapFolderLabelPdfText_(normalized,maxWidth,size,bold).length>(maxLines||1)){
+    let last=lines[lines.length-1];
+    while(last&&measureFolderLabelPdfText_(last+'...',size,bold)>maxWidth)last=last.slice(0,-1);
+    lines[lines.length-1]=last+'...';
+  }
+  return lines.map((line,index)=>'BT '+(color||'0 0 0')+' rg /'+(bold?'F2':'F1')+' '+
+    pdfNumber_(size)+' Tf '+pdfNumber_(x)+' '+pdfNumber_(y-index*size*1.15)+' Td ('+
+    pdfEscapeText_(line)+') Tj ET').join('\n');
+}
+
+function formatLoanOutDate_(value){
+  const match=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!match)return String(value||'–');
+  const months=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  return Number(match[3])+' '+months[Number(match[2])-1]+' '+match[1];
+}
+</script>
