@@ -1,16 +1,15 @@
 const RC_RELEASE = Object.freeze({
-  VERSION: '1.0.0',
-  SCHEMA_VERSION: 1,
+  VERSION: '1.1.0',
+  SCHEMA_VERSION: 2,
   CHANNEL: 'PILOT',
-  RELEASE_DATE: '2026-08-20'
+  RELEASE_DATE: '2026-08-21'
 });
 
-// RC-00 = fondasi instance: installer, folder, registry sumber Central File,
-// reliability (migrasi/health/audit/backup). Sheet transaksi bisnis
-// (PENERIMAAN_USUL_PINDAH/BERKAS/ITEM, RC_INBOX_EVENTS, RC_DECISION_OUTBOX)
-// sengaja belum dibuat di sini — schema-nya dirancang bersamaan dengan
-// endpoint federatif RC-01 supaya kolomnya cocok persis dengan payload yang
-// dikirim Central File (lihat buildTransferSubmissionEnvelope_ pada paket CF).
+// RC-00 = fondasi instance (installer, folder, registry sumber, reliability).
+// RC-01 = endpoint federatif + tabel bisnis penerimaan usul pindah, ditambah
+// setelah kolomnya diselaraskan dengan payload aktual dari Central File
+// (lihat buildTransferSubmissionEnvelope_ di central-file/TransferSubmissionService.js)
+// dan protokol poll pada docs/ADDENDUM_2026-08-20_PROTOKOL_KEPUTUSAN_RC_CF.md.
 const RC_CONFIG = Object.freeze({
   // ID spreadsheet disimpan installer pada Script Properties, bukan hard-code,
   // supaya paket kode yang sama bisa dipakai ulang bila RC perlu instance lain.
@@ -24,16 +23,24 @@ const RC_CONFIG = Object.freeze({
     AUDIT: 'RC_AUDIT_LOG',
     SYSTEM_MIGRATIONS: 'RC_SYSTEM_MIGRATIONS',
     SYSTEM_HEALTH: 'RC_SYSTEM_HEALTH',
-    SYSTEM_BACKUPS: 'RC_SYSTEM_BACKUPS'
+    SYSTEM_BACKUPS: 'RC_SYSTEM_BACKUPS',
+    INBOX_EVENTS: 'RC_INBOX_EVENTS',
+    TRANSFER_PROPOSAL: 'PENERIMAAN_USUL_PINDAH',
+    TRANSFER_PROPOSAL_BERKAS: 'PENERIMAAN_USUL_BERKAS',
+    TRANSFER_PROPOSAL_ITEM: 'PENERIMAAN_USUL_ITEM',
+    DECISION_OUTBOX: 'RC_DECISION_OUTBOX'
   }),
   FOLDERS: Object.freeze({
     // Keempat folder ini dibuat installer sekarang sesuai daftar folder RC-00
-    // di handoff §13.2, walau '01' dan '02' baru terisi berkas ketika RC-01
-    // (penerimaan usul) dan RC-03 (penataan) dibangun.
+    // di handoff §13.2. '01' mulai terisi mulai RC-01 ini; '02' baru terisi
+    // ketika RC-03 (penataan) dibangun.
     TRANSFER_INBOX: '01 PENERIMAAN USUL PINDAH',
     INACTIVE_ARCHIVE: '02 ARSIP INAKTIF',
     QUARANTINE: '90 KARANTINA APLIKASI',
     BACKUP: '99 BACKUP APLIKASI'
   }),
-  SOURCE_STATUS: Object.freeze(['AKTIF', 'NONAKTIF'])
+  SOURCE_STATUS: Object.freeze(['AKTIF', 'NONAKTIF']),
+  PROPOSAL_STATUS: Object.freeze(['DITERIMA', 'DISETUJUI', 'DITOLAK', 'DIBATALKAN']),
+  // Baseline §12.3: event lebih tua dari ini ditolak (proteksi replay).
+  MAX_EVENT_AGE_MS: 24 * 60 * 60 * 1000
 });

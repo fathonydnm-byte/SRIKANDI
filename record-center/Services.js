@@ -13,6 +13,12 @@ function cleanText_(value, maxLength) {
   return maxLength ? text.substring(0, maxLength) : text;
 }
 
+function cleanFileName_(value) {
+  return cleanText_(value, 120)
+    .replace(/[\\/:*?"<>|#%{}~]/g, '-')
+    .replace(/[. ]+$/g, '') || 'Tanpa Judul';
+}
+
 function requireValue_(value, label) {
   if (value === undefined || value === null || String(value).trim() === '') {
     throw new Error(label + ' wajib diisi.');
@@ -71,4 +77,37 @@ function requireRecordCenterAdmin_() {
     );
   }
   return user;
+}
+
+// --- Kriptografi protokol federasi (§12.3) ---------------------------------
+// Skema identik dengan transferSubmissionSha256_/transferSubmissionSignature_
+// pada central-file/TransferSubmissionService.js — HARUS tetap sama persis
+// di kedua sisi supaya signature yang dihitung CF bisa diverifikasi RC.
+
+function rcSha256_(text) {
+  const bytes = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256, String(text), Utilities.Charset.UTF_8);
+  return bytes.map(byte => ('0' + ((byte + 256) % 256).toString(16)).slice(-2)).join('');
+}
+
+function rcHmacSignature_(eventId, hash, timestamp, secret) {
+  const bytes = Utilities.computeHmacSha256Signature(
+    String(eventId) + '|' + String(hash) + '|' + String(timestamp),
+    String(secret), Utilities.Charset.UTF_8);
+  return bytes.map(byte => ('0' + ((byte + 256) % 256).toString(16)).slice(-2)).join('');
+}
+
+// Perbandingan constant-time (§12.3) — panjang tetap diperiksa dulu (bocoran
+// panjang dianggap dapat diterima, itu bukan bagian rahasia), lalu XOR semua
+// byte tanpa short-circuit supaya waktu eksekusi tidak bocorkan posisi
+// karakter yang salah.
+function rcConstantTimeEquals_(a, b) {
+  a = String(a || '');
+  b = String(b || '');
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
 }

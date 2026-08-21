@@ -278,6 +278,12 @@ function applyRcMigrations_() {
       id: 'RC-REL-001',
       version: 1,
       description: 'Fondasi instance RC-00: settings, source registry, audit, migrasi, health, backup'
+    },
+    {
+      id: 'RC-REL-002',
+      version: 2,
+      description: 'RC-01: endpoint federatif, RC_INBOX_EVENTS, penerimaan usul pindah, RC_DECISION_OUTBOX',
+      run: function() { ensureTransferInboxSchema_(); }
     }
   ];
   const applied = readObjects_(RC_CONFIG.SHEETS.SYSTEM_MIGRATIONS);
@@ -507,9 +513,21 @@ function runRcHealthCheck_(persist) {
       'Backup terakhir ' + Math.round(ageHours * 10) / 10 + ' jam lalu.');
   }
 
-  addRcCheck_(checks, 'RC01_ENDPOINT_SCOPE', 'WARNING',
-    'Endpoint federatif, RC_INBOX_EVENTS, RC_DECISION_OUTBOX, dan tabel penerimaan usul ' +
-    'pindah belum dibangun. Ini scope RC-01, bukan kegagalan RC-00.');
+  if (typeof getTransferInboxHealth_ === 'function') {
+    const inboxHealth = getTransferInboxHealth_();
+    addRcCheck_(checks, 'RC01_TRANSFER_INBOX_SCHEMA', inboxHealth.ok ? 'OK' : 'ERROR',
+      inboxHealth.ok
+        ? 'Schema endpoint federatif, penerimaan usul pindah, dan decision outbox lengkap.'
+        : 'Kolom RC-01 hilang: ' + inboxHealth.missing.slice(0, 8).join(', ') +
+          (inboxHealth.missing.length > 8 ? ', …' : ''));
+    const pendingCount = listPendingProposals_().length;
+    addRcCheck_(checks, 'RC01_PENDING_DECISIONS', 'OK',
+      pendingCount + ' usul menunggu keputusan.');
+  } else {
+    addRcCheck_(checks, 'RC01_ENDPOINT_SCOPE', 'WARNING',
+      'Endpoint federatif, RC_INBOX_EVENTS, RC_DECISION_OUTBOX, dan tabel penerimaan usul ' +
+      'pindah belum dibangun. Ini scope RC-01, bukan kegagalan RC-00.');
+  }
 
   const status = checks.some(check => check.status === 'ERROR') ? 'ERROR'
     : (checks.some(check => check.status === 'WARNING') ? 'WARNING' : 'OK');
