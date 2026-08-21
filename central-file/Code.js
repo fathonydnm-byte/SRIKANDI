@@ -29,6 +29,7 @@ function onOpen() {
     .addItem('Kirim Ulang Pengajuan ke Record Center (tanpa dialog)…', 'retryTransferSubmissionViaPrompt')
     .addItem('Cek Status Keputusan Record Center…', 'checkTransferDecisionViaPrompt')
     .addItem('Aktifkan Polling Otomatis Keputusan RC', 'installTransferDecisionPollTriggerViaMenu')
+    .addItem('Jalankan Migrasi Tertunda', 'runPendingMigrationsViaMenu')
     .addSeparator()
     .addItem('Perbaiki / Segarkan Laporan', 'repairReports')
     .addItem('Pasang / Perbaiki Modul Penerimaan', 'repairReceiptModule')
@@ -156,6 +157,23 @@ function installTransferDecisionPollTriggerViaMenu() {
   try {
     const result = installTransferDecisionPollTrigger_();
     ui.alert('Berhasil', result.message, ui.ButtonSet.OK);
+  } catch (error) {
+    ui.alert('Gagal', error.message, ui.ButtonSet.OK);
+  }
+}
+
+// applyReliabilityMigrations_ normalnya berjalan sebagai bagian dari
+// installUnitInstance_. Menu ini memanggilnya langsung supaya migrasi baru
+// (mis. REL-011/CF-06.1) tercatat SUCCESS di SYSTEM_MIGRATIONS tanpa perlu
+// menjalankan ulang seluruh form installer. Aman diulang — migrasi yang
+// sudah SUCCESS dilewati.
+function runPendingMigrationsViaMenu() {
+  const ui = SpreadsheetApp.getUi();
+  try {
+    applyReliabilityMigrations_();
+    ui.alert('Berhasil',
+      'Migrasi tertunda telah dijalankan dan tercatat di SYSTEM_MIGRATIONS.',
+      ui.ButtonSet.OK);
   } catch (error) {
     ui.alert('Gagal', error.message, ui.ButtonSet.OK);
   }
