@@ -26,6 +26,7 @@ function onOpen() {
     .createMenu('Arsip Aktif')
     .addItem('Instalasi & Reliability…', 'showReliabilityDialog')
     .addItem('Update Koneksi Record Center (tanpa dialog)…', 'updateRecordCenterConnectionViaPrompts')
+    .addItem('Kirim Ulang Pengajuan ke Record Center (tanpa dialog)…', 'retryTransferSubmissionViaPrompt')
     .addSeparator()
     .addItem('Perbaiki / Segarkan Laporan', 'repairReports')
     .addItem('Pasang / Perbaiki Modul Penerimaan', 'repairReceiptModule')
@@ -80,6 +81,38 @@ function updateRecordCenterConnectionViaPrompts() {
       recordCenterSharedSecret: recordCenterSharedSecret
     });
     ui.alert('Berhasil', result.message, ui.ButtonSet.OK);
+  } catch (error) {
+    ui.alert('Gagal', error.message, ui.ButtonSet.OK);
+  }
+}
+
+// Jalur cadangan untuk retry outbox CF06 — sama alasannya dengan menu update
+// koneksi RC di atas. UI utama (Usul Pemindahan → Riwayat Pengajuan →
+// Kirim Ulang) tetap jadi jalur normal sehari-hari; ini dipakai kalau
+// dialog/halaman itu bermasalah di lingkungan browser tertentu.
+function retryTransferSubmissionViaPrompt() {
+  const ui = SpreadsheetApp.getUi();
+  try {
+    const proposals = listDiajukanProposalsForRetry_();
+    if (!proposals.length) {
+      ui.alert('Tidak ada usul berstatus DIAJUKAN yang bisa dikirim ulang.');
+      return;
+    }
+    const lines = proposals.map((p, i) => (i + 1) + '. ' + p.number +
+      ' — outbox: ' + p.outboxStatus + (p.lastError ? ' (' + p.lastError + ')' : ''));
+    ui.alert('Usul Berstatus DIAJUKAN',
+      lines.join('\n') + '\n\nSalin nomor usul (contoh: UP-2026-0002) untuk prompt berikutnya.',
+      ui.ButtonSet.OK);
+
+    const response = ui.prompt('Nomor Usul untuk Dikirim Ulang',
+      'Contoh: UP-2026-0002', ui.ButtonSet.OK_CANCEL);
+    if (response.getSelectedButton() !== ui.Button.OK) return;
+    const inputNumber = cleanText_(response.getResponseText(), 100);
+    const target = proposals.find(p => String(p.number) === inputNumber);
+    if (!target) throw new Error('Nomor usul tidak ditemukan di antara yang DIAJUKAN: ' + inputNumber);
+
+    const result = retryTransferSubmission_(target.proposalId);
+    ui.alert('Hasil Kirim Ulang', result.message, ui.ButtonSet.OK);
   } catch (error) {
     ui.alert('Gagal', error.message, ui.ButtonSet.OK);
   }

@@ -302,6 +302,19 @@ function cancelTransferSubmissionUpload_(sessionId) {
   return {ok: true};
 }
 
+function listDiajukanProposalsForRetry_() {
+  ensureTransferSubmissionSchema_();
+  return readObjects_(APP_CONFIG.SHEETS.TRANSFER_PROPOSAL)
+    .filter(row => String(row.STATUS_USUL || '').toUpperCase() === 'DIAJUKAN')
+    .map(row => ({
+      proposalId: row.USUL_PINDAH_ID,
+      number: row.NO_USUL_PINDAH,
+      outboxStatus: row.OUTBOX_STATUS,
+      lastAttempt: row.OUTBOX_LAST_ATTEMPT_AT,
+      lastError: row.OUTBOX_LAST_ERROR
+    }));
+}
+
 function retryTransferSubmission_(proposalId) {
   ensureTransferSubmissionSchema_();
   const proposal = readObjects_(APP_CONFIG.SHEETS.TRANSFER_PROPOSAL)
