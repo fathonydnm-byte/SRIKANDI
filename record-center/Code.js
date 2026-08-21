@@ -36,8 +36,34 @@ function include(filename) {
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Record Center')
+    .addItem('0. Otorisasi Awal (jalankan sekali sebelum instalasi)', 'runInitialAuthorization')
     .addItem('Instalasi & Reliability…', 'showRcInstallerDialog')
     .addToUi();
+}
+
+// Apps Script tidak bisa menampilkan layar izin dari DALAM dialog/sidebar,
+// dan menjalankan fungsi lewat tombol Run di editor tidak selalu memicu
+// izin yang sama dengan konteks UI spreadsheet. Klik menu ini LANGSUNG dari
+// spreadsheet (bukan dari editor, bukan dari dalam dialog lain) supaya
+// Google menampilkan layar otorisasi native untuk seluruh scope yang
+// dibutuhkan (Spreadsheet, Drive, Properties) sebelum instalasi dijalankan.
+function runInitialAuthorization() {
+  const ui = SpreadsheetApp.getUi();
+  try {
+    const email = getCurrentUser_();
+    SpreadsheetApp.getActiveSpreadsheet().getId();
+    DriveApp.getRootFolder().getId();
+    PropertiesService.getScriptProperties().getProperty('RC_INSTANCE_ID');
+    ui.alert(
+      'Otorisasi berhasil',
+      'Akses untuk ' + email + ' sudah aktif. Sekarang buka menu ' +
+        '"Instalasi & Reliability…".',
+      ui.ButtonSet.OK
+    );
+  } catch (error) {
+    ui.alert('Otorisasi gagal', error.message, ui.ButtonSet.OK);
+    throw error;
+  }
 }
 
 function apiGetInstanceSetup() {
