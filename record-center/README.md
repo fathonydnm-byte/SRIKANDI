@@ -1,44 +1,45 @@
-# Record Center — RC-00 (fondasi instance)
+# Record Center — RC-00 + RC-01
 
-Status: **terpasang dan Definition of Done §14 tuntas** pada akun `bag.umum@uinsby.ac.id` (instance ID `RC-8ae1f3f3-8542-48be-9c3d-ae51a2ed3ffd`). Ditulis dari nol pada 20–21 Agustus 2026 mengikuti spesifikasi handoff §13.2 dan §14, karena source RC-00/RC-01 sebelumnya (v1.0.0 PILOT yang disebut di handoff) tidak pernah masuk git dan direktori kerjanya tidak lagi terjangkau dari sesi ini. Detail lihat "Status pemasangan" di bawah.
+Status: **RC-00 dan RC-01 terpasang & di-deploy** pada akun `bag.umum@uinsby.ac.id` (instance ID `RC-8ae1f3f3-8542-48be-9c3d-ae51a2ed3ffd`). Ditulis dari nol pada 20–21 Agustus 2026 mengikuti spesifikasi handoff §13.2/§13.3 dan protokol poll pada `docs/ADDENDUM_2026-08-20_PROTOKOL_KEPUTUSAN_RC_CF.md`, karena source RC-00/RC-01 sebelumnya (v1.0.0 PILOT yang disebut di handoff) tidak pernah masuk git dan direktori kerjanya tidak lagi terjangkau dari sesi ini. Detail lihat "Status pemasangan" di bawah dan `docs/ADDENDUM_2026-08-21_RC01_DESAIN_ENDPOINT.md` untuk keputusan desain endpoint.
 
-## Cakupan RC-00 (yang ADA di sini)
+## Cakupan RC-00 (fondasi instance)
 
-- Installer (`showRcInstallerDialog` / `AdminSetup.html`) — membuat/mengikat spreadsheet Record Center, folder Drive terpisah, dan seluruh sheet fondasi.
+- Installer (`showRcInstallerDialog` / `AdminSetup.html`, atau jalur `ui.prompt()` cadangan) — membuat/mengikat spreadsheet Record Center, folder Drive terpisah, dan seluruh sheet fondasi.
 - Sheet: `RC_SETTINGS`, `RC_SOURCE_REGISTRY`, `RC_AUDIT_LOG`, `RC_SYSTEM_MIGRATIONS`, `RC_SYSTEM_HEALTH`, `RC_SYSTEM_BACKUPS`.
-- Folder: `01 PENERIMAAN USUL PINDAH`, `02 ARSIP INAKTIF`, `90 KARANTINA APLIKASI`, `99 BACKUP APLIKASI` (folder `01`/`02` dibuat sekarang tapi baru dipakai isinya oleh RC-01/RC-03).
-- Registry sumber Central File: daftar/perbarui/nonaktifkan sumber, terbitkan shared secret (disimpan di Script Properties dengan kunci `SOURCE_SECRET_<sourceId>`, **tidak pernah** ditulis ke sheet — hanya tampil sekali di respons API saat diterbitkan).
-- Health check, Audit Log, migrasi (`RC-REL-001`, schema 1), backup sinkron (salinan spreadsheet + manifest jumlah file/folder).
-- Guard administrator (`isRecordCenterAdmin_`/`requireRecordCenterAdmin_`) — dashboard dan aksi registry menolak akun selain admin instance, diperiksa di server bukan hanya lewat access setting deployment (§22.3).
+- Folder: `01 PENERIMAAN USUL PINDAH`, `02 ARSIP INAKTIF`, `90 KARANTINA APLIKASI`, `99 BACKUP APLIKASI`.
+- Registry sumber Central File: daftar/perbarui/nonaktifkan sumber, terbitkan shared secret (disimpan di Script Properties dengan kunci `SOURCE_SECRET_<sourceId>`, **tidak pernah** ditulis ke sheet — hanya tampil sekali saat diterbitkan).
+- Health check, Audit Log, migrasi (`RC-REL-001`, schema 1), backup sinkron.
+- Guard administrator (`isRecordCenterAdmin_`/`requireRecordCenterAdmin_`) — diperiksa di server, bukan hanya lewat access setting deployment (§22.3).
 
-## Yang SENGAJA belum ada (scope RC-01)
+## Cakupan RC-01 (endpoint federatif) — `TransferInboxService.js`
 
-- `doPost()` / endpoint federatif apa pun. RC-00 murni installer + dashboard, tidak menerima panggilan dari Central File.
-- Sheet `RC_INBOX_EVENTS`, `RC_DECISION_OUTBOX`, `PENERIMAAN_USUL_PINDAH`, `PENERIMAAN_USUL_BERKAS`, `PENERIMAAN_USUL_ITEM`. Kolomnya perlu diselaraskan dengan payload aktual yang dikirim Central File — lihat `buildTransferSubmissionEnvelope_` di `central-file/TransferSubmissionService.js` (schema `UINSA-ARSIP-TRANSFER-PROPOSAL/1.0`) sebelum menulis skema ini.
-- Verifikasi signature HMAC (`transferSubmissionSignature_`/`transferSubmissionSha256_` di CF sudah jadi acuan formatnya: `HMAC-SHA256(eventId|payloadSha256|timestamp, secret)`, hex lowercase) — RC-01 perlu meng-cover-nya di sisi penerima, termasuk perbandingan constant-time.
-- Event `QUERY_DECISION` (protokol poll — lihat `docs/ADDENDUM_2026-08-20_PROTOKOL_KEPUTUSAN_RC_CF.md`).
-- Dua deployment (endpoint `Anyone` + dashboard `Only myself`/terbatas) — baru relevan setelah RC-01 punya `doPost()` untuk di-deploy.
+- Sheet tambahan: `RC_INBOX_EVENTS` (log idempotensi/audit tiap event masuk), `PENERIMAAN_USUL_PINDAH`, `PENERIMAAN_USUL_BERKAS`/`PENERIMAAN_USUL_ITEM` (kolom snapshot identik `RETENTION_CF04_DETAIL_HEADERS_`/`RETENTION_CF05_ITEM_HEADERS_` di CF, minus kolom status internal CF), `RC_DECISION_OUTBOX`. Migrasi `RC-REL-002`, schema 2.
+- `doPost()` menangani `SUBMIT_TRANSFER_PROPOSAL`, `CANCEL_TRANSFER_PROPOSAL`, `QUERY_DECISION` — validasi envelope lengkap (§12.3): instance tujuan cocok, sumber aktif terdaftar, usia event ≤24 jam, signature HMAC constant-time, **dan** hash payload (yang secara keamanan sama pentingnya dengan signature — lihat addendum §2).
+- Dokumen wajib (Nota Dinas, XLSX, Riwayat JRA) + opsional (PDF) disalin dari Drive CF ke Drive RC sendiri (CF sudah membagikan akses viewer ke email admin RC saat pengajuan).
+- Keputusan `DISETUJUI`/`DITOLAK` (alasan wajib ≥10 karakter untuk tolak) lewat menu spreadsheet — **bukan** dashboard Web App (lihat alasan di addendum §1: satu deployment saja, `doGet()` tidak pernah menampilkan data).
+- `QUERY_DECISION` — kontrak protokol poll sudah siap di sisi RC; **belum diimplementasikan di CF** (itu kerja CF-06.1 berikutnya).
 
-`isSourceActive_(sourceId)` dan `getSourceSecret_(sourceId)` sudah disediakan di `ReliabilityService.js` karena RC-01 akan langsung membutuhkannya untuk memvalidasi pengirim.
+## Cara memasang (mengikuti handoff §19.3, diperbarui dengan langkah deploy)
 
-## Cara memasang (mengikuti handoff §19.3)
-
-1. Login akun Google yang ditetapkan sebagai Record Center pilot (**terpisah** dari akun Central File `bag.umum@uinsa.ac.id`).
-2. Buat Google Sheet baru kosong, lalu buat folder Drive induk kosong untuk Record Center (folder ini akan diisi installer dengan empat subfolder di atas).
-3. Buka Extensions → Apps Script pada spreadsheet tersebut (ini membuat container-bound Apps Script project baru dengan `scriptId` sendiri).
-4. Push seluruh isi direktori ini ke project tersebut (lewat clasp: `clasp push` setelah `.clasp.json` diisi `scriptId` project itu, atau tempel manual bila belum ada akses clasp ke akun RC).
-5. Reload spreadsheet, jalankan menu **Record Center → Instalasi & Reliability…**, isi form, submit.
-6. Daftarkan Central File pilot sebagai sumber (Instance ID CF ada di `INSTANCE_ID` pada Script Properties CF / hasil installer CF — lihat handoff §6.1).
-7. Simpan shared secret yang diterbitkan — akan dibutuhkan untuk mengisi field Record Center pada installer Central File (`recordCenterSharedSecret`, dst., sudah ada di `installUnitInstance_` CF).
-8. Jalankan Backup Sekarang dan pastikan health check `OK`/`WARNING` (bukan `ERROR`) sebelum lanjut ke RC-01.
+1. Login akun Google yang ditetapkan sebagai Record Center pilot (**terpisah** dari akun Central File).
+2. Buat Google Sheet baru kosong + folder Drive induk kosong.
+3. Buka Extensions → Apps Script pada spreadsheet (membuat project Apps Script container-bound).
+4. Push seluruh isi direktori ini (`clasp push` dengan `.clasp.json` diisi `scriptId` project itu).
+5. Reload spreadsheet, jalankan menu **Record Center → 0. Otorisasi Awal**, lalu **Pasang Instance**, isi form.
+6. Daftarkan Central File pilot sebagai sumber lewat menu **Daftarkan Sumber CF** — simpan shared secret yang diterbitkan.
+7. Jalankan **Cek Status & Backup** sampai health check `OK`/`WARNING` (bukan `ERROR`).
+8. **Deploy sebagai Web App** (`clasp deploy`) — manifest `appsscript.json` sudah diset `access: ANYONE_ANONYMOUS`, `executeAs: USER_DEPLOYING`. Catat URL `.../exec` yang dihasilkan.
+9. Masukkan URL itu ke installer Central File (menu **Arsip Aktif → Update Koneksi Record Center**, field endpoint) bersama nama/instance ID/secret RC.
+10. UAT: retry pengajuan CF yang `PENDING_CONFIGURATION`, pastikan berubah jadi `SENT` dan proposal muncul satu kali di RC (`Lihat Usul Menunggu Keputusan`).
 
 ## Status pemasangan
 
-- **RC-00 terpasang dan terverifikasi** (21 Agustus 2026) pada akun `bag.umum@uinsby.ac.id`. Project Apps Script + spreadsheet dibuat via clasp, `scriptId` tercatat di `.clasp.json` pada direktori ini.
-- Instalasi dijalankan pengguna langsung dari menu spreadsheet (**Record Center → Pasang Instance**) memakai jalur `ui.prompt()` native — bukan dialog HTML `Instalasi & Reliability…`, karena di lingkungan browser yang dipakai, dialog HTML gagal total dengan `Authorization is required to perform that action` akibat `docs.google.com/offline/iframeapi` diblokir jaringan (nol eksekusi server tercatat untuk percobaan lewat dialog — dikonfirmasi lewat Apps Script Executions). Jalur `ui.prompt()` tidak melalui iframe/`google.script.run` sama sekali sehingga tidak terpengaruh.
-- Terverifikasi read-only via Drive API: keempat folder (`01 PENERIMAAN USUL PINDAH`, `02 ARSIP INAKTIF`, `90 KARANTINA APLIKASI`, `99 BACKUP APLIKASI`) dan spreadsheet-nya sudah terbentuk di folder induk `14m43F_svYjdrZHYTWES1QmzcUbjZxsW-`.
-- Instance ID RC (tercatat di sheet `RC_SETTINGS`, baris `RC_INSTANCE_ID`, bukan rahasia): **`RC-8ae1f3f3-8542-48be-9c3d-ae51a2ed3ffd`**.
-- Sumber Central File pilot sudah terdaftar di `RC_SOURCE_REGISTRY` (`INS-6d92f552-1d7e-4935-a4e5-a04161ef6a75`, Bagian Umum Kantor Pusat – Biro AUPK) dengan shared secret yang sudah diterbitkan ke pengguna langsung (tidak dicatat di sini/di git, sesuai §20.3).
-- **Definition of done RC-00 (handoff §14) tuntas seluruhnya**: health check `WARNING` (bukan `ERROR`) dengan satu-satunya penyebab adalah scope RC-01 yang memang belum dibangun — semua check RC-00 sendiri `OK`. Backup metadata sudah dijalankan dan terverifikasi read-only via Drive API (manifest + salinan spreadsheet ada di `99 BACKUP APLIKASI`).
-- **Konfigurasi balik sudah masuk ke Central File juga** (21 Agustus 2026, lihat `central-file/TransferSubmissionService.js` — `updateRecordCenterConnection_`): CF Settings `RECORD_CENTER_NAME`/`RECORD_CENTER_EMAIL`/`RECORD_CENTER_INSTANCE_ID` (`RC-8ae1f3f3-8542-48be-9c3d-ae51a2ed3ffd`) dan Script Properties `RECORD_CENTER_SHARED_SECRET` sudah terisi cocok dengan instance RC ini. `RECORD_CENTER_ENDPOINT_URL` sengaja masih kosong — diisi setelah RC-01 di-deploy. CF health check menunjukkan `RECORD_CENTER_CONNECTION: WARNING` (bukan `ERROR`), status yang benar untuk kondisi ini.
-- Tersisa: seluruh scope RC-01 (endpoint federatif, tabel bisnis, event `QUERY_DECISION`) di atas — setelah itu deployment endpoint di-buat dan URL-nya dimasukkan ke `RECORD_CENTER_ENDPOINT_URL` CF lewat menu yang sama.
+- **RC-00 terpasang dan Definition of Done §14 tuntas** (21 Agustus 2026): folder/sheet terbentuk, sumber CF terdaftar, health check bersih, backup terverifikasi read-only via Drive API.
+- **RC-01 dibangun, di-deploy, dan diverifikasi read-only** (21 Agustus 2026):
+  - Deployment: `AKfycbxKeg5QZdyOh1HIfQEaMSZFUIn3VVU3TvRJnw75c_F2_h_CRDsLfwDlM5Nyc0mbUyKUww` @1, access `ANYONE_ANONYMOUS` — dikonfirmasi lewat Apps Script API (`entryPointConfig.access`), bukan cuma asumsi dari manifest.
+  - URL endpoint: `https://script.google.com/macros/s/AKfycbxKeg5QZdyOh1HIfQEaMSZFUIn3VVU3TvRJnw75c_F2_h_CRDsLfwDlM5Nyc0mbUyKUww/exec`
+  - **Belum bisa diuji langsung dari sesi agent ini** — sandbox jaringan sesi ini memblokir domain `script.google.com` di level proxy (`connect_rejected`, kebijakan sandbox, bukan masalah pada deployment-nya). Verifikasi end-to-end sesungguhnya terjadi lewat `UrlFetchApp` asli dari infrastruktur Apps Script CF saat retry pengajuan — jalur jaringan yang sepenuhnya berbeda dari sandbox ini.
+- Instance ID RC (bukan rahasia): `RC-8ae1f3f3-8542-48be-9c3d-ae51a2ed3ffd`.
+- Sumber Central File pilot terdaftar aktif: `INS-6d92f552-1d7e-4935-a4e5-a04161ef6a75` (Bagian Umum Kantor Pusat – Biro AUPK).
+- **CF sudah dikonfigurasi lengkap** termasuk endpoint URL di atas (lewat `updateRecordCenterConnectionViaPrompts` di CF) — belum diverifikasi hasil retry `UP-2026-0002` yang sesungguhnya.
+- Tersisa: UAT retry `UP-2026-0002` (langkah 10 di atas), lalu CF-06.1 (implementasi `QUERY_DECISION` di sisi CF + trigger poll otomatis, sesuai addendum 2026-08-20).

@@ -44,22 +44,29 @@ function onOpen() {
 function updateRecordCenterConnectionViaPrompts() {
   const ui = SpreadsheetApp.getUi();
   try {
-    let response = ui.prompt('1/4 — Nama Record Center',
+    let response = ui.prompt('1/5 — Nama Record Center',
       'Nama resmi Record Center tujuan pengajuan:', ui.ButtonSet.OK_CANCEL);
     if (response.getSelectedButton() !== ui.Button.OK) return;
     const recordCenterName = response.getResponseText();
 
-    response = ui.prompt('2/4 — Instance ID Record Center',
+    response = ui.prompt('2/5 — Instance ID Record Center',
       'Contoh: RC-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', ui.ButtonSet.OK_CANCEL);
     if (response.getSelectedButton() !== ui.Button.OK) return;
     const recordCenterInstanceId = response.getResponseText();
 
-    response = ui.prompt('3/4 — Email Record Center (opsional)',
+    response = ui.prompt('3/5 — Email Record Center (opsional)',
       'Boleh dikosongkan:', ui.ButtonSet.OK_CANCEL);
     if (response.getSelectedButton() !== ui.Button.OK) return;
     const recordCenterEmail = response.getResponseText();
 
-    response = ui.prompt('4/4 — Shared Secret',
+    response = ui.prompt('4/5 — Endpoint Federatif Record Center',
+      'URL Web App RC-01 (https://script.google.com/macros/s/.../exec). ' +
+      'Kosongkan bila RC-01 belum di-deploy — outbox tetap PENDING_CONFIGURATION, ini normal:',
+      ui.ButtonSet.OK_CANCEL);
+    if (response.getSelectedButton() !== ui.Button.OK) return;
+    const recordCenterEndpointUrl = response.getResponseText();
+
+    response = ui.prompt('5/5 — Shared Secret',
       'Salin persis dari layar pendaftaran sumber di aplikasi Record Center ' +
       '(kosongkan untuk mempertahankan secret yang sudah ada):', ui.ButtonSet.OK_CANCEL);
     if (response.getSelectedButton() !== ui.Button.OK) return;
@@ -69,7 +76,7 @@ function updateRecordCenterConnectionViaPrompts() {
       recordCenterName: recordCenterName,
       recordCenterInstanceId: recordCenterInstanceId,
       recordCenterEmail: recordCenterEmail,
-      recordCenterEndpointUrl: '',
+      recordCenterEndpointUrl: recordCenterEndpointUrl,
       recordCenterSharedSecret: recordCenterSharedSecret
     });
     ui.alert('Berhasil', result.message, ui.ButtonSet.OK);
