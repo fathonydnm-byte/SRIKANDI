@@ -135,24 +135,32 @@ function decideProposalViaPrompts() {
       return;
     }
 
-    const confirm = ui.alert('Konfirmasi Keputusan',
+    // ui.alert() tidak bisa mengubah label tombol bawaan Yes/No/Cancel —
+    // dipakai pola ketik-untuk-konfirmasi yang sudah lazim di aplikasi ini
+    // (lihat showPilotResetDialog_ pada central-file/Code.js) supaya tidak
+    // ambigu, bukan pilihan tombol generik.
+    const decisionResponse = ui.prompt('Keputusan',
       'Usul: ' + target.CF_PROPOSAL_NUMBER + ' dari ' + target.SOURCE_UNIT_NAME + '\n' +
       target.BERKAS_COUNT + ' berkas, ' + target.ITEM_COUNT + ' item.\n\n' +
-      'Yes = Setujui, No = Tolak, Cancel = batal tanpa perubahan.',
-      ui.ButtonSet.YES_NO_CANCEL);
-    if (confirm === ui.Button.CANCEL) return;
+      'Ketik SETUJUI atau TOLAK (persis), lalu OK. Cancel untuk batal tanpa perubahan.',
+      ui.ButtonSet.OK_CANCEL);
+    if (decisionResponse.getSelectedButton() !== ui.Button.OK) return;
+    const decisionText = cleanText_(decisionResponse.getResponseText(), 20).toUpperCase();
 
-    if (confirm === ui.Button.YES) {
+    if (decisionText === 'SETUJUI') {
       const result = approveProposal_(rcProposalId);
       ui.alert('Berhasil', result.message, ui.ButtonSet.OK);
       return;
     }
-
-    const reasonResponse = ui.prompt('Alasan Penolakan',
-      'Wajib diisi, minimal 10 karakter:', ui.ButtonSet.OK_CANCEL);
-    if (reasonResponse.getSelectedButton() !== ui.Button.OK) return;
-    const result = rejectProposal_(rcProposalId, reasonResponse.getResponseText());
-    ui.alert('Berhasil', result.message, ui.ButtonSet.OK);
+    if (decisionText === 'TOLAK') {
+      const reasonResponse = ui.prompt('Alasan Penolakan',
+        'Wajib diisi, minimal 10 karakter:', ui.ButtonSet.OK_CANCEL);
+      if (reasonResponse.getSelectedButton() !== ui.Button.OK) return;
+      const result = rejectProposal_(rcProposalId, reasonResponse.getResponseText());
+      ui.alert('Berhasil', result.message, ui.ButtonSet.OK);
+      return;
+    }
+    ui.alert('Dibatalkan', 'Ketikan "' + decisionText + '" tidak dikenali. Tidak ada perubahan.', ui.ButtonSet.OK);
   } catch (error) {
     ui.alert('Gagal', error.message, ui.ButtonSet.OK);
   }
