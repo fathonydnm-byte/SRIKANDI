@@ -984,7 +984,7 @@ function applyTransferDecision_(proposal, parsed, timestamp) {
       ok: true, status: decision,
       message: fresh.NO_USUL_PINDAH + ' ' + decision + ' oleh Record Center.' +
         (decision === 'DITOLAK'
-          ? (parsed.reason ? ' Alasan: ' + parsed.reason + '.' : '') +
+          ? (parsed.reason ? ' Alasan: ' + cleanText_(parsed.reason).replace(/\.+$/, '') + '.' : '') +
             ' ' + releasedCount + ' berkas dilepas kembali menjadi kandidat usul pemindahan.'
           : ' Berkas tetap terkunci dalam proses sampai diterima fisik Record Center.')
     };
