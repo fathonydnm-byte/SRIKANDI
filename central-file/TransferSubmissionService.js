@@ -568,6 +568,65 @@ function transferSubmissionDestination_(settings, session) {
   return destination;
 }
 
+// Update konfigurasi koneksi Record Center TANPA menjalankan ulang seluruh
+// installer unit (yang mewajibkan re-entry unitId/unitCode/unitName/dst).
+// Hanya menyentuh RECORD_CENTER_* pada Settings + Script Properties secret,
+// tidak mengubah data arsip/transaksi apa pun. Dipakai sekali per konfigurasi
+// federasi (handoff §19.3 langkah 10), bukan bagian dari alur harian.
+function updateRecordCenterConnection_(form) {
+  form = form || {};
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const recordCenterName = cleanText_(
+      requireValue_(form.recordCenterName, 'Nama Record Center'), 250);
+    const recordCenterEmailValue = cleanText_(form.recordCenterEmail, 250);
+    const recordCenterEmail = recordCenterEmailValue
+      ? normalizeEmail_(recordCenterEmailValue) : '';
+    const recordCenterInstanceId = cleanText_(
+      requireValue_(form.recordCenterInstanceId, 'Instance ID Record Center'), 150);
+    const recordCenterEndpointUrl = cleanText_(form.recordCenterEndpointUrl, 1000);
+    if (recordCenterEndpointUrl &&
+        !/^https:\/\/script\.google\.com\//i.test(recordCenterEndpointUrl)) {
+      throw new Error('Endpoint Record Center harus berupa URL Web App Apps Script.');
+    }
+    const recordCenterSharedSecret = String(form.recordCenterSharedSecret || '');
+    if (recordCenterSharedSecret && recordCenterSharedSecret.length < 32) {
+      throw new Error('Shared secret Record Center minimal 32 karakter.');
+    }
+
+    upsertReliabilitySettingsBatch_([
+      ['RECORD_CENTER_NAME', recordCenterName, 'STRING', 'Tujuan pengajuan usul pemindahan'],
+      ['RECORD_CENTER_EMAIL', recordCenterEmail, 'STRING', 'Email aplikasi/petugas Record Center'],
+      ['RECORD_CENTER_INSTANCE_ID', recordCenterInstanceId, 'STRING', 'ID instance aplikasi Record Center'],
+      ['RECORD_CENTER_ENDPOINT_URL', recordCenterEndpointUrl, 'URL', 'Endpoint federatif aplikasi Record Center']
+    ]);
+    if (recordCenterSharedSecret) {
+      PropertiesService.getScriptProperties()
+        .setProperty('RECORD_CENTER_SHARED_SECRET', recordCenterSharedSecret);
+    }
+
+    audit_('UPDATE', 'RELIABILITY', 'RECORD_CENTER_CONNECTION', recordCenterInstanceId,
+      'Memperbarui konfigurasi koneksi Record Center: ' + recordCenterName +
+      (recordCenterSharedSecret ? ' (secret diperbarui)' : ' (secret tidak diubah)'),
+      '', 'SUCCESS');
+
+    const health = runReliabilityHealthCheck_(true);
+    const connectionCheck = health.checks.find(
+      check => check.code === 'RECORD_CENTER_CONNECTION') || {};
+    return {
+      ok: true,
+      recordCenterConnectionStatus: connectionCheck.status || 'UNKNOWN',
+      message: 'Konfigurasi Record Center diperbarui. Status RECORD_CENTER_CONNECTION: ' +
+        (connectionCheck.status || 'UNKNOWN') + ' — ' + (connectionCheck.detail || '') +
+        (recordCenterEndpointUrl ? '' :
+          ' (endpoint masih kosong sampai RC-01 dirilis; outbox tetap PENDING_CONFIGURATION, ini normal)')
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function markTransferProposalBerkasSubmitted_(proposalId, timestamp, user) {
   const details = readObjects_(APP_CONFIG.SHEETS.TRANSFER_PROPOSAL_DETAIL)
     .filter(row => String(row.USUL_PINDAH_ID || '') === String(proposalId) &&

@@ -25,6 +25,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Arsip Aktif')
     .addItem('Instalasi & Reliability…', 'showReliabilityDialog')
+    .addItem('Update Koneksi Record Center (tanpa dialog)…', 'updateRecordCenterConnectionViaPrompts')
     .addSeparator()
     .addItem('Perbaiki / Segarkan Laporan', 'repairReports')
     .addItem('Pasang / Perbaiki Modul Penerimaan', 'repairReceiptModule')
@@ -33,6 +34,48 @@ function onOpen() {
     .addSeparator()
     .addItem('Hapus Data Pilot…', 'showPilotResetDialog')
     .addToUi();
+}
+
+// Jalur ui.prompt() native — tidak lewat HtmlService/google.script.run —
+// dipakai kalau dialog "Instalasi & Reliability" gagal dimuat karena
+// lingkungan browser memblokir iframe otorisasi Apps Script (lihat catatan
+// yang sama pada record-center/Code.js). Hanya mengubah RECORD_CENTER_*,
+// tidak menyentuh field instalasi unit lainnya.
+function updateRecordCenterConnectionViaPrompts() {
+  const ui = SpreadsheetApp.getUi();
+  try {
+    let response = ui.prompt('1/4 — Nama Record Center',
+      'Nama resmi Record Center tujuan pengajuan:', ui.ButtonSet.OK_CANCEL);
+    if (response.getSelectedButton() !== ui.Button.OK) return;
+    const recordCenterName = response.getResponseText();
+
+    response = ui.prompt('2/4 — Instance ID Record Center',
+      'Contoh: RC-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', ui.ButtonSet.OK_CANCEL);
+    if (response.getSelectedButton() !== ui.Button.OK) return;
+    const recordCenterInstanceId = response.getResponseText();
+
+    response = ui.prompt('3/4 — Email Record Center (opsional)',
+      'Boleh dikosongkan:', ui.ButtonSet.OK_CANCEL);
+    if (response.getSelectedButton() !== ui.Button.OK) return;
+    const recordCenterEmail = response.getResponseText();
+
+    response = ui.prompt('4/4 — Shared Secret',
+      'Salin persis dari layar pendaftaran sumber di aplikasi Record Center ' +
+      '(kosongkan untuk mempertahankan secret yang sudah ada):', ui.ButtonSet.OK_CANCEL);
+    if (response.getSelectedButton() !== ui.Button.OK) return;
+    const recordCenterSharedSecret = response.getResponseText();
+
+    const result = updateRecordCenterConnection_({
+      recordCenterName: recordCenterName,
+      recordCenterInstanceId: recordCenterInstanceId,
+      recordCenterEmail: recordCenterEmail,
+      recordCenterEndpointUrl: '',
+      recordCenterSharedSecret: recordCenterSharedSecret
+    });
+    ui.alert('Berhasil', result.message, ui.ButtonSet.OK);
+  } catch (error) {
+    ui.alert('Gagal', error.message, ui.ButtonSet.OK);
+  }
 }
 
 function apiGetBootstrap() {
