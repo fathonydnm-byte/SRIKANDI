@@ -41,7 +41,47 @@ function onOpen() {
     .addSeparator()
     .addItem('Pasang Instance (tanpa dialog, jika dialog gagal)', 'installRecordCenterInstanceViaPrompts')
     .addItem('Daftarkan Sumber CF (tanpa dialog, jika dialog gagal)', 'registerSourceViaPrompts')
+    .addItem('Cek Status & Backup (tanpa dialog)', 'checkHealthAndBackupViaPrompt')
+    .addItem('Lihat Sumber Terdaftar (tanpa dialog)', 'listSourcesViaPrompt')
     .addToUi();
+}
+
+function checkHealthAndBackupViaPrompt() {
+  const ui = SpreadsheetApp.getUi();
+  try {
+    const health = runRcHealthCheck_(true);
+    const lines = health.checks.map(check => check.code + ': ' + check.status + ' — ' + check.detail);
+    const response = ui.alert(
+      'Status Kesehatan RC-00: ' + health.overallStatus,
+      lines.join('\n') + '\n\nJalankan Backup Sekarang juga?',
+      ui.ButtonSet.YES_NO
+    );
+    if (response === ui.Button.YES) {
+      const backup = startRcBackup_();
+      ui.alert('Backup selesai',
+        backup.fileCount + ' file, ' + backup.folderCount + ' folder tercatat pada manifest.\n' +
+        backup.spreadsheetCopyUrl, ui.ButtonSet.OK);
+    }
+  } catch (error) {
+    ui.alert('Gagal', error.message, ui.ButtonSet.OK);
+  }
+}
+
+function listSourcesViaPrompt() {
+  const ui = SpreadsheetApp.getUi();
+  try {
+    const sources = listSources_();
+    if (!sources.length) {
+      ui.alert('Sumber Terdaftar', 'Belum ada sumber Central File yang terdaftar.', ui.ButtonSet.OK);
+      return;
+    }
+    const lines = sources.map(source =>
+      source.unitName + ' (' + source.sourceId + ') — ' + source.status +
+      (source.secretConfigured ? ', secret aktif' : ', secret BELUM diterbitkan'));
+    ui.alert('Sumber Terdaftar (' + sources.length + ')', lines.join('\n'), ui.ButtonSet.OK);
+  } catch (error) {
+    ui.alert('Gagal', error.message, ui.ButtonSet.OK);
+  }
 }
 
 // Jalur cadangan: sebagian lingkungan browser memblokir iframe otorisasi
