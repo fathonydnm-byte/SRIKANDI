@@ -398,6 +398,14 @@ function applyReliabilityMigrations_() {
       run: function() {
         ensureTransferSubmissionSchema_();
       }
+    },
+    {
+      id: 'REL-011',
+      version: 9,
+      description: 'Menambahkan sinkronisasi keputusan Record Center (poll QUERY_DECISION) CF-06.1',
+      run: function() {
+        ensureTransferDecisionSyncSchema_();
+      }
     }
   ];
   const applied = readObjects_(APP_CONFIG.SHEETS.SYSTEM_MIGRATIONS);
@@ -1372,6 +1380,32 @@ function runReliabilityHealthCheck_(persist) {
       ? 'Endpoint federatif Record Center telah dikonfigurasi.'
       : 'Paket CF-06 tetap tersimpan di outbox; koneksi diaktifkan setelah aplikasi Record Center dipasang.'
   );
+
+  if (typeof getTransferDecisionSyncHealth_ === 'function') {
+    const decisionSyncHealth = getTransferDecisionSyncHealth_();
+    addReliabilityCheck_(
+      checks,
+      'TRANSFER_DECISION_SYNC_CF061_SCHEMA',
+      decisionSyncHealth.ok ? 'OK' : 'ERROR',
+      decisionSyncHealth.ok
+        ? 'Schema sinkronisasi keputusan Record Center (CF-06.1) lengkap.'
+        : 'Kolom CF-06.1 hilang: ' + decisionSyncHealth.missing.slice(0, 8).join(', ') +
+          (decisionSyncHealth.missing.length > 8 ? ', …' : '')
+    );
+    const pollTriggerInstalled = ScriptApp.getProjectTriggers()
+      .some(trigger => trigger.getHandlerFunction() === 'scheduledTransferDecisionPoll');
+    const pendingDecisionCount = typeof listDiajukanSentProposalsForPoll_ === 'function'
+      ? listDiajukanSentProposalsForPoll_().length : 0;
+    addReliabilityCheck_(
+      checks,
+      'RECORD_CENTER_DECISION_POLL_TRIGGER',
+      pollTriggerInstalled ? 'OK' : 'WARNING',
+      (pollTriggerInstalled
+        ? 'Trigger polling keputusan RC aktif.'
+        : 'Trigger belum aktif — jalankan menu "Aktifkan Polling Otomatis Keputusan RC".') +
+        ' ' + pendingDecisionCount + ' usul menunggu keputusan disinkronkan.'
+    );
+  }
 
   [
     ['ARCHIVE_FOLDER_ID', 'Folder arsip'],

@@ -817,3 +817,243 @@ function recoverTransferSubmissionResult_(session) {
     message: proposal.NO_USUL_PINDAH + ' sudah berstatus DIAJUKAN. Status dipulihkan tanpa membuat paket ganda.'
   };
 }
+
+// --- CF-06.1 — Poll keputusan Record Center (QUERY_DECISION) ---------------
+// Lihat docs/ADDENDUM_2026-08-20_PROTOKOL_KEPUTUSAN_RC_CF.md: CF yang
+// bertanya ke RC (poll), bukan RC memanggil balik CF (push) — memakai pola
+// signed request yang identik dengan dispatchTransferOutbox_ di atas.
+
+var TRANSFER_CF061_PROPOSAL_HEADERS_ = [
+  'DECISION_STATUS', 'DECISION_REASON', 'DECISION_AT', 'DECISION_BY',
+  'DECISION_SYNCED_AT', 'LAST_QUERY_AT', 'LAST_QUERY_STATUS', 'LAST_QUERY_ERROR'
+];
+
+function ensureTransferDecisionSyncSchema_() {
+  ensureColumnsOnSheet_(
+    APP_CONFIG.SHEETS.TRANSFER_PROPOSAL,
+    TRANSFER_CF061_PROPOSAL_HEADERS_,
+    [150, 360, 190, 240, 190, 190, 150, 360]
+  );
+  return {ok: true};
+}
+
+function getTransferDecisionSyncHealth_() {
+  const sheet = getSpreadsheet_().getSheetByName(APP_CONFIG.SHEETS.TRANSFER_PROPOSAL);
+  if (!sheet) return {ok: false, missing: [APP_CONFIG.SHEETS.TRANSFER_PROPOSAL + '.*']};
+  const headers = getHeaders_(sheet);
+  const missing = TRANSFER_CF061_PROPOSAL_HEADERS_
+    .filter(header => headers.indexOf(header) === -1)
+    .map(header => APP_CONFIG.SHEETS.TRANSFER_PROPOSAL + '.' + header);
+  return {ok: missing.length === 0, missing: missing};
+}
+
+// Dipanggil trigger terjadwal (semua usul DIAJUKAN+SENT) maupun tombol
+// "Cek Status" manual (satu usul). Tidak melempar untuk kondisi bisnis biasa
+// (belum ada keputusan, dsb.) — hanya melempar untuk kegagalan teknis nyata.
+function queryTransferDecision_(proposalId) {
+  ensureTransferSubmissionSchema_();
+  ensureTransferDecisionSyncSchema_();
+  const proposal = readObjects_(APP_CONFIG.SHEETS.TRANSFER_PROPOSAL)
+    .find(row => String(row.USUL_PINDAH_ID || '') === String(proposalId || ''));
+  if (!proposal) throw new Error('Pengajuan usul tidak ditemukan.');
+  if (String(proposal.STATUS_USUL || '').toUpperCase() !== 'DIAJUKAN') {
+    return {ok: true, status: 'TIDAK_PERLU',
+      message: proposal.NO_USUL_PINDAH + ' sudah berstatus ' + proposal.STATUS_USUL + ', tidak perlu polling.'};
+  }
+  if (!proposal.OUTBOX_ID || String(proposal.OUTBOX_STATUS || '').toUpperCase() !== 'SENT') {
+    return {ok: true, status: 'BELUM_TERKIRIM',
+      message: proposal.NO_USUL_PINDAH + ': paket belum terkonfirmasi terkirim (outbox: ' +
+        (proposal.OUTBOX_STATUS || 'kosong') + '). Kirim/kirim ulang dulu sebelum cek keputusan.'};
+  }
+
+  const settings = readSettings_();
+  const destination = transferSubmissionDestination_(settings, {
+    recordCenterName: proposal.RECORD_CENTER_NAME_SNAPSHOT,
+    recordCenterEmail: proposal.RECORD_CENTER_EMAIL_SNAPSHOT
+  });
+  if (!destination.ready) {
+    return {ok: true, status: 'BELUM_TERKONFIGURASI',
+      message: proposal.NO_USUL_PINDAH + ': koneksi Record Center belum lengkap (endpoint/instance/secret).'};
+  }
+
+  const timestamp = nowIso_();
+  const eventId = 'QRY-' + Utilities.getUuid();
+  const queryPayload = {submitEventId: proposal.OUTBOX_ID};
+  const payloadText = JSON.stringify(queryPayload);
+  const hash = transferSubmissionSha256_(payloadText);
+  const signature = transferSubmissionSignature_(eventId, hash, timestamp, destination.secret);
+
+  let response;
+  try {
+    response = UrlFetchApp.fetch(destination.endpointUrl, {
+      method: 'post',
+      contentType: 'application/json',
+      muteHttpExceptions: true,
+      payload: JSON.stringify({
+        eventId: eventId,
+        eventType: 'QUERY_DECISION',
+        sourceInstanceId: settings.INSTANCE_ID || '',
+        destinationInstanceId: destination.instanceId,
+        sentAt: timestamp,
+        payloadSha256: hash,
+        signature: signature,
+        payload: queryPayload
+      })
+    });
+  } catch (error) {
+    updateQueryTrackingFields_(proposal, timestamp, 'ERROR', error.message);
+    throw new Error('Gagal menghubungi Record Center: ' + error.message);
+  }
+
+  const code = response.getResponseCode();
+  const body = cleanText_(response.getContentText(), 4000);
+  let parsed = {};
+  try { parsed = body ? JSON.parse(body) : {}; } catch (ignore) {}
+
+  if (code < 200 || code >= 300 || parsed.ok !== true) {
+    const message = parsed.message || ('HTTP ' + code + (body ? ': ' + body : ''));
+    updateQueryTrackingFields_(proposal, timestamp, 'ERROR', message);
+    throw new Error('Record Center menolak permintaan status: ' + message);
+  }
+
+  updateQueryTrackingFields_(proposal, timestamp, parsed.status || '', '');
+
+  if (!parsed.decisionAvailable) {
+    return {ok: true, status: parsed.status || 'MENUNGGU_KEPUTUSAN',
+      message: proposal.NO_USUL_PINDAH + ': ' + (parsed.message || 'belum ada keputusan.')};
+  }
+
+  return applyTransferDecision_(proposal, parsed, timestamp);
+}
+
+function updateQueryTrackingFields_(proposal, timestamp, status, error) {
+  try {
+    updateObjectAtRow_(APP_CONFIG.SHEETS.TRANSFER_PROPOSAL, proposal._rowNumber, {
+      LAST_QUERY_AT: timestamp, LAST_QUERY_STATUS: status, LAST_QUERY_ERROR: cleanText_(error, 500)
+    });
+  } catch (ignore) {
+    // Kegagalan mencatat status polling tidak boleh menutupi hasil sesungguhnya.
+  }
+}
+
+function applyTransferDecision_(proposal, parsed, timestamp) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    // Baca ulang di dalam lock — mencegah menerapkan keputusan dua kali bila
+    // trigger otomatis dan klik manual berbenturan (idempoten).
+    const fresh = readObjects_(APP_CONFIG.SHEETS.TRANSFER_PROPOSAL)
+      .find(row => String(row.USUL_PINDAH_ID) === String(proposal.USUL_PINDAH_ID));
+    if (!fresh) throw new Error('Usul tidak ditemukan saat menerapkan keputusan.');
+    if (String(fresh.STATUS_USUL || '').toUpperCase() !== 'DIAJUKAN') {
+      return {ok: true, status: fresh.STATUS_USUL, alreadyApplied: true,
+        message: fresh.NO_USUL_PINDAH + ': keputusan sudah diterapkan sebelumnya (' + fresh.STATUS_USUL + ').'};
+    }
+    const decision = String(parsed.decision || '').toUpperCase();
+    if (['DISETUJUI', 'DITOLAK'].indexOf(decision) === -1) {
+      throw new Error('Keputusan tidak dikenali dari Record Center: ' + parsed.decision);
+    }
+    const user = getCurrentUser_();
+    updateObjectAtRow_(APP_CONFIG.SHEETS.TRANSFER_PROPOSAL, fresh._rowNumber, {
+      STATUS_USUL: decision,
+      DECISION_STATUS: decision,
+      DECISION_REASON: cleanText_(parsed.reason, 1000),
+      DECISION_AT: parsed.decidedAt || '',
+      DECISION_BY: parsed.decidedBy || '',
+      DECISION_SYNCED_AT: timestamp,
+      UPDATED_AT: timestamp,
+      UPDATED_BY: user
+    });
+
+    let releasedCount = 0;
+    if (decision === 'DITOLAK') {
+      // §12.5/§16.3: berkas pada usul ditolak dilepas agar dapat
+      // diperbaiki/diajukan ulang. Berkas disetujui SENGAJA tidak diubah di
+      // sini — tetap terkunci sampai diterima fisik/ditata (RC-02+).
+      releasedCount = releaseTransferProposalBerkas_(fresh.USUL_PINDAH_ID, timestamp, user);
+    }
+
+    audit_(decision === 'DITOLAK' ? 'REJECT_SYNCED' : 'APPROVE_SYNCED',
+      'USUL_PEMINDAHAN', 'USUL_PINDAH', fresh.USUL_PINDAH_ID,
+      'Keputusan Record Center diterima: ' + decision + ' untuk ' + fresh.NO_USUL_PINDAH,
+      cleanText_(parsed.reason, 500) +
+        (decision === 'DITOLAK' ? ' | ' + releasedCount + ' berkas dilepas kembali' : ''),
+      'SUCCESS');
+
+    return {
+      ok: true, status: decision,
+      message: fresh.NO_USUL_PINDAH + ' ' + decision + ' oleh Record Center.' +
+        (decision === 'DITOLAK'
+          ? (parsed.reason ? ' Alasan: ' + parsed.reason + '.' : '') +
+            ' ' + releasedCount + ' berkas dilepas kembali menjadi kandidat usul pemindahan.'
+          : ' Berkas tetap terkunci dalam proses sampai diterima fisik Record Center.')
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Sama persis pola pelepasan berkas pada cancelTransferProposalDraft_ di
+// RetentionService.js — sengaja ditulis terpisah, bukan refactor fungsi yang
+// sudah lulus UAT, supaya perubahan CF-06.1 ini tidak menyentuh perilaku lama.
+function releaseTransferProposalBerkas_(proposalId, timestamp, user) {
+  const details = readObjects_(APP_CONFIG.SHEETS.TRANSFER_PROPOSAL_DETAIL)
+    .filter(row => String(row.USUL_PINDAH_ID) === String(proposalId) &&
+      String(row.STATUS_DETAIL || 'AKTIF').toUpperCase() !== 'DIBATALKAN');
+  const berkasRows = readObjects_(APP_CONFIG.SHEETS.BERKAS);
+  const byId = {};
+  berkasRows.forEach(row => byId[String(row.BERKAS_ID || '')] = row);
+  const updates = [];
+  details.forEach(detail => {
+    const parent = byId[String(detail.BERKAS_ID || '')];
+    if (!parent || String(parent.USUL_PINDAH_ID_AKTIF || '') !== String(proposalId)) return;
+    updates.push({
+      rowNumber: parent._rowNumber,
+      changes: {
+        USUL_PINDAH_ID_AKTIF: '',
+        USUL_PINDAH_NO_AKTIF: '',
+        STATUS_RETENSI: 'HABIS AKTIF – KANDIDAT USUL PINDAH',
+        UPDATED_AT: timestamp,
+        UPDATED_BY: user,
+        VERSION: Number(parent.VERSION || 0) + 1
+      }
+    });
+  });
+  if (updates.length) updateObjectsAtRows_(APP_CONFIG.SHEETS.BERKAS, updates);
+  return updates.length;
+}
+
+function listDiajukanSentProposalsForPoll_() {
+  ensureTransferSubmissionSchema_();
+  return readObjects_(APP_CONFIG.SHEETS.TRANSFER_PROPOSAL)
+    .filter(row => String(row.STATUS_USUL || '').toUpperCase() === 'DIAJUKAN' &&
+      String(row.OUTBOX_STATUS || '').toUpperCase() === 'SENT');
+}
+
+// Trigger terjadwal (dipasang lewat installTransferDecisionPollTrigger_).
+// Satu usul gagal tidak boleh menghentikan usul lain dalam batch yang sama.
+function scheduledTransferDecisionPoll() {
+  try {
+    listDiajukanSentProposalsForPoll_().forEach(row => {
+      try {
+        queryTransferDecision_(row.USUL_PINDAH_ID);
+      } catch (error) {
+        audit_('QUERY_DECISION', 'USUL_PEMINDAHAN', 'USUL_PINDAH', row.USUL_PINDAH_ID,
+          'Polling keputusan Record Center gagal (' + row.NO_USUL_PINDAH + ')',
+          error.message, 'FAILED');
+      }
+    });
+  } catch (error) {
+    if (typeof recordReliabilityJobError_ === 'function') {
+      recordReliabilityJobError_('TRANSFER_DECISION_POLL', error);
+    }
+  }
+}
+
+function installTransferDecisionPollTrigger_() {
+  ScriptApp.getProjectTriggers()
+    .filter(trigger => trigger.getHandlerFunction() === 'scheduledTransferDecisionPoll')
+    .forEach(trigger => ScriptApp.deleteTrigger(trigger));
+  ScriptApp.newTrigger('scheduledTransferDecisionPoll').timeBased().everyHours(2).create();
+  return {ok: true, message: 'Trigger polling keputusan Record Center aktif (tiap 2 jam).'};
+}

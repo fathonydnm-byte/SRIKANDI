@@ -1,8 +1,8 @@
 const APP_RELEASE = Object.freeze({
-  VERSION: '3.25.1',
-  SCHEMA_VERSION: 8,
+  VERSION: '3.26.0',
+  SCHEMA_VERSION: 9,
   CHANNEL: 'STABLE',
-  RELEASE_DATE: '2026-08-14'
+  RELEASE_DATE: '2026-08-21'
 });
 
 const APP_CONFIG = Object.freeze({

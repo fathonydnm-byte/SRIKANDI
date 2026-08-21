@@ -27,6 +27,8 @@ function onOpen() {
     .addItem('Instalasi & Reliability…', 'showReliabilityDialog')
     .addItem('Update Koneksi Record Center (tanpa dialog)…', 'updateRecordCenterConnectionViaPrompts')
     .addItem('Kirim Ulang Pengajuan ke Record Center (tanpa dialog)…', 'retryTransferSubmissionViaPrompt')
+    .addItem('Cek Status Keputusan Record Center…', 'checkTransferDecisionViaPrompt')
+    .addItem('Aktifkan Polling Otomatis Keputusan RC', 'installTransferDecisionPollTriggerViaMenu')
     .addSeparator()
     .addItem('Perbaiki / Segarkan Laporan', 'repairReports')
     .addItem('Pasang / Perbaiki Modul Penerimaan', 'repairReceiptModule')
@@ -113,6 +115,47 @@ function retryTransferSubmissionViaPrompt() {
 
     const result = retryTransferSubmission_(target.proposalId);
     ui.alert('Hasil Kirim Ulang', result.message, ui.ButtonSet.OK);
+  } catch (error) {
+    ui.alert('Gagal', error.message, ui.ButtonSet.OK);
+  }
+}
+
+// CF-06.1 — lihat docs/ADDENDUM_2026-08-20_PROTOKOL_KEPUTUSAN_RC_CF.md.
+// Trigger otomatis (installTransferDecisionPollTrigger_) + tombol manual ini
+// keduanya berjalan berdampingan, sesuai keputusan protokol poll.
+function checkTransferDecisionViaPrompt() {
+  const ui = SpreadsheetApp.getUi();
+  try {
+    const allDiajukan = readObjects_(APP_CONFIG.SHEETS.TRANSFER_PROPOSAL)
+      .filter(row => String(row.STATUS_USUL || '').toUpperCase() === 'DIAJUKAN');
+    if (!allDiajukan.length) {
+      ui.alert('Tidak ada usul berstatus DIAJUKAN.');
+      return;
+    }
+    const lines = allDiajukan.map((row, i) => (i + 1) + '. ' + row.NO_USUL_PINDAH +
+      ' — outbox: ' + row.OUTBOX_STATUS +
+      (row.LAST_QUERY_STATUS ? ', cek terakhir: ' + row.LAST_QUERY_STATUS : ''));
+    ui.alert('Usul Berstatus DIAJUKAN (' + allDiajukan.length + ')',
+      lines.join('\n') + '\n\nKetik nomor usul untuk cek status keputusan.', ui.ButtonSet.OK);
+
+    const response = ui.prompt('Cek Status Keputusan', 'Contoh: UP-2026-0002', ui.ButtonSet.OK_CANCEL);
+    if (response.getSelectedButton() !== ui.Button.OK) return;
+    const number = cleanText_(response.getResponseText(), 100);
+    const target = allDiajukan.find(row => String(row.NO_USUL_PINDAH) === number);
+    if (!target) throw new Error('Nomor usul tidak ditemukan di antara yang DIAJUKAN: ' + number);
+
+    const result = queryTransferDecision_(target.USUL_PINDAH_ID);
+    ui.alert('Hasil Cek Status', result.message, ui.ButtonSet.OK);
+  } catch (error) {
+    ui.alert('Gagal', error.message, ui.ButtonSet.OK);
+  }
+}
+
+function installTransferDecisionPollTriggerViaMenu() {
+  const ui = SpreadsheetApp.getUi();
+  try {
+    const result = installTransferDecisionPollTrigger_();
+    ui.alert('Berhasil', result.message, ui.ButtonSet.OK);
   } catch (error) {
     ui.alert('Gagal', error.message, ui.ButtonSet.OK);
   }
