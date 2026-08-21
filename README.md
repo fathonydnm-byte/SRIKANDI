@@ -18,12 +18,12 @@ record-center/                                    # aplikasi Arsip Inaktif (dipa
   appsscript.json, Code.js, Config.js, ...        # RC-00: installer, registry sumber, health/audit/backup
 ```
 
-## Status (20 Agustus 2026)
+## Status (21 Agustus 2026)
 
 - **Central File**: source di `central-file/` ditarik langsung via `clasp pull` dari project Apps Script yang **sedang live di produksi pilot** (akun `bag.umum@uinsa.ac.id`, Bagian Umum Kantor Pusat – Biro AUPK). Terverifikasi cocok dengan baseline handoff: `VERSION 3.25.1`, `SCHEMA_VERSION 8`, 30 file, termasuk `ReceiptPrint.html` sebagai tipe HTML yang benar. Ini pertama kalinya kode ini masuk git — sebelumnya hanya hidup di Apps Script editor. Belum ada perubahan apa pun terhadap project live ini.
-- **Record Center**: paket lama `RC-00 + RC-01 v1.0.0 PILOT` yang disebut di handoff **tidak dapat dipulihkan** — tidak pernah masuk git dan direktori kerja sesi AI sebelumnya sudah tidak terjangkau. Sebagai gantinya, **RC-00 (fondasi instance) ditulis ulang dari nol** di `record-center/` pada tanggal yang sama, mengikuti spesifikasi handoff §13.2 dan pola engineering yang sudah terbukti di `central-file/` (batch read/write, LockService, audit trail, migrasi idempoten, secret di Script Properties). Source ini **sudah lulus syntax check tapi belum pernah dipasang** ke Apps Script/Drive manapun — lihat `record-center/README.md` untuk cakupan persis dan cara memasang.
+- **Record Center**: paket lama `RC-00 + RC-01 v1.0.0 PILOT` yang disebut di handoff **tidak dapat dipulihkan** — tidak pernah masuk git dan direktori kerja sesi AI sebelumnya sudah tidak terjangkau. Sebagai gantinya, **RC-00 (fondasi instance) ditulis ulang dari nol** di `record-center/`, mengikuti spesifikasi handoff §13.2 dan pola engineering yang sudah terbukti di `central-file/`. **RC-00 sudah terpasang dan terverifikasi** (21 Agustus 2026) pada akun `bag.umum@uinsby.ac.id` — folder, sheet, dan sumber Central File pilot (`INS-6d92f552-1d7e-4935-a4e5-a04161ef6a75`) sudah terdaftar dengan shared secret. Lihat `record-center/README.md` untuk detail dan status terkini.
 - Protokol pengambilan keputusan RC→CF sudah diputuskan (**poll dari CF**, bukan push dari RC) — lihat `docs/ADDENDUM_2026-08-20_PROTOKOL_KEPUTUSAN_RC_CF.md`. Ini menggantikan bagian §12.5/§14 handoff yang sebelumnya masih terbuka.
-- Langkah berikutnya: pasang RC-00 ke akun Record Center pilot (terpisah dari akun CF), lalu bangun RC-01 (endpoint federatif + `RC_INBOX_EVENTS`/`RC_DECISION_OUTBOX`/tabel penerimaan usul + event `QUERY_DECISION`), baru lanjut UAT pengiriman `UP-2026-0002` sesuai urutan di handoff §1.3/§21.
+- Langkah berikutnya: masukkan shared secret + instance ID + endpoint RC ke installer Central File (endpoint baru ada setelah RC-01 di-deploy), bangun RC-01 (endpoint federatif + `RC_INBOX_EVENTS`/`RC_DECISION_OUTBOX`/tabel penerimaan usul + event `QUERY_DECISION`), baru lanjut UAT pengiriman `UP-2026-0002` sesuai urutan di handoff §1.3/§21.
 
 ## Prinsip kerja di repo ini
 

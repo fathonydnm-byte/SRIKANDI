@@ -34,5 +34,8 @@ Status: **kode ditulis & lulus syntax check, belum pernah dipasang ke Apps Scrip
 
 ## Status pemasangan
 
-- Project Apps Script + spreadsheet RC-00 sudah dibuat (20 Agustus 2026) pada akun `bag.umum@uinsby.ac.id`, `scriptId` tercatat di `.clasp.json` pada direktori ini. Folder induk dan 10 file source sudah ter-*push*.
-- Instalasi (menjalankan installer dari menu spreadsheet, mengisi form, mendaftarkan sumber CF) dilakukan pengguna langsung di browser — `google.script.run` pada dialog installer memerlukan sesi browser aktif dan tidak dapat dipicu dari sesi agent ini.
+- **RC-00 terpasang dan terverifikasi** (21 Agustus 2026) pada akun `bag.umum@uinsby.ac.id`. Project Apps Script + spreadsheet dibuat via clasp, `scriptId` tercatat di `.clasp.json` pada direktori ini.
+- Instalasi dijalankan pengguna langsung dari menu spreadsheet (**Record Center → Pasang Instance**) memakai jalur `ui.prompt()` native — bukan dialog HTML `Instalasi & Reliability…`, karena di lingkungan browser yang dipakai, dialog HTML gagal total dengan `Authorization is required to perform that action` akibat `docs.google.com/offline/iframeapi` diblokir jaringan (nol eksekusi server tercatat untuk percobaan lewat dialog — dikonfirmasi lewat Apps Script Executions). Jalur `ui.prompt()` tidak melalui iframe/`google.script.run` sama sekali sehingga tidak terpengaruh.
+- Terverifikasi read-only via Drive API: keempat folder (`01 PENERIMAAN USUL PINDAH`, `02 ARSIP INAKTIF`, `90 KARANTINA APLIKASI`, `99 BACKUP APLIKASI`) dan spreadsheet-nya sudah terbentuk di folder induk `14m43F_svYjdrZHYTWES1QmzcUbjZxsW-`.
+- Sumber Central File pilot sudah terdaftar di `RC_SOURCE_REGISTRY` (`INS-6d92f552-1d7e-4935-a4e5-a04161ef6a75`, Bagian Umum Kantor Pusat – Biro AUPK) dengan shared secret yang sudah diterbitkan ke pengguna langsung (tidak dicatat di sini/di git, sesuai §20.3). Secret ini masih perlu dimasukkan ke installer Central File — belum dilakukan.
+- **Belum dilakukan**: Backup Sekarang, health check ulang untuk konfirmasi status, dan tentu saja seluruh scope RC-01 (endpoint federatif dst.) di atas.
