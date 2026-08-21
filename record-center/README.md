@@ -41,5 +41,11 @@ Status: **RC-00 dan RC-01 terpasang & di-deploy** pada akun `bag.umum@uinsby.ac.
   - **Belum bisa diuji langsung dari sesi agent ini** — sandbox jaringan sesi ini memblokir domain `script.google.com` di level proxy (`connect_rejected`, kebijakan sandbox, bukan masalah pada deployment-nya). Verifikasi end-to-end sesungguhnya terjadi lewat `UrlFetchApp` asli dari infrastruktur Apps Script CF saat retry pengajuan — jalur jaringan yang sepenuhnya berbeda dari sandbox ini.
 - Instance ID RC (bukan rahasia): `RC-8ae1f3f3-8542-48be-9c3d-ae51a2ed3ffd`.
 - Sumber Central File pilot terdaftar aktif: `INS-6d92f552-1d7e-4935-a4e5-a04161ef6a75` (Bagian Umum Kantor Pusat – Biro AUPK).
-- **UAT federasi ujung-ke-ujung LULUS** (21 Agustus 2026): retry `UP-2026-0002` dari CF berhasil — outbox CF berubah `PENDING_CONFIGURATION` → `SENT`, proposal muncul tepat satu kali di RC (`RCUP-7fd50e2b-7969-4bc1-8930-dc2a07992bd2`, 1 berkas, 2 item, `SOURCE_UNIT_NAME` benar). Retry kedua terbukti idempoten — `STATUS_OUTBOX` sudah `SENT` sehingga CF langsung membalas "Paket sudah diterima" tanpa mengirim ulang, tidak ada duplikasi di RC. Ini menuntaskan UAT §18.5 poin 4–7 handoff.
-- Tersisa: uji keputusan `DISETUJUI`/`DITOLAK` (§18.5 poin 8–10), lalu CF-06.1 (implementasi `QUERY_DECISION` di sisi CF + trigger poll otomatis, sesuai addendum 2026-08-20) supaya keputusan RC benar-benar sampai balik ke CF secara otomatis.
+- **Siklus federasi penuh LULUS ujung-ke-ujung** (21 Agustus 2026), memenuhi seluruh UAT §18.5 handoff:
+  1. Retry `UP-2026-0002` dari CF berhasil — outbox `PENDING_CONFIGURATION` → `SENT`, proposal masuk tepat satu kali di RC (`RCUP-7fd50e2b-7969-4bc1-8930-dc2a07992bd2`, 1 berkas, 2 item, `SOURCE_UNIT_NAME` benar).
+  2. Retry kedua terbukti idempoten — `STATUS_OUTBOX` sudah `SENT`, CF langsung membalas "Paket sudah diterima" tanpa mengirim ulang, tidak ada duplikasi di RC.
+  3. Petugas RC menolak usul lewat menu (`DITOLAK`, alasan wajib) — tersimpan di `RC_DECISION_OUTBOX`.
+  4. **CF-06.1 (poll `QUERY_DECISION`) juga LULUS**: CF bertanya ke RC, menerima `DITOLAK` beserta alasan persis, otomatis mengubah `STATUS_USUL` dan **melepas 1 berkas kembali menjadi kandidat usul pemindahan** — persis sesuai guardrail §12.5/§16.3.
+  5. Trigger polling otomatis (tiap 2 jam) sudah diaktifkan di CF, berdampingan dengan tombol "Cek Status" manual — sesuai keputusan protokol poll.
+- Federasi CF↔RC untuk pilot ini **beroperasi penuh**: submit, idempotensi, keputusan, dan sinkronisasi balik semuanya teruji dengan data nyata (bukan simulasi/mock).
+- Tersisa untuk pengembangan lanjut: RC-02 (penerimaan fisik arsip inaktif) dan seterusnya — lihat roadmap §14 handoff.
