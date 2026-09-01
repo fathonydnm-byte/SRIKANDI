@@ -194,6 +194,86 @@ function updateArchiveItem_(form, preUploadedReplacementId) {
   }
 }
 
+function updateBerkasTitle_(form) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  let titleUpdated = false;
+  let original = null;
+  let berkasId = '';
+  try {
+    form = form || {};
+    berkasId = cleanText_(requireValue_(form.editBerkasId, 'Berkas induk'), 80);
+    const newTitle = cleanText_(requireValue_(form.editBerkasTitle, 'Judul berkas baru'), 500);
+    const reason = cleanText_(requireValue_(form.editReason, 'Alasan perubahan'), 2000);
+    if (reason.length < 10) throw new Error('Alasan perubahan minimal 10 karakter agar jejak audit cukup jelas.');
+
+    const parent = readObjects_(APP_CONFIG.SHEETS.BERKAS).find(row => row.BERKAS_ID === berkasId && !isDeleted_(row));
+    if (!parent) throw new Error('Berkas induk tidak ditemukan atau sudah dihapus.');
+    assertBerkasAvailableForEdit_(parent);
+
+    const oldTitle = cleanText_(parent.JUDUL_BERKAS, 500);
+    if (newTitle === oldTitle) throw new Error('Tidak ada perubahan yang perlu disimpan.');
+
+    original = {
+      JUDUL_BERKAS: parent.JUDUL_BERKAS,
+      UPDATED_AT: parent.UPDATED_AT,
+      UPDATED_BY: parent.UPDATED_BY,
+      VERSION: parent.VERSION
+    };
+
+    const timestamp = nowIso_();
+    const user = getCurrentUser_();
+    const changes = {
+      JUDUL_BERKAS: newTitle,
+      UPDATED_AT: timestamp,
+      UPDATED_BY: user,
+      VERSION: Number(parent.VERSION || 0) + 1
+    };
+    updateObjectAtRow_(APP_CONFIG.SHEETS.BERKAS, parent._rowNumber, changes);
+    titleUpdated = true;
+
+    const warnings = [];
+    try { rebuildReports_(); }
+    catch (reportError) {
+      warnings.push('Laporan belum dapat disegarkan: ' + reportError.message);
+      audit_('REPORT_WARNING', 'EDIT_ARSIP', 'BERKAS', parent.BERKAS_ID, 'Data berubah tetapi laporan gagal disegarkan', reportError.message, 'WARNING');
+    }
+
+    audit_('UPDATE_TITLE', 'EDIT_ARSIP', 'BERKAS', parent.BERKAS_ID,
+      'Sebelum: "' + oldTitle + '" | Sesudah: "' + newTitle + '"',
+      reason, warnings.length ? 'WARNING' : 'SUCCESS');
+    return {
+      ok: true,
+      berkasId: parent.BERKAS_ID,
+      warnings: warnings,
+      message: 'Judul berkas berhasil diubah dan laporan telah diperbarui.'
+    };
+  } catch (error) {
+    if (titleUpdated && original && berkasId) {
+      try {
+        const current = readObjects_(APP_CONFIG.SHEETS.BERKAS).find(row => row.BERKAS_ID === berkasId);
+        if (current) updateObjectAtRow_(APP_CONFIG.SHEETS.BERKAS, current._rowNumber, original);
+      } catch (rollbackError) {}
+    }
+    audit_('UPDATE_TITLE', 'EDIT_ARSIP', 'BERKAS', berkasId || '', 'Perubahan judul berkas gagal', error.message, 'FAILED');
+    throw error;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function assertBerkasAvailableForEdit_(parent) {
+  if (String(parent.STATUS_PEMINJAMAN || 'TERSEDIA').toUpperCase() !== 'TERSEDIA') {
+    throw new Error('Berkas sedang dipinjam. Selesaikan transaksi peminjaman sebelum mengedit.');
+  }
+  const activeLoan = readObjects_(APP_CONFIG.SHEETS.PEMINJAMAN).find(loan => {
+    if (String(loan.STATUS || '').toUpperCase() !== 'DIPINJAM') return false;
+    const loanBerkasId = String(loan.BERKAS_ID || (String(loan.JENIS_OBJEK || '').toUpperCase() === 'BERKAS' ? loan.OBJEK_ID : '') || '');
+    return loanBerkasId === String(parent.BERKAS_ID);
+  });
+  if (activeLoan) throw new Error('Masih ada transaksi peminjaman aktif untuk berkas ini. Selesaikan pengembalian sebelum mengedit.');
+}
+
 function assertItemAvailableForEdit_(parent, item) {
   if (String(parent.STATUS_PEMINJAMAN || 'TERSEDIA').toUpperCase() !== 'TERSEDIA' ||
       String(item.STATUS_PEMINJAMAN || 'TERSEDIA').toUpperCase() !== 'TERSEDIA') {

@@ -660,23 +660,35 @@
       <section id="editPage" class="page">
         <form id="editForm" class="form-card" enctype="multipart/form-data">
           <div class="section-heading">
-            <div><h2>Edit Detail Item Arsip</h2><p>Perbaiki metadata atau ganti file alih media tanpa menghapus dan menginput ulang item.</p></div>
-          </div>
-          <div class="info-panel">
-            <strong>Perubahan terkontrol</strong>
-            <span>Perubahan tanggal dapat mengubah nomor kronologis. Perubahan uraian memperbarui nama PDF. File lama dipindahkan ke karantina bila PDF diganti.</span>
+            <div><h2>Edit Arsip</h2><p>Ubah judul berkas, atau perbaiki metadata/file alih media satu item, tanpa menghapus dan menginput ulang.</p></div>
           </div>
           <div class="form-grid">
+            <label class="field">Yang diubah *
+              <select id="editScope" name="editScope" required>
+                <option value="ITEM">Detail item arsip (tanggal, halaman, uraian, PDF, dst.)</option>
+                <option value="BERKAS">Judul berkas induk</option>
+              </select>
+            </label>
             <label class="field">Berkas induk *
               <select id="editBerkasId" name="editBerkasId" required><option value="">Memuat daftar berkas…</option></select>
             </label>
+          </div>
+          <div id="editItemInfoPanel" class="info-panel">
+            <strong>Perubahan terkontrol</strong>
+            <span>Perubahan tanggal dapat mengubah nomor kronologis. Perubahan uraian memperbarui nama PDF. File lama dipindahkan ke karantina bila PDF diganti.</span>
+          </div>
+          <div id="editBerkasInfoPanel" class="info-panel" hidden>
+            <strong>Perubahan terkontrol</strong>
+            <span>Hanya judul berkas yang berubah — nomor berkas, klasifikasi, dan seluruh item di dalamnya tidak tersentuh. Daftar Berkas dan lidah folder otomatis ditandai perlu dicetak ulang.</span>
+          </div>
+          <div id="editItemFields" class="form-grid">
             <label class="field">Item arsip *
-              <select id="editItemId" name="editItemId" required><option value="">Pilih berkas terlebih dahulu</option></select>
+              <select id="editItemId" name="editItemId"><option value="">Pilih berkas terlebih dahulu</option></select>
             </label>
-            <label class="field">Tanggal naskah *<input id="editDocumentDate" name="editDocumentDate" type="date" required></label>
-            <label class="field">Jumlah halaman *<input id="editPageCount" name="editPageCount" type="number" min="1" step="1" required></label>
+            <label class="field">Tanggal naskah *<input id="editDocumentDate" name="editDocumentDate" type="date"></label>
+            <label class="field">Jumlah halaman *<input id="editPageCount" name="editPageCount" type="number" min="1" step="1"></label>
             <label class="field">Tingkat perkembangan *
-              <select id="editDevelopmentLevel" name="editDevelopmentLevel" required><option value="ASLI">Asli</option><option value="COPY">Copy</option></select>
+              <select id="editDevelopmentLevel" name="editDevelopmentLevel"><option value="ASLI">Asli</option><option value="COPY">Copy</option></select>
             </label>
             <label class="field">Kondisi fisik
               <select id="editCondition" name="editCondition">
@@ -688,7 +700,7 @@
               </select>
             </label>
             <label class="field">Klasifikasi keamanan dan akses *
-              <select id="editSecurityClassification" name="editSecurityClassification" required>
+              <select id="editSecurityClassification" name="editSecurityClassification">
                 <option value="BIASA/TERBUKA">Biasa/Terbuka</option>
                 <option value="TERBATAS">Terbatas</option>
                 <option value="RAHASIA">Rahasia</option>
@@ -697,12 +709,22 @@
             </label>
             <div class="field current-file"><span>File alih media saat ini</span><a id="editCurrentFile" href="#" target="_blank" rel="noopener">Pilih item untuk melihat file</a></div>
             <label class="field span-2">Uraian informasi arsip *
-              <textarea id="editDescription" name="editDescription" rows="5" maxlength="2000" required></textarea>
+              <textarea id="editDescription" name="editDescription" rows="5" maxlength="2000"></textarea>
             </label>
             <label class="field span-2">Ganti PDF alih media (opsional)
               <input id="replacementPdf" name="replacementPdf" type="file" accept="application/pdf,.pdf">
               <small class="helper">Kosongkan bila file tidak berubah. PDF pengganti harus kurang dari 100 MB.</small>
             </label>
+          </div>
+          <div id="editBerkasFields" class="form-grid" hidden>
+            <label class="field span-2">Judul berkas saat ini
+              <input id="editBerkasCurrentTitle" type="text" disabled placeholder="Pilih berkas terlebih dahulu">
+            </label>
+            <label class="field span-2">Judul berkas baru *
+              <textarea id="editBerkasTitle" name="editBerkasTitle" rows="3" maxlength="500"></textarea>
+            </label>
+          </div>
+          <div class="form-grid">
             <label class="field span-2">Alasan perubahan *
               <textarea id="editReason" name="editReason" rows="3" minlength="10" maxlength="2000" required placeholder="Contoh: Satu rangkap kontrak diserahkan kepada vendor sehingga jumlah halaman disesuaikan…"></textarea>
               <small class="helper">Minimal 10 karakter dan akan dicatat pada Audit Log.</small>

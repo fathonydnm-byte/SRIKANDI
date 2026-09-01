@@ -460,6 +460,10 @@ function apiUpdateArchiveItem(formObject) {
   return updateArchiveItem_(formObject);
 }
 
+function apiUpdateBerkasTitle(formObject) {
+  return updateBerkasTitle_(formObject);
+}
+
 function apiStartEditReplacementUpload(request) {
   return startEditReplacementUpload_(request);
 }

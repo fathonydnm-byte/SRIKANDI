@@ -2450,10 +2450,37 @@ async function finishMediaUpload(result){
 }
 
 function bindEditForm(){
-  $('editBerkasId').addEventListener('change',renderEditItems);
+  $('editScope').addEventListener('change',renderEditMode);
+  $('editBerkasId').addEventListener('change',()=>{renderEditItems();populateEditBerkasTitle()});
   $('editItemId').addEventListener('change',populateEditFields);
   $('editForm').addEventListener('submit',submitEdit);
   clearEditFields();
+  renderEditMode();
+}
+
+function renderEditMode(){
+  const berkasMode=$('editScope').value==='BERKAS';
+  $('editItemFields').hidden=berkasMode;
+  $('editBerkasFields').hidden=!berkasMode;
+  $('editItemInfoPanel').hidden=berkasMode;
+  $('editBerkasInfoPanel').hidden=!berkasMode;
+  $('editItemId').required=!berkasMode;
+  $('editDocumentDate').required=!berkasMode;
+  $('editPageCount').required=!berkasMode;
+  $('editDevelopmentLevel').required=!berkasMode;
+  $('editSecurityClassification').required=!berkasMode;
+  $('editDescription').required=!berkasMode;
+  $('editBerkasTitle').required=berkasMode;
+  if(berkasMode)populateEditBerkasTitle();
+  $('editStatus').textContent='';
+}
+
+function populateEditBerkasTitle(){
+  if($('editScope').value!=='BERKAS')return;
+  const berkas=state.editOptions&&(state.editOptions.berkas||[]).find(row=>row.id===$('editBerkasId').value);
+  $('editBerkasCurrentTitle').value=berkas?berkas.title:'';
+  $('editBerkasTitle').value=berkas?berkas.title:'';
+  $('editReason').value='';
 }
 
 async function loadEditOptions(force=false){
@@ -2473,6 +2500,7 @@ function renderEditOptions(){
   (state.editOptions.berkas||[]).forEach(row=>select.add(new Option(row.label,row.id)));
   if(previous&&(state.editOptions.berkas||[]).some(row=>row.id===previous))select.value=previous;
   renderEditItems();
+  populateEditBerkasTitle();
 }
 
 function renderEditItems(){
@@ -2516,13 +2544,19 @@ function clearEditFields(){
   $('editCurrentFile').textContent='Pilih item untuk melihat file';
   $('editCurrentFile').href='#';
   $('editCurrentFile').classList.add('disabled');
+  $('editBerkasCurrentTitle').value='';
+  $('editBerkasTitle').value='';
 }
 
 async function submitEdit(event){
   event.preventDefault();
-  if(!$('editBerkasId').value||!$('editItemId').value){toast('Pilih berkas dan item arsip.',true);return}
+  const berkasMode=$('editScope').value==='BERKAS';
+  if(!$('editBerkasId').value){toast('Pilih berkas induk.',true);return}
+  if(berkasMode){
+    if(!$('editBerkasTitle').value.trim()){toast('Isi judul berkas baru.',true);return}
+  }else if(!$('editItemId').value){toast('Pilih berkas dan item arsip.',true);return}
   if($('editReason').value.trim().length<10){toast('Alasan perubahan minimal 10 karakter.',true);return}
-  const file=$('replacementPdf').files[0];
+  const file=berkasMode?null:$('replacementPdf').files[0];
   if(file){
     if(file.type&&file.type!=='application/pdf'){toast('File pengganti harus PDF.',true);return}
     if(file.size>=ARCHIVE_MEDIA_MAX_BYTES){toast('Ukuran PDF pengganti harus kurang dari 100 MB.',true);return}
@@ -2530,11 +2564,13 @@ async function submitEdit(event){
   const button=$('saveEdit');
   button.disabled=true;
   button.textContent=file?'Menyiapkan PDF…':'Menyimpan…';
-  $('editStatus').textContent=file?'Menyiapkan upload PDF pengganti…':'Memperbarui metadata, penomoran, Drive, dan laporan…';
+  $('editStatus').textContent=berkasMode?'Memperbarui judul berkas dan laporan…':(file?'Menyiapkan upload PDF pengganti…':'Memperbarui metadata, penomoran, Drive, dan laporan…');
   try{
     const payload=formPayloadWithoutFiles($('editForm'));
     let result;
-    if(file){
+    if(berkasMode){
+      result=await runServer('apiUpdateBerkasTitle',payload);
+    }else if(file){
       result=await editWithReplacementUpload(payload,file,button);
     }else{
       if(state.editUpload&&state.editUpload.sessionId){
@@ -2548,6 +2584,7 @@ async function submitEdit(event){
     state.editUpload=null;
     state.editOptions=null;
     state.deletionOptions=null;
+    state.mediaOptions=null;
     await loadBootstrap();
     await loadEditOptions(true);
     const warning=result.warnings&&result.warnings.length?' Peringatan: '+result.warnings.join(' | '):'';
