@@ -324,8 +324,20 @@ function buildNumberingOperations_(plan, timestamp, user) {
 }
 
 function executeNumberingDriveRenames_(driveRenames) {
+  const renames = driveRenames || [];
   const driveWarnings = [];
-  (driveRenames || []).forEach(rename => {
+  if (!renames.length) return driveWarnings;
+  // Penomoran ulang kronologis bisa memicu banyak folder/file Drive yang perlu
+  // di-rename sekaligus (setiap berkas sesudah titik perubahan ikut bergeser
+  // nomornya). Untuk >1 rename, coba kirim sebagai satu batch HTTP ke Drive API
+  // v3 dulu (jauh lebih cepat daripada memanggil DriveApp per objek satu per
+  // satu). Bila batch gagal dengan cara apa pun (kuota, jaringan, format
+  // respons tak terduga), SEMUA rename yang belum terkonfirmasi otomatis
+  // dikerjakan ulang lewat jalur DriveApp lama di bawah — jadi hasil akhirnya
+  // tidak pernah lebih buruk dari sebelum optimisasi ini, hanya berpotensi
+  // lebih cepat.
+  const pending = renames.length > 1 ? applyDriveRenamesViaBatchApi_(renames) : renames;
+  pending.forEach(rename => {
     try {
       if (rename.type === 'FOLDER') DriveApp.getFolderById(rename.id).setName(rename.name);
       else DriveApp.getFileById(rename.id).setName(rename.name);
@@ -334,6 +346,82 @@ function executeNumberingDriveRenames_(driveRenames) {
     }
   });
   return driveWarnings;
+}
+
+var DRIVE_BATCH_CHUNK_SIZE_ = 90;
+var DRIVE_BATCH_ENDPOINT_ = 'https://www.googleapis.com/batch/drive/v3';
+
+// Mengirim rename folder/file Drive sebagai batch HTTP (Drive API v3),
+// dipecah per DRIVE_BATCH_CHUNK_SIZE_ agar tetap di bawah batas jumlah
+// sub-request per batch. Mengembalikan daftar rename yang BELUM terkonfirmasi
+// berhasil (baik karena batch itu sendiri gagal, atau karena satu-dua item di
+// dalamnya ditolak Drive) — item-item ini lalu dikerjakan ulang lewat DriveApp
+// biasa oleh pemanggil, sehingga rename yang idempotent (nama tujuan sama)
+// aman diulang tanpa efek samping.
+function applyDriveRenamesViaBatchApi_(renames) {
+  const pending = [];
+  for (let start = 0; start < renames.length; start += DRIVE_BATCH_CHUNK_SIZE_) {
+    const chunk = renames.slice(start, start + DRIVE_BATCH_CHUNK_SIZE_);
+    let confirmed = null;
+    try {
+      confirmed = sendDriveRenameBatch_(chunk);
+    } catch (error) {
+      confirmed = null;
+    }
+    if (!confirmed) {
+      chunk.forEach(rename => pending.push(rename));
+      continue;
+    }
+    chunk.forEach((rename, index) => {
+      if (!confirmed[index]) pending.push(rename);
+    });
+  }
+  return pending;
+}
+
+// Mengirim satu batch (maks DRIVE_BATCH_CHUNK_SIZE_ item) sebagai satu
+// request multipart/mixed ke endpoint batch Drive API v3. Mengembalikan array
+// boolean sepanjang chunk.length (true = rename item itu terkonfirmasi
+// berhasil), atau null bila responsnya tidak bisa dipastikan (network error,
+// status bukan 200, atau format multipart tak terduga) sehingga pemanggil
+// tahu harus menganggap SEMUA item di chunk ini belum berhasil.
+function sendDriveRenameBatch_(chunk) {
+  const boundary = 'srikandi_batch_' + Utilities.getUuid().replace(/-/g, '');
+  const parts = chunk.map((rename, index) => {
+    const body = JSON.stringify({name: rename.name});
+    return '--' + boundary + '\r\n' +
+      'Content-Type: application/http\r\n' +
+      'Content-ID: <rename-' + index + '>\r\n\r\n' +
+      'PATCH /drive/v3/files/' + encodeURIComponent(rename.id) + '?fields=id HTTP/1.1\r\n' +
+      'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+      body + '\r\n';
+  });
+  const payload = parts.join('') + '--' + boundary + '--';
+  const response = UrlFetchApp.fetch(DRIVE_BATCH_ENDPOINT_, {
+    method: 'post',
+    contentType: 'multipart/mixed; boundary=' + boundary,
+    payload: payload,
+    headers: {Authorization: 'Bearer ' + ScriptApp.getOAuthToken()},
+    muteHttpExceptions: true
+  });
+  if (response.getResponseCode() !== 200) return null;
+  const headers = response.getHeaders() || {};
+  const contentType = headers['Content-Type'] || headers['content-type'] || '';
+  return parseDriveBatchResponse_(contentType, response.getContentText(), chunk.length);
+}
+
+function parseDriveBatchResponse_(contentType, text, expectedCount) {
+  const boundaryMatch = /boundary=(?:"([^"]+)"|([^;\s]+))/i.exec(String(contentType || ''));
+  const boundary = boundaryMatch ? (boundaryMatch[1] || boundaryMatch[2]) : '';
+  if (!boundary) return null;
+  const results = [];
+  String(text || '').split('--' + boundary).forEach(part => {
+    const trimmed = part.trim();
+    if (!trimmed || trimmed === '--') return;
+    const statusMatch = /HTTP\/1\.[01]\s+(\d{3})/.exec(trimmed);
+    results.push(Boolean(statusMatch) && statusMatch[1].charAt(0) === '2');
+  });
+  return results.length === expectedCount ? results : null;
 }
 
 function historyRecord_(type, objectId, berkasId, oldNumber, newNumber, oldName, newName, timestamp, user, reason) {
