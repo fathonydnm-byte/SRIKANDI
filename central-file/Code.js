@@ -30,6 +30,7 @@ function onOpen() {
     .addItem('Cek Status Keputusan Record Center…', 'checkTransferDecisionViaPrompt')
     .addItem('Aktifkan Polling Otomatis Keputusan RC', 'installTransferDecisionPollTriggerViaMenu')
     .addItem('Jalankan Migrasi Tertunda', 'runPendingMigrationsViaMenu')
+    .addItem('Atur Data Petugas & Pimpinan (Berita Acara)…', 'updateBeritaAcaraDefaultsViaPrompts')
     .addSeparator()
     .addItem('Perbaiki / Segarkan Laporan', 'repairReports')
     .addItem('Pasang / Perbaiki Modul Penerimaan', 'repairReceiptModule')
@@ -84,6 +85,63 @@ function updateRecordCenterConnectionViaPrompts() {
       recordCenterSharedSecret: recordCenterSharedSecret
     });
     ui.alert('Berhasil', result.message, ui.ButtonSet.OK);
+  } catch (error) {
+    ui.alert('Gagal', error.message, ui.ButtonSet.OK);
+  }
+}
+
+// Default petugas Central File dan pimpinan unit kerja untuk Berita Acara
+// Peminjaman/Pengembalian (lihat BeritaAcaraService.js). Nilainya otomatis
+// dipakai untuk mengisi form Pinjam/Kembali (tetap bisa diganti manual per
+// transaksi bila petugas yang memproses berbeda), dan Nama/NIP Pimpinan
+// langsung terbaca sistem saat Berita Acara dibuat — bukan dikosongkan
+// untuk ditulis tangan.
+function updateBeritaAcaraDefaultsViaPrompts() {
+  const ui = SpreadsheetApp.getUi();
+  try {
+    const settings = readSettings_();
+    let response = ui.prompt('1/5 — Nama Petugas Central File (default)',
+      'Nilai saat ini: ' + (cleanText_(settings.BA_PETUGAS_CF_NAMA, 250) || '(kosong)'),
+      ui.ButtonSet.OK_CANCEL);
+    if (response.getSelectedButton() !== ui.Button.OK) return;
+    const officerName = response.getResponseText();
+
+    response = ui.prompt('2/5 — NIP Petugas Central File (default)',
+      'Nilai saat ini: ' + (cleanText_(settings.BA_PETUGAS_CF_NIP, 100) || '(kosong)'),
+      ui.ButtonSet.OK_CANCEL);
+    if (response.getSelectedButton() !== ui.Button.OK) return;
+    const officerNip = response.getResponseText();
+
+    response = ui.prompt('3/5 — Jabatan Petugas Central File (default)',
+      'Nilai saat ini: ' + (cleanText_(settings.BA_PETUGAS_CF_JABATAN, 250) || '(kosong)'),
+      ui.ButtonSet.OK_CANCEL);
+    if (response.getSelectedButton() !== ui.Button.OK) return;
+    const officerJabatan = response.getResponseText();
+
+    response = ui.prompt('4/5 — Nama Pimpinan Unit Kerja',
+      'Yang menandatangani blok "Menyetujui/Mengetahui" pada Berita Acara. ' +
+      'Nilai saat ini: ' + (cleanText_(settings.BA_PIMPINAN_NAMA, 250) || '(kosong)'),
+      ui.ButtonSet.OK_CANCEL);
+    if (response.getSelectedButton() !== ui.Button.OK) return;
+    const pimpinanName = response.getResponseText();
+
+    response = ui.prompt('5/5 — NIP Pimpinan Unit Kerja',
+      'Nilai saat ini: ' + (cleanText_(settings.BA_PIMPINAN_NIP, 100) || '(kosong)'),
+      ui.ButtonSet.OK_CANCEL);
+    if (response.getSelectedButton() !== ui.Button.OK) return;
+    const pimpinanNip = response.getResponseText();
+
+    upsertReliabilitySettingsBatch_([
+      ['BA_PETUGAS_CF_NAMA', cleanText_(officerName, 250), 'STRING', 'Default nama petugas Central File pada Berita Acara'],
+      ['BA_PETUGAS_CF_NIP', cleanText_(officerNip, 100), 'STRING', 'Default NIP petugas Central File pada Berita Acara'],
+      ['BA_PETUGAS_CF_JABATAN', cleanText_(officerJabatan, 250), 'STRING', 'Default jabatan petugas Central File pada Berita Acara'],
+      ['BA_PIMPINAN_NAMA', cleanText_(pimpinanName, 250), 'STRING', 'Nama pimpinan unit kerja yang menandatangani Berita Acara'],
+      ['BA_PIMPINAN_NIP', cleanText_(pimpinanNip, 100), 'STRING', 'NIP pimpinan unit kerja yang menandatangani Berita Acara']
+    ]);
+    audit_('UPDATE', 'RELIABILITY', 'SETTINGS', 'BERITA_ACARA_DEFAULTS',
+      'Memperbarui default petugas Central File dan pimpinan untuk Berita Acara',
+      'Diubah lewat menu Atur Data Petugas & Pimpinan', 'SUCCESS');
+    ui.alert('Berhasil', 'Default petugas dan pimpinan untuk Berita Acara tersimpan.', ui.ButtonSet.OK);
   } catch (error) {
     ui.alert('Gagal', error.message, ui.ButtonSet.OK);
   }
@@ -338,6 +396,10 @@ function apiReturnLoan(formObject) {
 
 function apiPrepareLoanOutIndicator(loanGroupId) {
   return prepareLoanOutIndicator_(loanGroupId);
+}
+
+function apiPrepareLoanBeritaAcara(loanGroupId, type) {
+  return prepareLoanBeritaAcara_(loanGroupId, type);
 }
 
 function apiStartLoanEvidenceUpload(request) {

@@ -406,6 +406,22 @@ function applyReliabilityMigrations_() {
       run: function() {
         ensureTransferDecisionSyncSchema_();
       }
+    },
+    {
+      id: 'REL-012',
+      version: 10,
+      description: 'Menambahkan data petugas/kondisi fisik peminjaman dan Berita Acara Pinjam/Kembali (Google Docs)',
+      run: function() {
+        ensureLoanSchema_();
+        ensureLoanBeritaAcaraLogSchema_();
+        upsertReliabilitySettingsBatch_([
+          ['BA_PETUGAS_CF_NAMA', '', 'STRING', 'Default nama petugas Central File pada Berita Acara'],
+          ['BA_PETUGAS_CF_NIP', '', 'STRING', 'Default NIP petugas Central File pada Berita Acara'],
+          ['BA_PETUGAS_CF_JABATAN', '', 'STRING', 'Default jabatan petugas Central File pada Berita Acara'],
+          ['BA_PIMPINAN_NAMA', '', 'STRING', 'Nama pimpinan unit kerja yang menandatangani Berita Acara'],
+          ['BA_PIMPINAN_NIP', '', 'STRING', 'NIP pimpinan unit kerja yang menandatangani Berita Acara']
+        ]);
+      }
     }
   ];
   const applied = readObjects_(APP_CONFIG.SHEETS.SYSTEM_MIGRATIONS);
@@ -1404,6 +1420,20 @@ function runReliabilityHealthCheck_(persist) {
         ? 'Trigger polling keputusan RC aktif.'
         : 'Trigger belum aktif — jalankan menu "Aktifkan Polling Otomatis Keputusan RC".') +
         ' ' + pendingDecisionCount + ' usul menunggu keputusan disinkronkan.'
+    );
+  }
+
+  if (typeof getBeritaAcaraTemplateDocId_ === 'function') {
+    const officerConfigured = Boolean(cleanText_(settings.BA_PETUGAS_CF_NAMA, 250));
+    const pimpinanConfigured = Boolean(cleanText_(settings.BA_PIMPINAN_NAMA, 250));
+    addReliabilityCheck_(
+      checks,
+      'BERITA_ACARA_PEMINJAMAN_DEFAULTS',
+      officerConfigured && pimpinanConfigured ? 'OK' : 'WARNING',
+      officerConfigured && pimpinanConfigured
+        ? 'Default petugas Central File dan pimpinan unit kerja sudah diatur untuk Berita Acara.'
+        : 'Default petugas Central File dan/atau pimpinan belum diatur — jalankan menu ' +
+          '"Atur Data Petugas & Pimpinan (Berita Acara)…" agar tidak perlu diketik manual setiap transaksi.'
     );
   }
 

@@ -1756,6 +1756,8 @@ function bindLoanPage(){
   $('loanResultsBody').addEventListener('click',event=>{
     const printButton=event.target.closest('[data-print-out-indicator]');
     if(printButton){prepareAndDownloadLoanOutIndicator_(printButton.dataset.printOutIndicator);return}
+    const baButton=event.target.closest('[data-print-ba]');
+    if(baButton){prepareAndDownloadLoanBeritaAcara_(baButton.dataset.printBa,baButton.dataset.baType);return}
     const button=event.target.closest('[data-return-loan]');
     if(button)startLoanReturn_(button.dataset.returnLoan);
   });
@@ -1796,6 +1798,8 @@ function renderLoanPage_(){
   renderLoanTable_();
   if(!$('loanDate').value)setDefaultLoanDates_();
   if(!$('loanPreviewId').value)$('loanPreviewId').value=newClientId('LOAN');
+  if(!$('loanCondition').value)$('loanCondition').value='BAIK';
+  applyLoanOfficerDefaults_();
 }
 
 function renderLoanStats_(){
@@ -1963,10 +1967,20 @@ async function resetLoanForm_(focus=false){
   state.selectedLoanItemIds.clear();
   $('loanObjectType').value='BERKAS';
   $('loanPreviewId').value=newClientId('LOAN');
+  $('loanCondition').value='BAIK';
   setDefaultLoanDates_();
+  applyLoanOfficerDefaults_();
   $('loanFormStatus').textContent='Lengkapi data peminjaman.';
   renderLoanBerkasOptions_();
   if(focus)$('loanBerkasId').focus();
+}
+
+function applyLoanOfficerDefaults_(){
+  const officer=state.loanOptions&&state.loanOptions.officerDefault;
+  if(!officer)return;
+  if(!$('loanOfficerName').value)$('loanOfficerName').value=officer.name||'';
+  if(!$('loanOfficerNip').value)$('loanOfficerNip').value=officer.nip||'';
+  if(!$('loanOfficerJabatan').value)$('loanOfficerJabatan').value=officer.jabatan||'';
 }
 
 function applyLoanCreateOptimistically_(payload,result){
@@ -2117,8 +2131,10 @@ async function submitLoan_(event){
       :'';
     const successMessage='Peminjaman tersimpan'+(duration?' dalam '+duration:'')+
       pathLabel+slowDetail+'.';
-    $('loanFormStatus').textContent=successMessage+' Menyiapkan Out Indicator A5 dan menyegarkan data di latar belakang…';
+    $('loanFormStatus').textContent=successMessage+' Menyiapkan Out Indicator A5, Berita Acara, dan menyegarkan data di latar belakang…';
     prepareAndDownloadLoanOutIndicator_(result.loanGroupId||result.loanId,true)
+      .catch(()=>{});
+    prepareAndDownloadLoanBeritaAcara_(result.loanGroupId||result.loanId,'PEMINJAMAN',true)
       .catch(()=>{});
     refreshLoanViewsInBackground_(successMessage);
   }catch(error){
@@ -2192,6 +2208,27 @@ async function prepareAndDownloadLoanOutIndicator_(loanGroupId,automatic=false){
   }
 }
 
+async function prepareAndDownloadLoanBeritaAcara_(loanGroupId,type,automatic=false){
+  if(!loanGroupId)throw new Error('ID transaksi peminjaman tidak tersedia.');
+  const label=type==='PENGEMBALIAN'?'Pengembalian':'Peminjaman';
+  const statusField=type==='PENGEMBALIAN'?'loanReturnStatus':'loanFormStatus';
+  if(!automatic)toast('Menyiapkan Berita Acara '+label+'…');
+  try{
+    const result=await runServer('apiPrepareLoanBeritaAcara',loanGroupId,type);
+    if($(statusField))$(statusField).textContent=result.message;
+    toast(result.message);
+    window.open(result.pdfUrl,'_blank');
+    state.loanOptions=null;
+    return result;
+  }catch(error){
+    const message='Berita Acara '+label+' belum dapat dibuat: '+error.message+
+      '. Transaksi tetap sudah tersimpan; gunakan tombol Cetak Berita Acara pada tabel.';
+    if($(statusField))$(statusField).textContent=message;
+    toast(message,true);
+    throw error;
+  }
+}
+
 function renderLoanTable_(){
   if(!state.loanOptions)return;
   const query=normalizeFolderLabelFilter_($('loanSearch').value);
@@ -2240,6 +2277,11 @@ function renderLoanRow_(row){
     : '<button type="button" class="loan-action-button" data-return-loan="'+escapeHtml(row.id)+'">Catat Kembali</button>';
   const printAction='<button type="button" class="loan-action-button secondary" data-print-out-indicator="'+
     escapeHtml(row.groupId||row.id)+'">'+(row.statusCode==='RETURNED'?'Cetak Riwayat':'Cetak Out Indicator')+'</button>';
+  const baPeminjamanAction='<button type="button" class="loan-action-button secondary" data-print-ba="'+
+    escapeHtml(row.groupId||row.id)+'" data-ba-type="PEMINJAMAN">Cetak BA Peminjaman</button>';
+  const baPengembalianAction=row.statusCode==='RETURNED'
+    ?'<button type="button" class="loan-action-button secondary" data-print-ba="'+
+      escapeHtml(row.groupId||row.id)+'" data-ba-type="PENGEMBALIAN">Cetak BA Pengembalian</button>':'';
   const itemDetail=row.itemCount>1
     ?'<span class="search-cell-sub">'+escapeHtml((row.itemTitles||[]).join(' · '))+'</span>':'';
   return '<tr>'+
@@ -2248,7 +2290,7 @@ function renderLoanRow_(row){
     '<td><span class="search-cell-main">Pinjam '+formatIndonesianDate_(row.borrowDate)+'</span><span class="search-cell-sub">'+escapeHtml(schedule)+'</span>'+overdue+'</td>'+
     '<td><span class="search-cell-main">'+escapeHtml(row.pageCount)+' lembar/item</span></td>'+
     '<td><span class="status-badge '+statusClass+'">'+escapeHtml(row.statusLabel)+'</span>'+evidence+'</td>'+
-    '<td><div class="loan-actions">'+printAction+returnAction+'</div></td>'+
+    '<td><div class="loan-actions">'+printAction+baPeminjamanAction+baPengembalianAction+returnAction+'</div></td>'+
   '</tr>';
 }
 
@@ -2285,6 +2327,11 @@ async function startLoanReturn_(loanId){
   $('returnDate').value=(state.loanOptions&&state.loanOptions.today)||new Date().toISOString().slice(0,10);
   $('returnNotes').value='';
   $('returnConfirmation').value='';
+  $('returnCondition').value='BAIK';
+  const officer=state.loanOptions&&state.loanOptions.officerDefault;
+  $('returnOfficerName').value=(officer&&officer.name)||'';
+  $('returnOfficerNip').value=(officer&&officer.nip)||'';
+  $('returnOfficerJabatan').value=(officer&&officer.jabatan)||'';
   $('loanReturnTitle').textContent=(row.objectType==='BERKAS'?'Berkas ':'Item ')+
     (row.objectType==='BERKAS'?(row.berkasNumber||'DRAFT'):
       row.itemCount>1?(row.itemCount+' item dalam berkas '+(row.berkasNumber||'–')):
@@ -2317,6 +2364,8 @@ async function submitLoanReturn_(event){
     const result=await runServer('apiReturnLoan',formPayloadWithoutFiles($('loanReturnForm')));
     applyLoanReturnOptimistically_(result.loanId,result.returnedDate||$('returnDate').value);
     toast(result.message);
+    prepareAndDownloadLoanBeritaAcara_(result.loanGroupId||result.loanId,'PENGEMBALIAN',true)
+      .catch(()=>{});
     cancelLoanReturn_();
     const duration=result.durationMs?Math.max(.1,result.durationMs/1000).toFixed(1)+' detik':'';
     refreshLoanViewsInBackground_('Pengembalian tersimpan'+(duration?' dalam '+duration:'')+'.');

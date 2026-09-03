@@ -578,6 +578,7 @@
           <div class="form-grid">
             <label class="field">Nama peminjam *<input id="borrowerName" name="borrowerName" maxlength="250" required autocomplete="off"></label>
             <label class="field">NIP/NIK (opsional)<input id="borrowerIdentity" name="borrowerIdentity" maxlength="100" autocomplete="off"></label>
+            <label class="field">Jabatan peminjam *<input id="borrowerJabatan" name="borrowerJabatan" maxlength="250" required autocomplete="off"></label>
             <label class="field">Unit kerja *<input id="borrowerUnit" name="borrowerUnit" maxlength="250" required autocomplete="off"></label>
             <label class="field">Nomor WhatsApp (opsional)<input id="borrowerWhatsapp" name="borrowerWhatsapp" maxlength="50" autocomplete="off" inputmode="tel"></label>
             <label class="field span-2">Keperluan *
@@ -593,6 +594,14 @@
               <input id="loanPageCount" name="loanPageCount" type="number" min="1" step="1" required>
               <small class="helper">Diisi otomatis dari database dan dapat dikoreksi bila yang dipinjam hanya sebagian.</small>
             </label>
+            <label class="field">Kondisi fisik saat dipinjam *
+              <select id="loanCondition" name="loanCondition" required>
+                <option value="BAIK">Baik</option>
+                <option value="RUSAK RINGAN">Rusak ringan</option>
+                <option value="RUSAK SEDANG">Rusak sedang</option>
+                <option value="RUSAK BERAT">Rusak berat</option>
+              </select>
+            </label>
             <label class="field">Bukti persetujuan (opsional)
               <input id="loanEvidence" type="file" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png">
               <small class="helper">PDF, JPG, JPEG, atau PNG; maksimal 25 MB. Disimpan di folder BUKTI PEMINJAMAN.</small>
@@ -600,6 +609,13 @@
             <label class="field span-2">Catatan
               <textarea id="loanNotes" name="loanNotes" rows="3" maxlength="2000"></textarea>
             </label>
+          </div>
+
+          <div class="section-heading compact"><div><h2>Petugas Central File</h2><p>Otomatis terisi dari pengaturan default; ubah bila yang memproses berbeda.</p></div></div>
+          <div class="form-grid">
+            <label class="field">Nama petugas *<input id="loanOfficerName" name="loanOfficerName" maxlength="250" required autocomplete="off"></label>
+            <label class="field">NIP petugas (opsional)<input id="loanOfficerNip" name="loanOfficerNip" maxlength="100" autocomplete="off"></label>
+            <label class="field">Jabatan petugas *<input id="loanOfficerJabatan" name="loanOfficerJabatan" maxlength="250" required autocomplete="off"></label>
           </div>
           <div class="form-actions">
             <span id="loanFormStatus" aria-live="polite">Lengkapi data peminjaman.</span>
@@ -643,9 +659,20 @@
           <div id="loanReturnImpact" class="loan-object-info"></div>
           <div class="form-grid loan-return-fields">
             <label class="field">Tanggal kembali *<input id="returnDate" name="returnDate" type="date" required></label>
+            <label class="field">Kondisi fisik saat kembali *
+              <select id="returnCondition" name="returnCondition" required>
+                <option value="BAIK">Baik</option>
+                <option value="RUSAK RINGAN">Rusak ringan</option>
+                <option value="RUSAK SEDANG">Rusak sedang</option>
+                <option value="RUSAK BERAT">Rusak berat</option>
+              </select>
+            </label>
             <label class="field span-2">Catatan pengembalian
               <textarea id="returnNotes" name="returnNotes" rows="3" maxlength="1000" placeholder="Contoh: Dikembalikan lengkap dan kondisi baik…"></textarea>
             </label>
+            <label class="field">Nama petugas penerima *<input id="returnOfficerName" name="returnOfficerName" maxlength="250" required autocomplete="off"></label>
+            <label class="field">NIP petugas (opsional)<input id="returnOfficerNip" name="returnOfficerNip" maxlength="100" autocomplete="off"></label>
+            <label class="field">Jabatan petugas *<input id="returnOfficerJabatan" name="returnOfficerJabatan" maxlength="250" required autocomplete="off"></label>
             <label class="field span-2">Konfirmasi *
               <input id="returnConfirmation" name="returnConfirmation" autocomplete="off" required placeholder="Ketik KEMBALIKAN">
             </label>

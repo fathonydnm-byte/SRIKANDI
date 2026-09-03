@@ -14,14 +14,20 @@ var LOAN_OUT_INDICATOR_LOG_HEADERS_ = [
 var LOAN_REQUIRED_HEADERS_ = [
   'PEMINJAMAN_ID', 'LOAN_GROUP_ID', 'JENIS_OBJEK', 'BERKAS_ID', 'ITEM_ID',
   'NO_BERKAS_SNAPSHOT', 'NO_ITEM_SNAPSHOT', 'URAIAN_OBJEK_SNAPSHOT',
-  'NAMA_PEMINJAM', 'NIP_NIK', 'UNIT_KERJA', 'NO_WHATSAPP', 'KEPERLUAN',
+  'NAMA_PEMINJAM', 'NIP_NIK', 'JABATAN_PEMINJAM', 'UNIT_KERJA', 'NO_WHATSAPP', 'KEPERLUAN',
   'TANGGAL_PINJAM', 'TANGGAL_WAJIB_KEMBALI', 'TANGGAL_KEMBALI',
   'JUMLAH_HALAMAN_ITEM', 'JUMLAH_HALAMAN_GRUP_SNAPSHOT',
   'LOKASI_ASAL_SNAPSHOT', 'NO_FILLING_KABINET_SNAPSHOT',
   'NO_LACI_SNAPSHOT', 'NO_FOLDER_SNAPSHOT', 'BUKTI_PERSETUJUAN_FILE_ID',
   'BUKTI_PERSETUJUAN_URL', 'STATUS', 'CATATAN',
+  'KONDISI_PINJAM', 'KONDISI_KEMBALI',
+  'PETUGAS_PINJAM_NAMA', 'PETUGAS_PINJAM_NIP', 'PETUGAS_PINJAM_JABATAN',
+  'PETUGAS_KEMBALI_NAMA', 'PETUGAS_KEMBALI_NIP', 'PETUGAS_KEMBALI_JABATAN',
+  'BA_PEMINJAMAN_PDF_ID', 'BA_PEMINJAMAN_PDF_URL',
+  'BA_PENGEMBALIAN_PDF_ID', 'BA_PENGEMBALIAN_PDF_URL',
   'CREATED_AT', 'CREATED_BY', 'UPDATED_AT', 'UPDATED_BY'
 ];
+var LOAN_CONDITION_OPTIONS_ = ['BAIK', 'RUSAK RINGAN', 'RUSAK SEDANG', 'RUSAK BERAT'];
 
 function getLoanOptions_() {
   ensureLoanSchema_();
@@ -66,6 +72,7 @@ function getLoanOptions_() {
     borrowedItems: activeLoanRows.filter(row => loanObjectType_(row) === 'ITEM').length,
     returned: presentedLoans.filter(row => row.statusCode === 'RETURNED').length
   };
+  const settings = readSettings_();
   return {
     ok: true,
     today: today,
@@ -73,7 +80,18 @@ function getLoanOptions_() {
     berkas: berkas.map(row => loanBerkasOption_(row, itemsByBerkas[row.BERKAS_ID] || [], activity)),
     itemsByBerkas: itemsByBerkas,
     loans: presentedLoans,
-    synchronizedObjects: synchronization.updated
+    synchronizedObjects: synchronization.updated,
+    conditionOptions: LOAN_CONDITION_OPTIONS_,
+    officerDefault: {
+      name: cleanText_(settings.BA_PETUGAS_CF_NAMA, 250),
+      nip: cleanText_(settings.BA_PETUGAS_CF_NIP, 100),
+      jabatan: cleanText_(settings.BA_PETUGAS_CF_JABATAN, 250)
+    },
+    pimpinanDefault: {
+      name: cleanText_(settings.BA_PIMPINAN_NAMA, 250),
+      nip: cleanText_(settings.BA_PIMPINAN_NIP, 100),
+      unitName: cleanText_(settings.UNIT_NAME, 250)
+    }
   };
 }
 
@@ -145,6 +163,7 @@ function loanPresentation_(row, berkasById, itemById, today) {
     title: title,
     borrowerName: row.NAMA_PEMINJAM || '',
     borrowerIdentity: row.NIP_NIK || '',
+    borrowerJabatan: row.JABATAN_PEMINJAM || '',
     borrowerUnit: row.UNIT_KERJA || '',
     whatsapp: row.NO_WHATSAPP || '',
     purpose: row.KEPERLUAN || '',
@@ -156,6 +175,16 @@ function loanPresentation_(row, berkasById, itemById, today) {
     originalLocation: row.LOKASI_ASAL_SNAPSHOT || loanLocationLabel_(parent),
     evidenceUrl: row.BUKTI_PERSETUJUAN_URL || '',
     notes: row.CATATAN || '',
+    conditionBorrow: row.KONDISI_PINJAM || '',
+    conditionReturn: row.KONDISI_KEMBALI || '',
+    officerBorrowName: row.PETUGAS_PINJAM_NAMA || '',
+    officerBorrowNip: row.PETUGAS_PINJAM_NIP || '',
+    officerBorrowJabatan: row.PETUGAS_PINJAM_JABATAN || '',
+    officerReturnName: row.PETUGAS_KEMBALI_NAMA || '',
+    officerReturnNip: row.PETUGAS_KEMBALI_NIP || '',
+    officerReturnJabatan: row.PETUGAS_KEMBALI_JABATAN || '',
+    baPeminjamanUrl: row.BA_PEMINJAMAN_PDF_URL || '',
+    baPengembalianUrl: row.BA_PENGEMBALIAN_PDF_URL || '',
     statusCode: statusCode,
     statusLabel: statusLabel,
     overdueDays: overdue ? Math.max(1, -retentionDayDifference_(today, dueDate)) : 0,
@@ -204,6 +233,7 @@ function presentLoanGroups_(rows, berkasById, itemById, today) {
       title: title,
       borrowerName: first.borrowerName,
       borrowerIdentity: first.borrowerIdentity,
+      borrowerJabatan: first.borrowerJabatan,
       borrowerUnit: first.borrowerUnit,
       whatsapp: first.whatsapp,
       purpose: first.purpose,
@@ -215,6 +245,16 @@ function presentLoanGroups_(rows, berkasById, itemById, today) {
         presented.reduce((sum, row) => sum + Number(row.pageCount || 0), 0)),
       evidenceUrl: first.evidenceUrl,
       notes: first.notes,
+      conditionBorrow: first.conditionBorrow,
+      conditionReturn: first.conditionReturn,
+      officerBorrowName: first.officerBorrowName,
+      officerBorrowNip: first.officerBorrowNip,
+      officerBorrowJabatan: first.officerBorrowJabatan,
+      officerReturnName: first.officerReturnName,
+      officerReturnNip: first.officerReturnNip,
+      officerReturnJabatan: first.officerReturnJabatan,
+      baPeminjamanUrl: first.baPeminjamanUrl,
+      baPengembalianUrl: first.baPengembalianUrl,
       originalLocation: first.originalLocation,
       statusCode: statusCode,
       statusLabel: statusCode === 'OVERDUE' ? 'TERLAMBAT' :
@@ -361,12 +401,25 @@ function buildLoanRecords_(context, evidence, timestamp, user) {
     URAIAN_OBJEK_SNAPSHOT: item ? item.URAIAN_LENGKAP : context.parent.JUDUL_BERKAS,
     NAMA_PEMINJAM: context.borrowerName,
     NIP_NIK: context.identityNumber,
+    JABATAN_PEMINJAM: context.borrowerJabatan,
     UNIT_KERJA: context.workUnit,
     NO_WHATSAPP: context.whatsapp,
     KEPERLUAN: context.purpose,
     TANGGAL_PINJAM: context.borrowDate,
     TANGGAL_WAJIB_KEMBALI: context.dueDate,
     TANGGAL_KEMBALI: '',
+    KONDISI_PINJAM: context.loanCondition,
+    KONDISI_KEMBALI: '',
+    PETUGAS_PINJAM_NAMA: context.officerName,
+    PETUGAS_PINJAM_NIP: context.officerNip,
+    PETUGAS_PINJAM_JABATAN: context.officerJabatan,
+    PETUGAS_KEMBALI_NAMA: '',
+    PETUGAS_KEMBALI_NIP: '',
+    PETUGAS_KEMBALI_JABATAN: '',
+    BA_PEMINJAMAN_PDF_ID: '',
+    BA_PEMINJAMAN_PDF_URL: '',
+    BA_PENGEMBALIAN_PDF_ID: '',
+    BA_PENGEMBALIAN_PDF_URL: '',
     JUMLAH_HALAMAN_ITEM: item
       ? Number(item.JUMLAH_HALAMAN || 0) : context.automaticPages,
     JUMLAH_HALAMAN_GRUP_SNAPSHOT: context.pageCount,
@@ -707,7 +760,13 @@ function resolveLoanContext_(form, data) {
   }
   assertLoanAvailability_(objectType, parent, items, allItems, loanRows);
   const borrowerName = cleanText_(requireValue_(form.borrowerName, 'Nama peminjam'), 250);
+  const borrowerJabatan = cleanText_(requireValue_(form.borrowerJabatan, 'Jabatan peminjam'), 250);
   const workUnit = cleanText_(requireValue_(form.borrowerUnit, 'Unit kerja'), 250);
+  const loanCondition = String(requireValue_(form.loanCondition, 'Kondisi fisik saat dipinjam')).toUpperCase();
+  if (LOAN_CONDITION_OPTIONS_.indexOf(loanCondition) === -1) throw new Error('Kondisi fisik saat dipinjam tidak valid.');
+  const officerName = cleanText_(requireValue_(form.loanOfficerName, 'Nama petugas Central File'), 250);
+  const officerNip = cleanText_(form.loanOfficerNip, 100);
+  const officerJabatan = cleanText_(requireValue_(form.loanOfficerJabatan, 'Jabatan petugas Central File'), 250);
   const purpose = cleanText_(requireValue_(form.loanPurpose, 'Keperluan'), 1000);
   const borrowDate = loanDateKey_(requireValue_(form.loanDate, 'Tanggal pinjam'), 'Tanggal pinjam');
   const dueDate = loanDateKey_(requireValue_(form.loanDueDate, 'Tanggal wajib kembali'), 'Tanggal wajib kembali');
@@ -729,8 +788,13 @@ function resolveLoanContext_(form, data) {
     allItems: allItems,
     borrowerName: borrowerName,
     identityNumber: cleanText_(form.borrowerIdentity, 100),
+    borrowerJabatan: borrowerJabatan,
     workUnit: workUnit,
     whatsapp: cleanText_(form.borrowerWhatsapp, 50),
+    loanCondition: loanCondition,
+    officerName: officerName,
+    officerNip: officerNip,
+    officerJabatan: officerJabatan,
     purpose: purpose,
     borrowDate: borrowDate,
     dueDate: dueDate,
@@ -805,6 +869,11 @@ function returnLoan_(form) {
     const borrowDate = loanDateKey_(groupLoans[0].TANGGAL_PINJAM, 'Tanggal pinjam');
     if (returnDate < borrowDate) throw new Error('Tanggal kembali tidak boleh lebih awal daripada tanggal pinjam.');
     if (returnDate > loanTodayKey_()) throw new Error('Tanggal kembali tidak boleh berada di masa depan.');
+    const returnCondition = String(requireValue_(form.returnCondition, 'Kondisi fisik saat kembali')).toUpperCase();
+    if (LOAN_CONDITION_OPTIONS_.indexOf(returnCondition) === -1) throw new Error('Kondisi fisik saat kembali tidak valid.');
+    const returnOfficerName = cleanText_(requireValue_(form.returnOfficerName, 'Nama petugas Central File'), 250);
+    const returnOfficerNip = cleanText_(form.returnOfficerNip, 100);
+    const returnOfficerJabatan = cleanText_(requireValue_(form.returnOfficerJabatan, 'Jabatan petugas Central File'), 250);
     const timestamp = nowIso_();
     const updatedBy = getCurrentUser_();
     updateObjectsAtRows_(APP_CONFIG.SHEETS.PEMINJAMAN,
@@ -814,6 +883,10 @@ function returnLoan_(form) {
           TANGGAL_KEMBALI: returnDate,
           STATUS: LOAN_RETURNED_STATUS_,
           CATATAN: appendLoanReturnNote_(loan.CATATAN, form.returnNotes, returnDate),
+          KONDISI_KEMBALI: returnCondition,
+          PETUGAS_KEMBALI_NAMA: returnOfficerName,
+          PETUGAS_KEMBALI_NIP: returnOfficerNip,
+          PETUGAS_KEMBALI_JABATAN: returnOfficerJabatan,
           UPDATED_AT: timestamp,
           UPDATED_BY: updatedBy
         }
