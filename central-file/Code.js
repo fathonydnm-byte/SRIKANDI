@@ -398,8 +398,12 @@ function apiPrepareLoanOutIndicator(loanGroupId) {
   return prepareLoanOutIndicator_(loanGroupId);
 }
 
-function apiPrepareLoanBeritaAcara(loanGroupId, type) {
-  return prepareLoanBeritaAcara_(loanGroupId, type);
+function apiPrepareLoanBeritaAcara(loanGroupId) {
+  return prepareLoanBeritaAcara_(loanGroupId);
+}
+
+function apiSaveOutIndicatorPdf(loanGroupId, base64Data, fileName) {
+  return saveOutIndicatorPdf_(loanGroupId, base64Data, fileName);
 }
 
 function apiStartLoanEvidenceUpload(request) {

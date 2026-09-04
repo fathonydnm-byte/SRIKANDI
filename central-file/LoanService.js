@@ -23,8 +23,7 @@ var LOAN_REQUIRED_HEADERS_ = [
   'KONDISI_PINJAM', 'KONDISI_KEMBALI',
   'PETUGAS_PINJAM_NAMA', 'PETUGAS_PINJAM_NIP', 'PETUGAS_PINJAM_JABATAN',
   'PETUGAS_KEMBALI_NAMA', 'PETUGAS_KEMBALI_NIP', 'PETUGAS_KEMBALI_JABATAN',
-  'BA_PEMINJAMAN_PDF_ID', 'BA_PEMINJAMAN_PDF_URL',
-  'BA_PENGEMBALIAN_PDF_ID', 'BA_PENGEMBALIAN_PDF_URL',
+  'BA_PDF_ID', 'BA_PDF_URL',
   'CREATED_AT', 'CREATED_BY', 'UPDATED_AT', 'UPDATED_BY'
 ];
 var LOAN_CONDITION_OPTIONS_ = ['BAIK', 'RUSAK RINGAN', 'RUSAK SEDANG', 'RUSAK BERAT'];
@@ -183,8 +182,7 @@ function loanPresentation_(row, berkasById, itemById, today) {
     officerReturnName: row.PETUGAS_KEMBALI_NAMA || '',
     officerReturnNip: row.PETUGAS_KEMBALI_NIP || '',
     officerReturnJabatan: row.PETUGAS_KEMBALI_JABATAN || '',
-    baPeminjamanUrl: row.BA_PEMINJAMAN_PDF_URL || '',
-    baPengembalianUrl: row.BA_PENGEMBALIAN_PDF_URL || '',
+    baUrl: row.BA_PDF_URL || '',
     statusCode: statusCode,
     statusLabel: statusLabel,
     overdueDays: overdue ? Math.max(1, -retentionDayDifference_(today, dueDate)) : 0,
@@ -253,8 +251,7 @@ function presentLoanGroups_(rows, berkasById, itemById, today) {
       officerReturnName: first.officerReturnName,
       officerReturnNip: first.officerReturnNip,
       officerReturnJabatan: first.officerReturnJabatan,
-      baPeminjamanUrl: first.baPeminjamanUrl,
-      baPengembalianUrl: first.baPengembalianUrl,
+      baUrl: first.baUrl,
       originalLocation: first.originalLocation,
       statusCode: statusCode,
       statusLabel: statusCode === 'OVERDUE' ? 'TERLAMBAT' :
@@ -416,10 +413,8 @@ function buildLoanRecords_(context, evidence, timestamp, user) {
     PETUGAS_KEMBALI_NAMA: '',
     PETUGAS_KEMBALI_NIP: '',
     PETUGAS_KEMBALI_JABATAN: '',
-    BA_PEMINJAMAN_PDF_ID: '',
-    BA_PEMINJAMAN_PDF_URL: '',
-    BA_PENGEMBALIAN_PDF_ID: '',
-    BA_PENGEMBALIAN_PDF_URL: '',
+    BA_PDF_ID: '',
+    BA_PDF_URL: '',
     JUMLAH_HALAMAN_ITEM: item
       ? Number(item.JUMLAH_HALAMAN || 0) : context.automaticPages,
     JUMLAH_HALAMAN_GRUP_SNAPSHOT: context.pageCount,
