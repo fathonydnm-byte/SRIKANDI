@@ -2131,10 +2131,14 @@ async function submitLoan_(event){
       :'';
     const successMessage='Peminjaman tersimpan'+(duration?' dalam '+duration:'')+
       pathLabel+slowDetail+'.';
-    $('loanFormStatus').textContent=successMessage+' Menyiapkan Out Indicator A5, Berita Acara, dan menyegarkan data di latar belakang…';
+    $('loanFormStatus').textContent=successMessage+' Menyiapkan Out Indicator A5, sepasang Berita Acara (Peminjaman & Pengembalian), dan menyegarkan data di latar belakang…';
     prepareAndDownloadLoanOutIndicator_(result.loanGroupId||result.loanId,true)
       .catch(()=>{});
+    // Sepasang sekaligus: BA Pengembalian dibuat sebagai formulir kosong siap
+    // diisi tangan saat arsipnya benar-benar kembali (lihat prepareLoanBeritaAcara_).
     prepareAndDownloadLoanBeritaAcara_(result.loanGroupId||result.loanId,'PEMINJAMAN',true)
+      .catch(()=>{});
+    prepareAndDownloadLoanBeritaAcara_(result.loanGroupId||result.loanId,'PENGEMBALIAN',true)
       .catch(()=>{});
     refreshLoanViewsInBackground_(successMessage);
   }catch(error){
@@ -2217,7 +2221,11 @@ async function prepareAndDownloadLoanBeritaAcara_(loanGroupId,type,automatic=fal
     const result=await runServer('apiPrepareLoanBeritaAcara',loanGroupId,type);
     if($(statusField))$(statusField).textContent=result.message;
     toast(result.message);
-    window.open(result.pdfUrl,'_blank');
+    // window.open otomatis (tanpa klik langsung) sering diblokir browser sebagai
+    // popup, apalagi kalau 2 BA dibuat sekaligus. Buka tab baru hanya untuk klik
+    // manual tombol Cetak; hasil pembuatan otomatis cukup tersedia lewat tombol
+    // Cetak BA pada tabel begitu data disegarkan.
+    if(!automatic)window.open(result.pdfUrl,'_blank');
     state.loanOptions=null;
     return result;
   }catch(error){
@@ -2279,9 +2287,9 @@ function renderLoanRow_(row){
     escapeHtml(row.groupId||row.id)+'">'+(row.statusCode==='RETURNED'?'Cetak Riwayat':'Cetak Out Indicator')+'</button>';
   const baPeminjamanAction='<button type="button" class="loan-action-button secondary" data-print-ba="'+
     escapeHtml(row.groupId||row.id)+'" data-ba-type="PEMINJAMAN">Cetak BA Peminjaman</button>';
-  const baPengembalianAction=row.statusCode==='RETURNED'
-    ?'<button type="button" class="loan-action-button secondary" data-print-ba="'+
-      escapeHtml(row.groupId||row.id)+'" data-ba-type="PENGEMBALIAN">Cetak BA Pengembalian</button>':'';
+  const baPengembalianAction='<button type="button" class="loan-action-button secondary" data-print-ba="'+
+    escapeHtml(row.groupId||row.id)+'" data-ba-type="PENGEMBALIAN">'+
+    (row.statusCode==='RETURNED'?'Cetak BA Pengembalian':'Cetak BA Pengembalian (kosong)')+'</button>';
   const itemDetail=row.itemCount>1
     ?'<span class="search-cell-sub">'+escapeHtml((row.itemTitles||[]).join(' · '))+'</span>':'';
   return '<tr>'+

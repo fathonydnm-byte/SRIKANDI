@@ -218,10 +218,13 @@ function prepareLoanBeritaAcara_(loanGroupId, type) {
     String(row.PEMINJAMAN_ID) === loanGroupId);
   if (!records.length) throw new Error('Transaksi peminjaman tidak ditemukan.');
   const first = records[0];
-  if (type === 'PENGEMBALIAN' &&
-      !records.some(row => String(row.STATUS || '').toUpperCase() === LOAN_RETURNED_STATUS_)) {
-    throw new Error('Transaksi ini belum dikembalikan. Berita Acara Pengembalian belum dapat dibuat.');
-  }
+  // BA Peminjaman dan BA Pengembalian dibuat sepasang begitu transaksi Pinjam
+  // disimpan (lihat submitLoan_ di Client.html) — BA Pengembalian yang dibuat
+  // saat itu sengaja jadi formulir KOSONG untuk tanggal/kondisi/petugas yang
+  // belum diketahui (item peminjaman baru saja dibuat, belum ada yang
+  // mengembalikan), bukan ditebak/dipalsukan. Field itu terisi otomatis pada
+  // cetakan berikutnya begitu pengembalian sungguhan tercatat.
+  const isReturned = records.some(row => String(row.STATUS || '').toUpperCase() === LOAN_RETURNED_STATUS_);
 
   const berkasId = loanBerkasId_(first);
   const parent = readObjects_(APP_CONFIG.SHEETS.BERKAS)
@@ -231,7 +234,7 @@ function prepareLoanBeritaAcara_(loanGroupId, type) {
     .filter(row => String(row.BERKAS_ID) === berkasId)
     .forEach(row => itemById[String(row.ITEM_ID)] = row);
   const objectType = loanObjectType_(first);
-  const condition = (type === 'PEMINJAMAN' ? first.KONDISI_PINJAM : first.KONDISI_KEMBALI) || 'BAIK';
+  const condition = (type === 'PEMINJAMAN' ? first.KONDISI_PINJAM : first.KONDISI_KEMBALI) || '';
   const items = objectType === 'BERKAS'
     ? [{
         number: 'SELURUH BERKAS',
@@ -249,23 +252,24 @@ function prepareLoanBeritaAcara_(loanGroupId, type) {
 
   const settings = readSettings_();
   const unitName = cleanText_(settings.UNIT_NAME, 250) || 'UIN SUNAN AMPEL SURABAYA';
-  const eventDateSource = type === 'PEMINJAMAN'
-    ? (first.TANGGAL_PINJAM || loanTodayKey_())
-    : (first.TANGGAL_KEMBALI || loanTodayKey_());
-  const eventDate = loanDateKey_(eventDateSource, 'Tanggal Berita Acara');
-  const dateParts = beritaAcaraDateParts_(eventDate);
+  const eventDateSource = type === 'PEMINJAMAN' ? first.TANGGAL_PINJAM : first.TANGGAL_KEMBALI;
+  const dateParts = eventDateSource
+    ? beritaAcaraDateParts_(loanDateKey_(eventDateSource, 'Tanggal Berita Acara')) : null;
 
-  const officerName = type === 'PEMINJAMAN' ? first.PETUGAS_PINJAM_NAMA : first.PETUGAS_KEMBALI_NAMA;
-  const officerNip = type === 'PEMINJAMAN' ? first.PETUGAS_PINJAM_NIP : first.PETUGAS_KEMBALI_NIP;
-  const officerJabatan = type === 'PEMINJAMAN' ? first.PETUGAS_PINJAM_JABATAN : first.PETUGAS_KEMBALI_JABATAN;
+  // Petugas yang memproses pengembalian belum tentu sudah tercatat saat BA
+  // Pengembalian ini dicetak lebih dulu (paket bersama BA Peminjaman) —
+  // pakai petugas peminjaman sebagai isian awal yang wajar (bisa dicoret/
+  // diganti tangan), baru dipakai data pengembalian sungguhan setelah ada.
+  const officerName = type === 'PEMINJAMAN' ? first.PETUGAS_PINJAM_NAMA
+    : (first.PETUGAS_KEMBALI_NAMA || first.PETUGAS_PINJAM_NAMA);
+  const officerNip = type === 'PEMINJAMAN' ? first.PETUGAS_PINJAM_NIP
+    : (first.PETUGAS_KEMBALI_NIP || first.PETUGAS_PINJAM_NIP);
+  const officerJabatan = type === 'PEMINJAMAN' ? first.PETUGAS_PINJAM_JABATAN
+    : (first.PETUGAS_KEMBALI_JABATAN || first.PETUGAS_PINJAM_JABATAN);
   const pimpinanName = cleanText_(settings.BA_PIMPINAN_NAMA, 250);
   const pimpinanNip = cleanText_(settings.BA_PIMPINAN_NIP, 100);
 
   const tags = {
-    'HARI': dateParts.day,
-    'TANGGAL': dateParts.date,
-    'BULAN': dateParts.month,
-    'TAHUN': dateParts.year,
     'NAMA PETUGAS CENTRAL FILE': officerName || '–',
     'NIP PETUGAS CENTRAL FILE': officerNip || '–',
     'JABATAN PETUGAS CENTRAL FILE': officerJabatan || '–',
@@ -276,6 +280,17 @@ function prepareLoanBeritaAcara_(loanGroupId, type) {
     'NAMA PIMPINAN': pimpinanName || '–',
     'NIP PIMPINAN': pimpinanNip || '–'
   };
+  // [HARI]/[TANGGAL]/[BULAN]/[TAHUN] sengaja TIDAK dimasukkan ke tags bila
+  // tanggalnya belum diketahui (BA Pengembalian yang dicetak sebelum arsip
+  // sungguhan kembali) — tag tetap tertulis apa adanya di PDF sebagai
+  // penanda kolom yang perlu diisi tangan, bukan diisi tanggal hari ini
+  // yang keliru/menyesatkan.
+  if (dateParts) {
+    tags['HARI'] = dateParts.day;
+    tags['TANGGAL'] = dateParts.date;
+    tags['BULAN'] = dateParts.month;
+    tags['TAHUN'] = dateParts.year;
+  }
 
   const templateDocId = getBeritaAcaraTemplateDocId_(type, false);
   const previousPrints = readObjects_(APP_CONFIG.SHEETS.LOAN_BA_LOG)
@@ -323,6 +338,7 @@ function prepareLoanBeritaAcara_(loanGroupId, type) {
     'Membuat Berita Acara ' + (type === 'PEMINJAMAN' ? 'Peminjaman' : 'Pengembalian') + ' arsip',
     'Cetakan ke-' + printSequence, 'SUCCESS');
 
+  const isPreliminary = type === 'PENGEMBALIAN' && !isReturned;
   return {
     ok: true,
     loanGroupId: loanGroupId,
@@ -331,7 +347,9 @@ function prepareLoanBeritaAcara_(loanGroupId, type) {
     pdfUrl: pdfFile.getUrl(),
     printSequence: printSequence,
     isReprint: printSequence > 1,
+    isPreliminary: isPreliminary,
     message: 'Berita Acara ' + (type === 'PEMINJAMAN' ? 'Peminjaman' : 'Pengembalian') +
+      (isPreliminary ? ' (formulir kosong, siap diisi tangan saat arsip kembali)' : '') +
       ' berhasil dibuat' + (printSequence > 1 ? ' (cetak ulang ke-' + printSequence + ')' : '') + '.'
   };
 }
