@@ -1757,7 +1757,7 @@ function bindLoanPage(){
     const printButton=event.target.closest('[data-print-out-indicator]');
     if(printButton){prepareAndDownloadLoanOutIndicator_(printButton.dataset.printOutIndicator);return}
     const baButton=event.target.closest('[data-print-ba]');
-    if(baButton){prepareAndDownloadLoanBeritaAcara_(baButton.dataset.printBa);return}
+    if(baButton){prepareAndDownloadLoanBeritaAcara_(baButton.dataset.printBa,false,'loanFormStatus',baButton);return}
     const button=event.target.closest('[data-return-loan]');
     if(button)startLoanReturn_(button.dataset.returnLoan);
   });
@@ -2215,10 +2215,23 @@ async function prepareAndDownloadLoanOutIndicator_(loanGroupId,automatic=false){
   }
 }
 
-async function prepareAndDownloadLoanBeritaAcara_(loanGroupId,automatic=false,statusFieldId){
+async function prepareAndDownloadLoanBeritaAcara_(loanGroupId,automatic=false,statusFieldId,button){
   if(!loanGroupId)throw new Error('ID transaksi peminjaman tidak tersedia.');
   const statusField=statusFieldId||'loanFormStatus';
-  if(!automatic)toast('Menyiapkan Berita Acara Peminjaman…');
+  const originalButtonText=button?button.textContent:'';
+  // Dua gaya indikator "sedang berjalan" supaya petugas tidak mengira sistem
+  // macet: overlay layar penuh (dengan pesan bertahap, sama seperti saat
+  // menyimpan item arsip) untuk klik tombol manual — karena itu satu-satunya
+  // hal yang sedang ditunggu pengguna — dan spinner kecil di teks status
+  // untuk pembuatan otomatis di latar belakang, yang tidak boleh memblokir
+  // halaman karena transaksi utamanya sudah selesai duluan.
+  if(automatic){
+    if($(statusField))$(statusField).innerHTML='<span class="inline-spinner" aria-hidden="true"></span>Menyiapkan Berita Acara Peminjaman…';
+  }else{
+    toast('Menyiapkan Berita Acara Peminjaman…');
+    if(button){button.disabled=true;button.textContent='Menyiapkan…'}
+    showBeritaAcaraOverlay_();
+  }
   try{
     const result=await runServerWithTimeout_(60000,'apiPrepareLoanBeritaAcara',loanGroupId);
     if($(statusField))$(statusField).textContent=result.message;
@@ -2235,6 +2248,11 @@ async function prepareAndDownloadLoanBeritaAcara_(loanGroupId,automatic=false,st
     if($(statusField))$(statusField).textContent=message;
     toast(message,true);
     throw error;
+  }finally{
+    if(!automatic){
+      hideBeritaAcaraOverlay_();
+      if(button){button.disabled=false;button.textContent=originalButtonText||'Cetak BA Peminjaman'}
+    }
   }
 }
 
@@ -3180,6 +3198,25 @@ function showItemSavingOverlay(){
 }
 
 function hideItemSavingOverlay(){
+  loadingStageTimers.forEach(clearTimeout);
+  loadingStageTimers=[];
+  $('loadingOverlay').hidden=true;
+  $('app').removeAttribute('aria-busy');
+}
+
+function showBeritaAcaraOverlay_(){
+  loadingStageTimers.forEach(clearTimeout);
+  loadingStageTimers=[];
+  $('loadingTitle').textContent='Menyiapkan Berita Acara';
+  $('loadingMessage').textContent='Menyalin template dokumen…';
+  $('loadingOverlay').hidden=false;
+  $('app').setAttribute('aria-busy','true');
+  loadingStageTimers.push(setTimeout(()=>$('loadingMessage').textContent='Mengisi data pihak, tanggal, dan tabel arsip…',1500));
+  loadingStageTimers.push(setTimeout(()=>$('loadingMessage').textContent='Mengekspor PDF dan menyimpan ke Drive…',4000));
+  loadingStageTimers.push(setTimeout(()=>$('loadingMessage').textContent='Proses masih berjalan normal. Mohon tetap menunggu…',9000));
+}
+
+function hideBeritaAcaraOverlay_(){
   loadingStageTimers.forEach(clearTimeout);
   loadingStageTimers=[];
   $('loadingOverlay').hidden=true;
