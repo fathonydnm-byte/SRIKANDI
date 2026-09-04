@@ -2218,7 +2218,7 @@ async function prepareAndDownloadLoanBeritaAcara_(loanGroupId,type,automatic=fal
   const statusField=type==='PENGEMBALIAN'?'loanReturnStatus':'loanFormStatus';
   if(!automatic)toast('Menyiapkan Berita Acara '+label+'…');
   try{
-    const result=await runServer('apiPrepareLoanBeritaAcara',loanGroupId,type);
+    const result=await runServerWithTimeout_(60000,'apiPrepareLoanBeritaAcara',loanGroupId,type);
     if($(statusField))$(statusField).textContent=result.message;
     toast(result.message);
     // window.open otomatis (tanpa klik langsung) sering diblokir browser sebagai
