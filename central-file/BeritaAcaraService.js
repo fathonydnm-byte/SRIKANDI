@@ -246,16 +246,33 @@ function fillBeritaAcaraTags_(doc, tags) {
   });
 }
 
-// tableIndex: 0 = tabel daftar arsip pada bagian BERITA ACARA PEMINJAMAN,
-// 1 = tabel pada bagian BERITA ACARA PENGEMBALIAN (urutan tabel dalam
-// dokumen mengikuti urutan bagian yang ditulis appendBeritaAcaraSection_).
-function fillBeritaAcaraItemsTable_(doc, tableIndex, items, condition) {
+// Setiap bagian (Peminjaman/Pengembalian) sebenarnya memuat 2 tabel: tabel
+// daftar arsip DAN tabel tanda tangan (PIHAK KEDUA/PIHAK PERTAMA) — belum
+// termasuk tabel dekoratif apa pun yang mungkin ditambahkan admin di kop
+// surat (mis. baris logo akreditasi). Posisi murni (tables[0], tables[1], …)
+// karena itu TIDAK bisa diandalkan untuk menunjuk tabel daftar arsip yang
+// benar. Fungsi ini mencari tabel berdasarkan ISI header-nya (sel pertama
+// baris pertama = "No.") sehingga tahan terhadap tabel lain di sekitarnya,
+// lalu mengambil tabel ke sectionIndex (0 = bagian Peminjaman, 1 = bagian
+// Pengembalian) di antara tabel yang cocok saja.
+function findBeritaAcaraItemsTables_(body) {
+  return body.getTables().filter(table => {
+    if (table.getNumRows() < 1) return false;
+    const headerRow = table.getRow(0);
+    if (headerRow.getNumCells() < 1) return false;
+    const label = cleanText_(headerRow.getCell(0).getText(), 20).toUpperCase().replace(/\.+$/, '');
+    return label === 'NO';
+  });
+}
+
+function fillBeritaAcaraItemsTable_(doc, sectionIndex, items, condition) {
   const body = doc.getBody();
-  const tables = body.getTables();
-  if (tables.length <= tableIndex) {
-    throw new Error('Tabel daftar arsip bagian ke-' + (tableIndex + 1) + ' tidak ditemukan pada template Berita Acara.');
+  const tables = findBeritaAcaraItemsTables_(body);
+  if (tables.length <= sectionIndex) {
+    throw new Error('Tabel daftar arsip bagian ke-' + (sectionIndex + 1) + ' tidak ditemukan pada template Berita Acara ' +
+      '(header kolom pertama harus tetap berbunyi "No.").');
   }
-  const table = tables[tableIndex];
+  const table = tables[sectionIndex];
   while (table.getNumRows() > 1) table.removeRow(1);
   items.forEach((item, index) => {
     const row = table.appendTableRow();
