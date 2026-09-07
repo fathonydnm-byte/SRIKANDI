@@ -149,6 +149,64 @@ function getDashboardSummary_() {
   };
 }
 
+function getDashboardArchiveOverview_() {
+  const berkas = readObjects_(APP_CONFIG.SHEETS.BERKAS).filter(row =>
+    !isDeleted_(row) &&
+    row.NO_BERKAS_DEFINITIF !== '' &&
+    String(row.STATUS_PEMINDAHAN || '').toUpperCase() !== 'SUDAH DIPINDAHKAN'
+  );
+  const berkasById = {};
+  berkas.forEach(row => berkasById[row.BERKAS_ID] = row);
+  const items = readObjects_(APP_CONFIG.SHEETS.ITEM).filter(row => !isDeleted_(row) && berkasById[row.BERKAS_ID]);
+
+  const itemsByBerkas = {};
+  items.forEach(row => {
+    if (!itemsByBerkas[row.BERKAS_ID]) itemsByBerkas[row.BERKAS_ID] = [];
+    itemsByBerkas[row.BERKAS_ID].push(row);
+  });
+
+  const groups = berkas
+    .slice()
+    .sort((a, b) => Number(a.NO_BERKAS_DEFINITIF || 0) - Number(b.NO_BERKAS_DEFINITIF || 0))
+    .map(parent => {
+      const parentItems = (itemsByBerkas[parent.BERKAS_ID] || [])
+        .slice()
+        .sort((a, b) => Number(a.NO_ITEM_DEFINITIF || 0) - Number(b.NO_ITEM_DEFINITIF || 0));
+      let totalPages = 0;
+      const itemRows = parentItems.map(item => {
+        const pageCount = Number(item.JUMLAH_HALAMAN || 0);
+        totalPages += pageCount;
+        return {
+          itemId: item.ITEM_ID,
+          itemNumber: item.NO_ITEM_DEFINITIF || '',
+          letterNumber: cleanText_(item.NO_SURAT_DISPLAY || displayLetterNumber_(item.NO_SURAT_UTAMA, item.NO_SURAT_ALTERNATIF), 500),
+          description: cleanText_(item.URAIAN_LENGKAP, 2000),
+          pageCount: pageCount,
+          documentDate: item.TANGGAL_NASKAH ? dateKey_(item.TANGGAL_NASKAH) : '',
+          developmentLevel: cleanText_(item.TINGKAT_PERKEMBANGAN, 20),
+          condition: cleanText_(item.KONDISI_FISIK, 100),
+          fileUrl: item.DRIVE_FILE_URL || '',
+          fileStatus: cleanText_(item.DRIVE_FILE_ID, 250) ? 'TERSEDIA' : 'BELUM DIUNGGAH'
+        };
+      });
+      return {
+        berkasId: parent.BERKAS_ID,
+        berkasNumber: parent.NO_BERKAS_DEFINITIF || '',
+        classificationCode: cleanText_(parent.KODE_KLASIFIKASI_SNAPSHOT, 80),
+        title: cleanText_(parent.JUDUL_BERKAS, 500),
+        kurunWaktu: cleanText_(parent.KURUN_WAKTU, 50),
+        location: archiveLocationLabel_(parent),
+        statusRetensi: cleanText_(parent.STATUS_RETENSI, 100),
+        folderUrl: parent.DRIVE_FOLDER_URL || '',
+        itemCount: itemRows.length,
+        totalPages: totalPages,
+        items: itemRows
+      };
+    });
+
+  return {ok: true, groups: groups, generatedAt: nowIso_()};
+}
+
 function createBerkas_(payload) {
   payload = payload || {};
   const lock = LockService.getScriptLock();

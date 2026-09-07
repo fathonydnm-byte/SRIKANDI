@@ -90,6 +90,27 @@
           <article class="stat-card danger"><div class="stat-icon">⚠️</div><div><span>Habis Aktif</span><strong id="statExpired">–</strong></div></article>
         </div>
         <div class="empty-state"><h2>Input berkas dan item dalam satu layar</h2><p>Buat berkas baru atau lanjutkan input item pada berkas yang sudah ada.</p><button class="primary" data-go="input">Mulai Input Arsip</button></div>
+
+        <section class="form-card dashboard-archive-card">
+          <div class="section-heading">
+            <div>
+              <h2>Daftar Isi Berkas</h2>
+              <p>Ringkasan seluruh berkas beserta item arsip aktif — tidak perlu membuka spreadsheet.</p>
+            </div>
+            <button type="button" id="refreshDashboardArchive" class="secondary">Segarkan Data</button>
+          </div>
+          <div class="dashboard-archive-toolbar">
+            <label class="field">
+              <input id="dashboardArchiveSearch" autocomplete="off" maxlength="250" placeholder="Cari nomor berkas, judul, kode klasifikasi, atau uraian item">
+            </label>
+            <div class="dashboard-archive-actions">
+              <button type="button" id="expandAllDashboardArchive" class="secondary">Buka Semua</button>
+              <button type="button" id="collapseAllDashboardArchive" class="secondary">Tutup Semua</button>
+            </div>
+          </div>
+          <div id="dashboardArchiveEmpty" class="search-empty">Memuat daftar berkas dan item…</div>
+          <div id="dashboardArchiveList" class="dashboard-archive-list" hidden></div>
+        </section>
       </section>
 
       <section id="receiptsPage" class="page">

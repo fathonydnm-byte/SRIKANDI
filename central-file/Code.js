@@ -310,6 +310,10 @@ function apiGetMasterLog(limit) {
   return getMasterLog_(limit);
 }
 
+function apiGetDashboardArchiveOverview() {
+  return getDashboardArchiveOverview_();
+}
+
 function apiGetFolderLabelOptions() {
   return getFolderLabelOptions_();
 }

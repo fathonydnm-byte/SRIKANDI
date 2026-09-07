@@ -1,5 +1,5 @@
 <script>
-const state={bootstrap:null,bootstrapRequestId:0,pendingUpload:null,lockedBerkasId:'',lockedBerkasLabel:'',deletionOptions:null,editOptions:null,deletionUpload:null,editUpload:null,mediaOptions:null,mediaUpload:null,searchResults:null,labelOptions:null,selectedLabelIds:new Set(),retentionOptions:null,selectedRetentionIds:new Set(),transferSubmissionUpload:null,loanOptions:null,loanOptionsPromise:null,loanUpload:null,selectedLoanItemIds:new Set(),selectedReturnLoanId:'',receiptOptions:null,receiptUpload:null,receiptCancelUpload:null,receiptItemSequence:0,receiptSaveRequestId:'',receiptFilingOptions:null,selectedReceiptItemIds:new Set(),receiptFilingRequestId:'',inputSourceMode:'RECEIPT',spotlightResults:[],spotlightQuery:''};
+const state={bootstrap:null,bootstrapRequestId:0,pendingUpload:null,lockedBerkasId:'',lockedBerkasLabel:'',deletionOptions:null,editOptions:null,deletionUpload:null,editUpload:null,mediaOptions:null,mediaUpload:null,searchResults:null,labelOptions:null,selectedLabelIds:new Set(),retentionOptions:null,selectedRetentionIds:new Set(),transferSubmissionUpload:null,loanOptions:null,loanOptionsPromise:null,loanUpload:null,selectedLoanItemIds:new Set(),selectedReturnLoanId:'',receiptOptions:null,receiptUpload:null,receiptCancelUpload:null,receiptItemSequence:0,receiptSaveRequestId:'',receiptFilingOptions:null,selectedReceiptItemIds:new Set(),receiptFilingRequestId:'',inputSourceMode:'RECEIPT',spotlightResults:[],spotlightQuery:'',dashboardArchiveOverview:null,dashboardArchiveExpanded:new Set()};
 const ARCHIVE_MEDIA_MAX_BYTES=100*1024*1024;
 const $=id=>document.getElementById(id);
 let loadingStageTimers=[];
@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   bindMasterLogPage();
   bindSpotlightSearch();
   bindNavDropdown();
+  bindDashboardArchiveList();
   loadBootstrap();
 });
 
@@ -84,6 +85,7 @@ async function loadBootstrap(preferredBerkasId){
     renderDashboard();
     renderClassification('ROOT','primaryClass');
     renderBerkasOptions(preferredBerkasId||state.lockedBerkasId);
+    loadDashboardArchiveOverview();
   }catch(e){toast(e.message,true)}
 }
 
@@ -94,6 +96,105 @@ function renderDashboard(){
   $('statLoan').textContent=d.activeLoans;
   $('statDue').textContent=d.retentionDueSoon;
   $('statExpired').textContent=d.expiredRetention;
+}
+
+/* ===== Dashboard: Daftar Isi Berkas (gabungan Daftar Berkas + Daftar Isi Berkas) ===== */
+function bindDashboardArchiveList(){
+  $('refreshDashboardArchive').addEventListener('click',()=>loadDashboardArchiveOverview(true));
+  $('dashboardArchiveSearch').addEventListener('input',renderDashboardArchiveList_);
+  $('expandAllDashboardArchive').addEventListener('click',()=>{
+    (state.dashboardArchiveOverview||[]).forEach(group=>state.dashboardArchiveExpanded.add(group.berkasId));
+    renderDashboardArchiveList_();
+  });
+  $('collapseAllDashboardArchive').addEventListener('click',()=>{
+    state.dashboardArchiveExpanded.clear();
+    renderDashboardArchiveList_();
+  });
+  $('dashboardArchiveList').addEventListener('click',event=>{
+    const header=event.target.closest('[data-toggle-berkas-id]');
+    if(!header)return;
+    const berkasId=header.dataset.toggleBerkasId;
+    if(state.dashboardArchiveExpanded.has(berkasId))state.dashboardArchiveExpanded.delete(berkasId);
+    else state.dashboardArchiveExpanded.add(berkasId);
+    renderDashboardArchiveList_();
+  });
+}
+
+async function loadDashboardArchiveOverview(force){
+  if(state.dashboardArchiveOverview&&!force)return;
+  $('dashboardArchiveEmpty').hidden=false;
+  $('dashboardArchiveEmpty').textContent='Memuat daftar berkas dan item…';
+  $('dashboardArchiveList').hidden=true;
+  try{
+    const response=await runServer('apiGetDashboardArchiveOverview');
+    state.dashboardArchiveOverview=response.groups||[];
+    renderDashboardArchiveList_();
+  }catch(error){
+    state.dashboardArchiveOverview=null;
+    $('dashboardArchiveEmpty').hidden=false;
+    $('dashboardArchiveEmpty').textContent='Gagal memuat daftar berkas: '+error.message;
+    toast(error.message,true);
+  }
+}
+
+function renderDashboardArchiveList_(){
+  const groups=state.dashboardArchiveOverview;
+  if(!groups)return;
+  const term=normalizeFolderLabelFilter_($('dashboardArchiveSearch').value);
+  const tokens=term.split(' ').filter(Boolean);
+  const filtered=!tokens.length?groups:groups.filter(group=>{
+    const berkasCorpus=normalizeFolderLabelFilter_([group.berkasNumber,group.title,group.classificationCode,group.location].join(' '));
+    if(tokens.every(token=>berkasCorpus.includes(token)))return true;
+    return group.items.some(item=>{
+      const itemCorpus=normalizeFolderLabelFilter_([item.itemNumber,item.letterNumber,item.description].join(' '));
+      return tokens.every(token=>itemCorpus.includes(token));
+    });
+  });
+  $('dashboardArchiveEmpty').hidden=filtered.length>0;
+  $('dashboardArchiveList').hidden=filtered.length===0;
+  if(!filtered.length){
+    $('dashboardArchiveEmpty').textContent=groups.length?'Tidak ada berkas atau item yang cocok dengan pencarian.':'Belum ada berkas aktif.';
+    return;
+  }
+  $('dashboardArchiveList').innerHTML=filtered.map(renderDashboardArchiveGroup_).join('');
+}
+
+function renderDashboardArchiveGroup_(group){
+  const open=state.dashboardArchiveExpanded.has(group.berkasId);
+  const retensiText=group.statusRetensi||'–';
+  const retensiClass=/HABIS/.test(retensiText)?'danger':/^H-/.test(retensiText)?'warning':retensiText==='AKTIF'?'success':'';
+  const itemsHtml=group.items.length
+    ? '<table class="dashboard-archive-item-table"><thead><tr>'+
+      '<th>No. Item</th><th>No. Surat</th><th>Uraian</th><th>Halaman</th><th>Tanggal</th><th>Perkembangan</th><th>Alih Media</th>'+
+      '</tr></thead><tbody>'+group.items.map(renderDashboardArchiveItemRow_).join('')+'</tbody></table>'
+    : '<div class="dashboard-archive-empty-items">Belum ada item pada berkas ini.</div>';
+  return '<div class="dashboard-archive-group'+(open?' open':'')+'">'+
+    '<button type="button" class="dashboard-archive-group-header" data-toggle-berkas-id="'+escapeHtml(group.berkasId)+'">'+
+      '<span class="dashboard-archive-caret">▸</span>'+
+      '<div class="dashboard-archive-group-main"><strong>'+escapeHtml(group.berkasNumber)+' — '+escapeHtml(group.title)+'</strong>'+
+      '<span>'+escapeHtml(group.classificationCode||'–')+' · '+escapeHtml(group.kurunWaktu||'–')+' · '+escapeHtml(group.location)+'</span></div>'+
+      '<div class="dashboard-archive-group-meta">'+
+        '<span>'+group.itemCount+' item · '+group.totalPages+' lembar</span>'+
+        '<span class="status-badge'+(retensiClass?' '+retensiClass:'')+'">'+escapeHtml(retensiText)+'</span>'+
+      '</div>'+
+    '</button>'+
+    '<div class="dashboard-archive-items">'+itemsHtml+'</div>'+
+  '</div>';
+}
+
+function renderDashboardArchiveItemRow_(item){
+  const fileCell=item.fileUrl
+    ? '<a class="search-link" href="'+escapeHtml(item.fileUrl)+'" target="_blank" rel="noopener">Buka PDF</a>'
+    : '<span class="status-badge warning">Belum diunggah</span>';
+  return '<tr>'+
+    '<td>'+escapeHtml(item.itemNumber)+'</td>'+
+    '<td>'+escapeHtml(item.letterNumber||'Tanpa nomor surat')+'</td>'+
+    '<td>'+escapeHtml(item.description)+'</td>'+
+    '<td>'+escapeHtml(item.pageCount)+'</td>'+
+    '<td>'+escapeHtml(formatArchiveDate(item.documentDate))+'</td>'+
+    '<td>'+escapeHtml(item.developmentLevel||'–')+'</td>'+
+    '<td>'+fileCell+'</td>'+
+  '</tr>';
 }
 
 function renderBerkasOptions(preferredId){
