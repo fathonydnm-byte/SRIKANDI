@@ -24,15 +24,20 @@
         <div class="nav-section-title">Pencarian &amp; Registrasi</div>
         <button class="nav-button" data-page="search"><span class="nav-icon">🔍</span><span class="nav-label">Pencarian Arsip</span></button>
 
-        <div class="nav-group-title">📄 Penciptaan Arsip</div>
-        <button class="nav-button nav-sub" data-page="receipts"><span class="nav-label">Penerimaan Naskah</span></button>
-        <button class="nav-button nav-sub" data-page="input"><span class="nav-label">Registrasi Berkas Baru</span></button>
-        <button class="nav-button nav-sub" data-page="labels"><span class="nav-label">Cetak Label F4</span></button>
+        <div class="nav-group-title">Penciptaan Arsip</div>
+        <button class="nav-button" data-page="receipts"><span class="nav-icon">📥</span><span class="nav-label">Penerimaan Naskah</span></button>
+        <button class="nav-button" data-page="input"><span class="nav-icon">🗂️</span><span class="nav-label">Registrasi Berkas Baru</span></button>
+        <button class="nav-button" data-page="labels"><span class="nav-icon">🏷️</span><span class="nav-label">Cetak Lidah Folder</span></button>
 
-        <div class="nav-group-title">📁 Pemeliharaan Arsip</div>
-        <button class="nav-button nav-sub" data-page="edit"><span class="nav-label">Kelola Informasi Arsip</span></button>
-        <button class="nav-button nav-sub" data-page="deletion"><span class="nav-label">Koreksi &amp; Pembatalan</span></button>
-        <button class="nav-button nav-sub" data-page="media"><span class="nav-label">Alih Media Digital</span></button>
+        <div class="nav-group-title">Pemeliharaan Arsip</div>
+        <div class="nav-dropdown">
+          <button type="button" class="nav-button nav-dropdown-toggle" id="navKelolaToggle"><span class="nav-icon">⚙️</span><span class="nav-label">Kelola Informasi Arsip</span><span class="nav-caret">▾</span></button>
+          <div class="nav-dropdown-menu" id="navKelolaMenu" hidden>
+            <button class="nav-button nav-sub" data-page="edit"><span class="nav-label">Perubahan Arsip</span></button>
+            <button class="nav-button nav-sub" data-page="deletion"><span class="nav-label">Penghapusan Arsip</span></button>
+            <button class="nav-button nav-sub" data-page="media"><span class="nav-label">Alih Media Arsip</span></button>
+          </div>
+        </div>
 
         <div class="nav-section-title">Sirkulasi &amp; Retensi</div>
         <button class="nav-button" data-page="loans"><span class="nav-icon">📋</span><span class="nav-label">Peminjaman Arsip</span></button>
@@ -68,12 +73,12 @@
       <div id="subNavTabsPenciptaan" class="sub-nav-tabs" hidden>
         <button type="button" class="sub-tab-btn" data-page="receipts">1. Penerimaan Naskah</button>
         <button type="button" class="sub-tab-btn" data-page="input">2. Registrasi Berkas Baru</button>
-        <button type="button" class="sub-tab-btn" data-page="labels">3. Cetak Label F4</button>
+        <button type="button" class="sub-tab-btn" data-page="labels">3. Cetak Lidah Folder</button>
       </div>
       <div id="subNavTabsPemeliharaan" class="sub-nav-tabs" hidden>
-        <button type="button" class="sub-tab-btn" data-page="edit">1. Kelola Informasi Arsip</button>
-        <button type="button" class="sub-tab-btn" data-page="deletion">2. Koreksi &amp; Pembatalan</button>
-        <button type="button" class="sub-tab-btn" data-page="media">3. Alih Media Digital</button>
+        <button type="button" class="sub-tab-btn" data-page="edit">1. Perubahan Arsip</button>
+        <button type="button" class="sub-tab-btn" data-page="deletion">2. Penghapusan Arsip</button>
+        <button type="button" class="sub-tab-btn" data-page="media">3. Alih Media Arsip</button>
       </div>
 
       <section id="dashboardPage" class="page active">

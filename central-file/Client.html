@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   bindDeletionForm();
   bindMasterLogPage();
   bindSpotlightSearch();
+  bindNavDropdown();
   loadBootstrap();
 });
 
@@ -118,6 +119,16 @@ function bindNavigation(){
 
 const NAV_GROUPS_={receipts:'Penciptaan Arsip',input:'Penciptaan Arsip',labels:'Penciptaan Arsip',edit:'Pemeliharaan Arsip',deletion:'Pemeliharaan Arsip',media:'Pemeliharaan Arsip'};
 const NAV_SUBTABS_={receipts:'subNavTabsPenciptaan',input:'subNavTabsPenciptaan',labels:'subNavTabsPenciptaan',edit:'subNavTabsPemeliharaan',deletion:'subNavTabsPemeliharaan',media:'subNavTabsPemeliharaan'};
+const NAV_DROPDOWN_PAGES_=['edit','deletion','media'];
+
+function bindNavDropdown(){
+  const toggle=$('navKelolaToggle');
+  if(!toggle)return;
+  toggle.addEventListener('click',()=>{
+    const menu=$('navKelolaMenu');
+    menu.hidden=!menu.hidden;
+  });
+}
 
 function showPage(page){
   const titles={dashboard:['Dashboard','Ringkasan kondisi arsip Anda.'],receipts:['Penerimaan Arsip','Catat penyerahan fisik dan buat tanda terima secara otomatis.'],input:['Input Arsip','Buat berkas baru atau lanjutkan daftar isi berkas yang sudah ada.'],media:['Alih Media','Lengkapi PDF untuk item arsip yang sudah tersimpan.'],search:['Cari Arsip','Temukan arsip aktif dan akses alih medianya dengan cepat.'],labels:['Cetak Lidah Folder','Buat PDF label folder fisik dari nomor definitif terbaru.'],retention:['Usul Pemindahan','Pantau retensi aktif dan siapkan draft usul tanpa mengubah fase arsip.'],loans:['Peminjaman','Catat, pantau, dan selesaikan peminjaman berkas maupun item arsip.'],edit:['Edit Arsip','Perbaiki metadata dan file alih media item yang sudah tersimpan.'],deletion:['Koreksi & Pembatalan','Koreksi atau batalkan data arsip secara terkendali dan tercatat.'],masterlog:['Master Log Perubahan','Jejak audit permanen seluruh aktivitas petugas arsiparis.']};
@@ -135,6 +146,11 @@ function showPage(page){
   });
   const activeSubtabWrap=NAV_SUBTABS_[page];
   if(activeSubtabWrap&&$(activeSubtabWrap))$(activeSubtabWrap).hidden=false;
+  if($('navKelolaToggle')){
+    const isKelolaActive=NAV_DROPDOWN_PAGES_.indexOf(page)!==-1;
+    $('navKelolaToggle').classList.toggle('active',isKelolaActive);
+    if(isKelolaActive)$('navKelolaMenu').hidden=false;
+  }
   if(page==='receipts')loadReceiptOptions();
   if(page==='input')loadReceiptFilingOptions();
   if(page==='media')loadMediaOptions();
