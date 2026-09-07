@@ -15,6 +15,8 @@ document.addEventListener('DOMContentLoaded',()=>{
   bindLoanPage();
   bindEditForm();
   bindDeletionForm();
+  bindMasterLogPage();
+  bindSpotlightSearch();
   loadBootstrap();
 });
 
@@ -68,6 +70,11 @@ async function loadBootstrap(preferredBerkasId){
       }
     }
     $('userBadge').textContent=state.bootstrap.user;
+    if($('userBadgeTop'))$('userBadgeTop').textContent=state.bootstrap.user;
+    if($('userAvatar')){
+      const initialsSource=String(state.bootstrap.user||'?').trim();
+      $('userAvatar').textContent=initialsSource?initialsSource.charAt(0).toUpperCase():'?';
+    }
     if($('instanceUnitName')){
       const instance=state.bootstrap.instance||{};
       $('instanceUnitName').textContent=instance.unitName||instance.unitCode||'UINSA';
@@ -109,13 +116,25 @@ function bindNavigation(){
   document.querySelectorAll('[data-page],[data-go]').forEach(button=>button.addEventListener('click',()=>showPage(button.dataset.page||button.dataset.go)));
 }
 
+const NAV_GROUPS_={receipts:'Penciptaan Arsip',input:'Penciptaan Arsip',labels:'Penciptaan Arsip',edit:'Pemeliharaan Arsip',deletion:'Pemeliharaan Arsip',media:'Pemeliharaan Arsip'};
+const NAV_SUBTABS_={receipts:'subNavTabsPenciptaan',input:'subNavTabsPenciptaan',labels:'subNavTabsPenciptaan',edit:'subNavTabsPemeliharaan',deletion:'subNavTabsPemeliharaan',media:'subNavTabsPemeliharaan'};
+
 function showPage(page){
-  const titles={dashboard:['Dashboard','Ringkasan kondisi arsip Anda.'],receipts:['Penerimaan Arsip','Catat penyerahan fisik dan buat tanda terima secara otomatis.'],input:['Input Arsip','Buat berkas baru atau lanjutkan daftar isi berkas yang sudah ada.'],media:['Alih Media','Lengkapi PDF untuk item arsip yang sudah tersimpan.'],search:['Cari Arsip','Temukan arsip aktif dan akses alih medianya dengan cepat.'],labels:['Cetak Lidah Folder','Buat PDF label folder fisik dari nomor definitif terbaru.'],retention:['Usul Pemindahan','Pantau retensi aktif dan siapkan draft usul tanpa mengubah fase arsip.'],loans:['Peminjaman','Catat, pantau, dan selesaikan peminjaman berkas maupun item arsip.'],edit:['Edit Arsip','Perbaiki metadata dan file alih media item yang sudah tersimpan.'],deletion:['Koreksi & Pembatalan','Koreksi atau batalkan data arsip secara terkendali dan tercatat.']};
+  const titles={dashboard:['Dashboard','Ringkasan kondisi arsip Anda.'],receipts:['Penerimaan Arsip','Catat penyerahan fisik dan buat tanda terima secara otomatis.'],input:['Input Arsip','Buat berkas baru atau lanjutkan daftar isi berkas yang sudah ada.'],media:['Alih Media','Lengkapi PDF untuk item arsip yang sudah tersimpan.'],search:['Cari Arsip','Temukan arsip aktif dan akses alih medianya dengan cepat.'],labels:['Cetak Lidah Folder','Buat PDF label folder fisik dari nomor definitif terbaru.'],retention:['Usul Pemindahan','Pantau retensi aktif dan siapkan draft usul tanpa mengubah fase arsip.'],loans:['Peminjaman','Catat, pantau, dan selesaikan peminjaman berkas maupun item arsip.'],edit:['Edit Arsip','Perbaiki metadata dan file alih media item yang sudah tersimpan.'],deletion:['Koreksi & Pembatalan','Koreksi atau batalkan data arsip secara terkendali dan tercatat.'],masterlog:['Master Log Perubahan','Jejak audit permanen seluruh aktivitas petugas arsiparis.']};
   document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('.nav-button').forEach(x=>x.classList.toggle('active',x.dataset.page===page));
+  document.querySelectorAll('.sub-tab-btn').forEach(x=>x.classList.toggle('active',x.dataset.page===page));
   $(page+'Page').classList.add('active');
   $('pageTitle').textContent=titles[page][0];
   $('pageSubtitle').textContent=titles[page][1];
+  if($('pageTitleCrumb'))$('pageTitleCrumb').textContent=titles[page][0];
+  if($('crumbGroup'))$('crumbGroup').textContent=NAV_GROUPS_[page]||'Central File';
+  Object.keys(NAV_SUBTABS_).forEach(key=>{
+    const wrapId=NAV_SUBTABS_[key];
+    if($(wrapId))$(wrapId).hidden=true;
+  });
+  const activeSubtabWrap=NAV_SUBTABS_[page];
+  if(activeSubtabWrap&&$(activeSubtabWrap))$(activeSubtabWrap).hidden=false;
   if(page==='receipts')loadReceiptOptions();
   if(page==='input')loadReceiptFilingOptions();
   if(page==='media')loadMediaOptions();
@@ -124,6 +143,7 @@ function showPage(page){
   if(page==='loans')loadLoanOptions();
   if(page==='edit')loadEditOptions();
   if(page==='deletion')loadDeletionOptions();
+  if(page==='masterlog')loadMasterLog();
 }
 
 function bindReceiptPage(){
@@ -3391,4 +3411,128 @@ function resetNewBerkasFields(){
 
 function escapeHtml(value){return String(value).replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]))}
 function toast(message,error=false){const el=$('toast');el.textContent=message;el.className='toast show'+(error?' error':'');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.className='toast',4000)}
+
+/* ===== Master Log Perubahan (jejak audit, otorisasi server) ===== */
+function bindMasterLogPage(){
+  $('refreshMasterLog').addEventListener('click',()=>loadMasterLog(true));
+}
+
+let masterLogLoadedOnce_=false;
+async function loadMasterLog(forceReload){
+  if(masterLogLoadedOnce_&&!forceReload)return;
+  $('masterLogLocked').hidden=true;
+  $('masterLogTableWrap').hidden=true;
+  $('refreshMasterLog').hidden=true;
+  $('masterLogEmpty').hidden=false;
+  $('masterLogEmpty').textContent='Memuat jejak audit…';
+  $('masterLogSubtitle').textContent='Memeriksa hak akses…';
+  try{
+    const response=await runServer('apiGetMasterLog',200);
+    masterLogLoadedOnce_=true;
+    if(!response.authorized){
+      $('masterLogEmpty').hidden=true;
+      $('masterLogLocked').hidden=false;
+      $('masterLogDeniedMessage').textContent=response.message||'Hanya administrator unit yang dapat membuka Master Log Perubahan.';
+      $('masterLogSubtitle').textContent='Akses ditolak.';
+      return;
+    }
+    $('refreshMasterLog').hidden=false;
+    $('masterLogSubtitle').textContent='Jejak audit permanen seluruh aktivitas petugas arsiparis.';
+    const rows=response.rows||[];
+    $('masterLogEmpty').hidden=rows.length>0;
+    $('masterLogTableWrap').hidden=rows.length===0;
+    if(!rows.length){
+      $('masterLogEmpty').textContent='Belum ada aktivitas tercatat.';
+      return;
+    }
+    $('masterLogResultsBody').innerHTML=rows.map(renderMasterLogRow_).join('');
+  }catch(error){
+    masterLogLoadedOnce_=false;
+    $('masterLogEmpty').hidden=false;
+    $('masterLogEmpty').textContent='Gagal memuat Master Log: '+error.message;
+    $('masterLogSubtitle').textContent='Terjadi kesalahan.';
+    toast(error.message,true);
+  }
+}
+
+function renderMasterLogRow_(row){
+  const statusClass=String(row.status||'').toUpperCase()==='BERHASIL'?'success':(String(row.status||'').toUpperCase()==='GAGAL'?'danger':'warning');
+  return '<tr>'+
+    '<td>'+escapeHtml(row.timestamp||'–')+'</td>'+
+    '<td>'+escapeHtml(row.userEmail||'–')+'</td>'+
+    '<td>'+escapeHtml(row.modul||'–')+'</td>'+
+    '<td>'+escapeHtml(row.jenisObjek||'–')+(row.objekId?' <span class="search-cell-sub">'+escapeHtml(row.objekId)+'</span>':'')+'</td>'+
+    '<td><span class="status-badge '+statusClass+'">'+escapeHtml(row.aksi||'–')+'</span></td>'+
+    '<td><div class="search-description">'+escapeHtml(row.ringkasan||'–')+'</div>'+(row.alasan?'<span class="search-cell-sub">Alasan: '+escapeHtml(row.alasan)+'</span>':'')+'</td>'+
+  '</tr>';
+}
+
+/* ===== Spotlight Search (Ctrl+K, terhubung ke pencarian arsip asli) ===== */
+let spotlightDebounceTimer_=null;
+function bindSpotlightSearch(){
+  document.addEventListener('keydown',event=>{
+    if((event.ctrlKey||event.metaKey)&&String(event.key).toLowerCase()==='k'){
+      event.preventDefault();
+      openSpotlightSearch();
+      return;
+    }
+    if(event.key==='Escape'&&$('spotlightModal').classList.contains('open')){
+      closeSpotlightSearch();
+    }
+  });
+  $('spotlightModal').addEventListener('click',event=>{
+    if(event.target===$('spotlightModal'))closeSpotlightSearch();
+  });
+  $('spotlightInput').addEventListener('input',()=>{
+    clearTimeout(spotlightDebounceTimer_);
+    spotlightDebounceTimer_=setTimeout(runSpotlightSearch_,300);
+  });
+  $('spotlightResults').addEventListener('click',event=>{
+    const row=event.target.closest('[data-spotlight-page]');
+    if(!row)return;
+    closeSpotlightSearch();
+    showPage(row.dataset.spotlightPage);
+  });
+}
+
+function openSpotlightSearch(){
+  $('spotlightModal').classList.add('open');
+  $('spotlightInput').value='';
+  $('spotlightInput').focus();
+  $('spotlightResults').innerHTML='<div class="spotlight-empty">Ketik minimal 2 huruf untuk mulai mencari.</div>';
+}
+
+function closeSpotlightSearch(){
+  $('spotlightModal').classList.remove('open');
+  clearTimeout(spotlightDebounceTimer_);
+}
+
+async function runSpotlightSearch_(){
+  const query=$('spotlightInput').value.trim();
+  if(query.length<2){
+    $('spotlightResults').innerHTML='<div class="spotlight-empty">Ketik minimal 2 huruf untuk mulai mencari.</div>';
+    return;
+  }
+  $('spotlightResults').innerHTML='<div class="spotlight-empty">Mencari…</div>';
+  try{
+    const response=await runServer('apiSearchArchive',{query,limit:8});
+    const rows=response&&response.results||[];
+    if(!rows.length){
+      $('spotlightResults').innerHTML='<div class="spotlight-empty">Tidak ada arsip aktif yang cocok dengan "'+escapeHtml(query)+'".</div>';
+      return;
+    }
+    $('spotlightResults').innerHTML=rows.map(renderSpotlightRow_).join('')+
+      '<div class="spotlight-row spotlight-see-all" data-spotlight-page="search"><span class="spotlight-label-inline">Lihat semua hasil di halaman Pencarian Arsip →</span></div>';
+  }catch(error){
+    $('spotlightResults').innerHTML='<div class="spotlight-empty">Pencarian gagal: '+escapeHtml(error.message)+'</div>';
+  }
+}
+
+function renderSpotlightRow_(row){
+  return '<div class="spotlight-row" data-spotlight-page="search">'+
+    '<div><strong>'+escapeHtml(row.berkasNumber)+' / '+escapeHtml(row.itemNumber)+'</strong>'+
+    '<span class="spotlight-sub">'+escapeHtml(row.description)+'</span></div>'+
+    '<span class="spotlight-sub">'+escapeHtml(row.letterNumber||'Tanpa nomor surat')+'</span>'+
+  '</div>';
+}
 </script>

@@ -306,6 +306,10 @@ function apiSearchArchive(criteria) {
   return searchArchive_(criteria);
 }
 
+function apiGetMasterLog(limit) {
+  return getMasterLog_(limit);
+}
+
 function apiGetFolderLabelOptions() {
   return getFolderLabelOptions_();
 }

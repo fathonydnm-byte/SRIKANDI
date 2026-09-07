@@ -8,46 +8,91 @@
   <div id="app" class="app-shell">
     <aside class="sidebar">
       <div class="brand">
-        <span class="brand-mark">A</span>
-        <div><strong>Arsip Aktif</strong><small id="instanceUnitName">Memuat unit…</small></div>
+        <div class="brand-mark">
+          <svg viewBox="0 0 100 100" width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect x="20" y="20" width="60" height="60" rx="3" stroke="#0B4D2C" stroke-width="6" fill="none"/>
+            <rect x="20" y="20" width="60" height="60" rx="3" transform="rotate(45 50 50)" stroke="#0B4D2C" stroke-width="6" fill="none"/>
+            <path d="M42 62V44C42 40 45 36 48 36V62" stroke="#C4A163" stroke-width="4.5" stroke-linecap="round"/>
+            <path d="M54 62V38C54 34 58 32 62 36V62" stroke="#C4A163" stroke-width="4.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div><strong>Central File</strong><small id="instanceUnitName">Memuat unit…</small></div>
       </div>
       <nav>
-        <button class="nav-button active" data-page="dashboard">Dashboard</button>
-        <button class="nav-button" data-page="receipts">Penerimaan Arsip</button>
-        <button class="nav-button" data-page="input">Input Arsip</button>
-        <button class="nav-button" data-page="media">Alih Media</button>
-        <button class="nav-button" data-page="edit">Edit Arsip</button>
-        <button class="nav-button" data-page="deletion">Koreksi &amp; Pembatalan</button>
-        <button class="nav-button" data-page="search">Cari Arsip</button>
-        <button class="nav-button" data-page="labels">Cetak Lidah Folder</button>
-        <button class="nav-button" data-page="retention">Usul Pemindahan</button>
-        <button class="nav-button" data-page="loans">Peminjaman</button>
+        <button class="nav-button" data-page="dashboard"><span class="nav-icon">🏠</span><span class="nav-label">Dashboard</span></button>
+
+        <div class="nav-section-title">Pencarian &amp; Registrasi</div>
+        <button class="nav-button" data-page="search"><span class="nav-icon">🔍</span><span class="nav-label">Pencarian Arsip</span></button>
+
+        <div class="nav-group-title">📄 Penciptaan Arsip</div>
+        <button class="nav-button nav-sub" data-page="receipts"><span class="nav-label">Penerimaan Naskah</span></button>
+        <button class="nav-button nav-sub" data-page="input"><span class="nav-label">Registrasi Berkas Baru</span></button>
+        <button class="nav-button nav-sub" data-page="labels"><span class="nav-label">Cetak Label F4</span></button>
+
+        <div class="nav-group-title">📁 Pemeliharaan Arsip</div>
+        <button class="nav-button nav-sub" data-page="edit"><span class="nav-label">Kelola Informasi Arsip</span></button>
+        <button class="nav-button nav-sub" data-page="deletion"><span class="nav-label">Koreksi &amp; Pembatalan</span></button>
+        <button class="nav-button nav-sub" data-page="media"><span class="nav-label">Alih Media Digital</span></button>
+
+        <div class="nav-section-title">Sirkulasi &amp; Retensi</div>
+        <button class="nav-button" data-page="loans"><span class="nav-icon">📋</span><span class="nav-label">Peminjaman Arsip</span></button>
+        <button class="nav-button" data-page="retention"><span class="nav-icon">📦</span><span class="nav-label">Penyusutan Arsip</span></button>
+
+        <div class="nav-section-title">Keamanan &amp; Audit</div>
+        <button class="nav-button" data-page="masterlog"><span class="nav-icon">🔒</span><span class="nav-label">Master Log Perubahan</span></button>
       </nav>
+      <div class="sidebar-footer">
+        <div class="sidebar-avatar" id="userAvatar">–</div>
+        <div class="sidebar-footer-meta">
+          <strong id="userBadge">Memuat…</strong>
+          <span>Central File</span>
+        </div>
+      </div>
     </aside>
 
     <main class="content">
       <header class="topbar">
-        <div><h1 id="pageTitle">Dashboard</h1><p id="pageSubtitle">Ringkasan kondisi arsip Anda.</p></div>
-        <div id="userBadge" class="user-badge">Memuat…</div>
+        <div class="topbar-crumbs"><span id="crumbGroup">Central File</span><span>/</span><strong id="pageTitleCrumb">Dashboard</strong></div>
+        <div class="topbar-search" onclick="openSpotlightSearch()">
+          <span>🔍 Cari cepat nomor berkas, uraian, peminjam…</span>
+          <span class="kbd">Ctrl+K</span>
+        </div>
+        <div class="topbar-actions">
+          <div id="userBadgeTop" class="user-badge">Memuat…</div>
+        </div>
       </header>
+
+      <div class="content-scroll">
+      <h1 id="pageTitle">Dashboard</h1><p id="pageSubtitle">Ringkasan kondisi arsip Anda.</p>
+
+      <div id="subNavTabsPenciptaan" class="sub-nav-tabs" hidden>
+        <button type="button" class="sub-tab-btn" data-page="receipts">1. Penerimaan Naskah</button>
+        <button type="button" class="sub-tab-btn" data-page="input">2. Registrasi Berkas Baru</button>
+        <button type="button" class="sub-tab-btn" data-page="labels">3. Cetak Label F4</button>
+      </div>
+      <div id="subNavTabsPemeliharaan" class="sub-nav-tabs" hidden>
+        <button type="button" class="sub-tab-btn" data-page="edit">1. Kelola Informasi Arsip</button>
+        <button type="button" class="sub-tab-btn" data-page="deletion">2. Koreksi &amp; Pembatalan</button>
+        <button type="button" class="sub-tab-btn" data-page="media">3. Alih Media Digital</button>
+      </div>
 
       <section id="dashboardPage" class="page active">
         <div class="stat-grid">
-          <article class="stat-card"><span>Total Berkas</span><strong id="statBerkas">–</strong></article>
-          <article class="stat-card"><span>Total Item</span><strong id="statItem">–</strong></article>
-          <article class="stat-card"><span>Sedang Dipinjam</span><strong id="statLoan">–</strong></article>
-          <article class="stat-card warning"><span>Retensi H-7</span><strong id="statDue">–</strong></article>
-          <article class="stat-card danger"><span>Habis Aktif</span><strong id="statExpired">–</strong></article>
+          <article class="stat-card"><div class="stat-icon">📁</div><div><span>Total Berkas</span><strong id="statBerkas">–</strong></div></article>
+          <article class="stat-card"><div class="stat-icon">📄</div><div><span>Total Item</span><strong id="statItem">–</strong></div></article>
+          <article class="stat-card"><div class="stat-icon">📋</div><div><span>Sedang Dipinjam</span><strong id="statLoan">–</strong></div></article>
+          <article class="stat-card warning"><div class="stat-icon">⏱️</div><div><span>Retensi H-7</span><strong id="statDue">–</strong></div></article>
+          <article class="stat-card danger"><div class="stat-icon">⚠️</div><div><span>Habis Aktif</span><strong id="statExpired">–</strong></div></article>
         </div>
         <div class="empty-state"><h2>Input berkas dan item dalam satu layar</h2><p>Buat berkas baru atau lanjutkan input item pada berkas yang sudah ada.</p><button class="primary" data-go="input">Mulai Input Arsip</button></div>
       </section>
 
       <section id="receiptsPage" class="page">
         <div class="receipt-stat-grid">
-          <article class="stat-card"><span>Total Tanda Terima</span><strong id="receiptStatTotal">–</strong></article>
-          <article class="stat-card success"><span>Aktif</span><strong id="receiptStatActive">–</strong></article>
-          <article class="stat-card"><span>Bukti Tertandatangani</span><strong id="receiptStatEvidence">–</strong></article>
-          <article class="stat-card danger"><span>Dibatalkan</span><strong id="receiptStatCancelled">–</strong></article>
+          <article class="stat-card"><div class="stat-icon">📥</div><div><span>Total Tanda Terima</span><strong id="receiptStatTotal">–</strong></div></article>
+          <article class="stat-card success"><div class="stat-icon">✅</div><div><span>Aktif</span><strong id="receiptStatActive">–</strong></div></article>
+          <article class="stat-card"><div class="stat-icon">🖊️</div><div><span>Bukti Tertandatangani</span><strong id="receiptStatEvidence">–</strong></div></article>
+          <article class="stat-card danger"><div class="stat-icon">❌</div><div><span>Dibatalkan</span><strong id="receiptStatCancelled">–</strong></div></article>
         </div>
 
         <form id="receiptForm" class="form-card receipt-form-card">
@@ -419,10 +464,10 @@
 
       <section id="retentionPage" class="page">
         <div class="retention-stat-grid">
-          <article class="stat-card"><span>Masih Aktif</span><strong id="retentionStatActive">–</strong></article>
-          <article class="stat-card warning"><span>H-7</span><strong id="retentionStatDue">–</strong></article>
-          <article class="stat-card danger"><span>Habis Aktif</span><strong id="retentionStatExpired">–</strong></article>
-          <article class="stat-card success"><span>Dalam Usul</span><strong id="retentionStatProposed">–</strong></article>
+          <article class="stat-card"><div class="stat-icon">📦</div><div><span>Masih Aktif</span><strong id="retentionStatActive">–</strong></div></article>
+          <article class="stat-card warning"><div class="stat-icon">⏱️</div><div><span>H-7</span><strong id="retentionStatDue">–</strong></div></article>
+          <article class="stat-card danger"><div class="stat-icon">⚠️</div><div><span>Habis Aktif</span><strong id="retentionStatExpired">–</strong></div></article>
+          <article class="stat-card success"><div class="stat-icon">📑</div><div><span>Dalam Usul</span><strong id="retentionStatProposed">–</strong></div></article>
         </div>
 
         <section class="form-card retention-list-card">
@@ -535,10 +580,10 @@
 
       <section id="loansPage" class="page">
         <div class="loan-stat-grid">
-          <article class="stat-card"><span>Sedang Dipinjam</span><strong id="loanStatActive">–</strong></article>
-          <article class="stat-card danger"><span>Terlambat</span><strong id="loanStatOverdue">–</strong></article>
-          <article class="stat-card"><span>Berkas Dipinjam</span><strong id="loanStatBerkas">–</strong></article>
-          <article class="stat-card"><span>Item Dipinjam</span><strong id="loanStatItems">–</strong></article>
+          <article class="stat-card"><div class="stat-icon">📋</div><div><span>Sedang Dipinjam</span><strong id="loanStatActive">–</strong></div></article>
+          <article class="stat-card danger"><div class="stat-icon">⏱️</div><div><span>Terlambat</span><strong id="loanStatOverdue">–</strong></div></article>
+          <article class="stat-card"><div class="stat-icon">📁</div><div><span>Berkas Dipinjam</span><strong id="loanStatBerkas">–</strong></div></article>
+          <article class="stat-card"><div class="stat-icon">📄</div><div><span>Item Dipinjam</span><strong id="loanStatItems">–</strong></div></article>
         </div>
 
         <form id="loanForm" class="form-card loan-form-card" enctype="multipart/form-data">
@@ -799,6 +844,28 @@
           <div class="form-actions"><span id="deletionStatus" aria-live="polite"></span><button type="submit" id="deleteArchive" class="danger-button">Batalkan dari Arsip Aktif</button></div>
         </form>
       </section>
+
+      <section id="masterlogPage" class="page">
+        <section class="form-card">
+          <div class="section-heading">
+            <div><h2>Jejak Audit Aktivitas Petugas Arsiparis</h2><p id="masterLogSubtitle">Memeriksa hak akses…</p></div>
+            <button type="button" id="refreshMasterLog" class="secondary" hidden>Segarkan Data</button>
+          </div>
+          <div id="masterLogLocked" class="master-log-locked" hidden>
+            <div class="lock-badge">🔒</div>
+            <h2>Area Terproteksi</h2>
+            <p id="masterLogDeniedMessage">Hanya administrator unit yang dapat membuka Master Log Perubahan.</p>
+          </div>
+          <div id="masterLogEmpty" class="search-empty">Memuat jejak audit…</div>
+          <div id="masterLogTableWrap" class="master-log-table-wrap" hidden>
+            <table class="master-log-table">
+              <thead><tr><th>Waktu</th><th>Petugas</th><th>Modul</th><th>Objek</th><th>Aksi</th><th>Ringkasan &amp; Alasan</th></tr></thead>
+              <tbody id="masterLogResultsBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+      </div>
     </main>
   </div>
   <div id="employeeModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="employeeModalTitle">
@@ -825,6 +892,21 @@
       </div>
     </form>
   </div>
+
+  <div id="spotlightModal" class="modal" role="dialog" aria-modal="true" aria-label="Pencarian cepat arsip">
+    <div class="modal-card spotlight-body">
+      <div class="spotlight-input-row">
+        <span>🔍</span>
+        <input type="text" id="spotlightInput" placeholder="Cari cepat nomor berkas, uraian informasi, atau nomor surat…" autocomplete="off">
+        <span class="kbd">ESC</span>
+      </div>
+      <div class="spotlight-label">HASIL TEMU KEMBALI CEPAT</div>
+      <div id="spotlightResults" class="spotlight-results">
+        <div class="spotlight-empty">Ketik minimal 2 huruf untuk mulai mencari.</div>
+      </div>
+    </div>
+  </div>
+
   <div id="loadingOverlay" class="loading-overlay" role="dialog" aria-modal="true" aria-labelledby="loadingTitle" aria-describedby="loadingMessage" hidden>
     <div class="loading-card">
       <span class="loading-spinner" aria-hidden="true"></span>

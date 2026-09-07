@@ -78,6 +78,47 @@ function audit_(action, moduleName, objectType, objectId, summary, reason, statu
   });
 }
 
+function isCentralFileAdmin_() {
+  const settings = readSettings_();
+  const adminEmail = cleanText_(settings.UNIT_ADMIN_EMAIL, 250).toLowerCase();
+  if (!adminEmail) return false;
+  return getCurrentUser_().toLowerCase() === adminEmail;
+}
+
+function getMasterLog_(limit) {
+  if (!isCentralFileAdmin_()) {
+    return {
+      ok: true,
+      authorized: false,
+      message: 'Hanya administrator unit (' + (readSettings_().UNIT_ADMIN_EMAIL || 'belum diatur') + ') yang dapat membuka Master Log Perubahan.'
+    };
+  }
+  const cappedLimit = Math.min(Math.max(Number(limit) || 200, 1), 500);
+  const rows = readObjects_(APP_CONFIG.SHEETS.AUDIT)
+    .sort((a, b) => String(b.TIMESTAMP || '').localeCompare(String(a.TIMESTAMP || '')))
+    .slice(0, cappedLimit)
+    .map(row => ({
+      timestamp: formatAuditTimestamp_(row.TIMESTAMP),
+      userEmail: cleanText_(row.USER_EMAIL, 250),
+      aksi: cleanText_(row.AKSI, 50),
+      modul: cleanText_(row.MODUL, 100),
+      jenisObjek: cleanText_(row.JENIS_OBJEK, 100),
+      objekId: cleanText_(row.OBJEK_ID, 100),
+      ringkasan: cleanText_(row.RINGKASAN, 500),
+      alasan: cleanText_(row.ALASAN, 2000),
+      status: cleanText_(row.STATUS, 30) === 'FAILED' ? 'GAGAL' : 'BERHASIL'
+    }));
+  return {ok: true, authorized: true, rows, generatedAt: nowIso_()};
+}
+
+function formatAuditTimestamp_(value) {
+  const text = String(value || '').trim();
+  if (!text) return '–';
+  const parsed = new Date(text);
+  if (isNaN(parsed.getTime())) return text;
+  return Utilities.formatDate(parsed, APP_CONFIG.TIME_ZONE, 'dd/MM/yyyy HH:mm');
+}
+
 function getDashboardSummary_() {
   const berkas = readObjects_(APP_CONFIG.SHEETS.BERKAS)
     .filter(row => !isDeleted_(row) && String(row.STATUS_PEMINDAHAN || '').toUpperCase() !== 'SUDAH DIPINDAHKAN');
