@@ -912,6 +912,36 @@
     </div>
   </div>
 
+  <div id="archiveDetailModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="archiveDetailTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <h2 id="archiveDetailTitle">Detail Arsip</h2>
+          <p id="archiveDetailSubtitle">–</p>
+        </div>
+        <button type="button" id="closeArchiveDetail" class="icon-button" aria-label="Tutup">&times;</button>
+      </div>
+      <div class="archive-detail-body">
+        <p id="archiveDetailDescription" class="archive-detail-desc">–</p>
+        <div class="archive-detail-grid">
+          <div class="archive-detail-item"><span>Nomor Surat</span><strong id="archiveDetailLetterNumber">–</strong></div>
+          <div class="archive-detail-item"><span>Tanggal Naskah</span><strong id="archiveDetailDate">–</strong></div>
+          <div class="archive-detail-item"><span>Tingkat Perkembangan</span><strong id="archiveDetailDevelopment">–</strong></div>
+          <div class="archive-detail-item"><span>Jumlah Halaman</span><strong id="archiveDetailPageCount">–</strong></div>
+          <div class="archive-detail-item"><span>Kondisi Fisik</span><strong id="archiveDetailCondition">–</strong></div>
+          <div class="archive-detail-item"><span>Kode Klasifikasi</span><strong id="archiveDetailClassification">–</strong></div>
+          <div class="archive-detail-item"><span>Lokasi Fisik</span><strong id="archiveDetailLocation">–</strong></div>
+          <div class="archive-detail-item"><span>Judul Berkas</span><strong id="archiveDetailBerkasTitle">–</strong></div>
+        </div>
+        <div id="archiveDetailBadges" class="archive-detail-badges"></div>
+      </div>
+      <div class="modal-actions">
+        <a id="archiveDetailFolderLink" class="search-link secondary-link" href="#" target="_blank" rel="noopener">Buka Folder Berkas</a>
+        <a id="archiveDetailFileLink" class="search-link" href="#" target="_blank" rel="noopener">Buka PDF Alih Media</a>
+      </div>
+    </div>
+  </div>
+
   <div id="loadingOverlay" class="loading-overlay" role="dialog" aria-modal="true" aria-labelledby="loadingTitle" aria-describedby="loadingMessage" hidden>
     <div class="loading-card">
       <span class="loading-spinner" aria-hidden="true"></span>

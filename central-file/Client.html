@@ -1,5 +1,5 @@
 <script>
-const state={bootstrap:null,bootstrapRequestId:0,pendingUpload:null,lockedBerkasId:'',lockedBerkasLabel:'',deletionOptions:null,editOptions:null,deletionUpload:null,editUpload:null,mediaOptions:null,mediaUpload:null,searchResults:null,labelOptions:null,selectedLabelIds:new Set(),retentionOptions:null,selectedRetentionIds:new Set(),transferSubmissionUpload:null,loanOptions:null,loanOptionsPromise:null,loanUpload:null,selectedLoanItemIds:new Set(),selectedReturnLoanId:'',receiptOptions:null,receiptUpload:null,receiptCancelUpload:null,receiptItemSequence:0,receiptSaveRequestId:'',receiptFilingOptions:null,selectedReceiptItemIds:new Set(),receiptFilingRequestId:'',inputSourceMode:'RECEIPT'};
+const state={bootstrap:null,bootstrapRequestId:0,pendingUpload:null,lockedBerkasId:'',lockedBerkasLabel:'',deletionOptions:null,editOptions:null,deletionUpload:null,editUpload:null,mediaOptions:null,mediaUpload:null,searchResults:null,labelOptions:null,selectedLabelIds:new Set(),retentionOptions:null,selectedRetentionIds:new Set(),transferSubmissionUpload:null,loanOptions:null,loanOptionsPromise:null,loanUpload:null,selectedLoanItemIds:new Set(),selectedReturnLoanId:'',receiptOptions:null,receiptUpload:null,receiptCancelUpload:null,receiptItemSequence:0,receiptSaveRequestId:'',receiptFilingOptions:null,selectedReceiptItemIds:new Set(),receiptFilingRequestId:'',inputSourceMode:'RECEIPT',spotlightResults:[],spotlightQuery:''};
 const ARCHIVE_MEDIA_MAX_BYTES=100*1024*1024;
 const $=id=>document.getElementById(id);
 let loadingStageTimers=[];
@@ -3492,8 +3492,9 @@ function bindSpotlightSearch(){
       openSpotlightSearch();
       return;
     }
-    if(event.key==='Escape'&&$('spotlightModal').classList.contains('open')){
-      closeSpotlightSearch();
+    if(event.key==='Escape'){
+      if($('archiveDetailModal').classList.contains('open')){closeArchiveDetail_();return}
+      if($('spotlightModal').classList.contains('open'))closeSpotlightSearch();
     }
   });
   $('spotlightModal').addEventListener('click',event=>{
@@ -3504,10 +3505,25 @@ function bindSpotlightSearch(){
     spotlightDebounceTimer_=setTimeout(runSpotlightSearch_,300);
   });
   $('spotlightResults').addEventListener('click',event=>{
-    const row=event.target.closest('[data-spotlight-page]');
+    const seeAll=event.target.closest('[data-spotlight-see-all]');
+    if(seeAll){
+      const query=state.spotlightQuery;
+      closeSpotlightSearch();
+      showPage('search');
+      $('searchQuery').value=query;
+      $('searchForm').requestSubmit();
+      return;
+    }
+    const row=event.target.closest('[data-item-id]');
     if(!row)return;
+    const item=state.spotlightResults.find(candidate=>candidate.itemId===row.dataset.itemId);
+    if(!item)return;
     closeSpotlightSearch();
-    showPage(row.dataset.spotlightPage);
+    openArchiveDetail_(item);
+  });
+  $('closeArchiveDetail').addEventListener('click',closeArchiveDetail_);
+  $('archiveDetailModal').addEventListener('click',event=>{
+    if(event.target===$('archiveDetailModal'))closeArchiveDetail_();
   });
 }
 
@@ -3515,6 +3531,8 @@ function openSpotlightSearch(){
   $('spotlightModal').classList.add('open');
   $('spotlightInput').value='';
   $('spotlightInput').focus();
+  state.spotlightResults=[];
+  state.spotlightQuery='';
   $('spotlightResults').innerHTML='<div class="spotlight-empty">Ketik minimal 2 huruf untuk mulai mencari.</div>';
 }
 
@@ -3525,7 +3543,9 @@ function closeSpotlightSearch(){
 
 async function runSpotlightSearch_(){
   const query=$('spotlightInput').value.trim();
+  state.spotlightQuery=query;
   if(query.length<2){
+    state.spotlightResults=[];
     $('spotlightResults').innerHTML='<div class="spotlight-empty">Ketik minimal 2 huruf untuk mulai mencari.</div>';
     return;
   }
@@ -3533,22 +3553,72 @@ async function runSpotlightSearch_(){
   try{
     const response=await runServer('apiSearchArchive',{query,limit:8});
     const rows=response&&response.results||[];
+    state.spotlightResults=rows;
     if(!rows.length){
       $('spotlightResults').innerHTML='<div class="spotlight-empty">Tidak ada arsip aktif yang cocok dengan "'+escapeHtml(query)+'".</div>';
       return;
     }
     $('spotlightResults').innerHTML=rows.map(renderSpotlightRow_).join('')+
-      '<div class="spotlight-row spotlight-see-all" data-spotlight-page="search"><span class="spotlight-label-inline">Lihat semua hasil di halaman Pencarian Arsip →</span></div>';
+      '<div class="spotlight-row spotlight-see-all" data-spotlight-see-all><span class="spotlight-label-inline">Lihat semua hasil di halaman Pencarian Arsip →</span></div>';
   }catch(error){
+    state.spotlightResults=[];
     $('spotlightResults').innerHTML='<div class="spotlight-empty">Pencarian gagal: '+escapeHtml(error.message)+'</div>';
   }
 }
 
 function renderSpotlightRow_(row){
-  return '<div class="spotlight-row" data-spotlight-page="search">'+
+  return '<div class="spotlight-row" data-item-id="'+escapeHtml(row.itemId)+'">'+
     '<div><strong>'+escapeHtml(row.berkasNumber)+' / '+escapeHtml(row.itemNumber)+'</strong>'+
     '<span class="spotlight-sub">'+escapeHtml(row.description)+'</span></div>'+
     '<span class="spotlight-sub">'+escapeHtml(row.letterNumber||'Tanpa nomor surat')+'</span>'+
   '</div>';
+}
+
+/* ===== Detail Arsip (dibuka dari Spotlight Search) ===== */
+function openArchiveDetail_(row){
+  $('archiveDetailTitle').textContent=(row.berkasNumber||'–')+' / '+(row.itemNumber||'–');
+  $('archiveDetailSubtitle').textContent=row.title||'Tanpa judul berkas';
+  $('archiveDetailDescription').textContent=row.description||'Tidak ada uraian.';
+  $('archiveDetailLetterNumber').textContent=row.letterNumber||'Tanpa nomor surat';
+  $('archiveDetailDate').textContent=formatArchiveDate(row.documentDate);
+  $('archiveDetailDevelopment').textContent=row.developmentLevel||'–';
+  $('archiveDetailPageCount').textContent=(row.pageCount||0)+' lembar';
+  $('archiveDetailCondition').textContent=row.condition?receiptTitleCase_(row.condition):'Tidak dicatat';
+  $('archiveDetailClassification').textContent=row.classificationCode||'–';
+  $('archiveDetailLocation').textContent=row.location||'–';
+  $('archiveDetailBerkasTitle').textContent=row.title||'–';
+
+  const fileBadge=row.fileStatus==='TERSEDIA'
+    ? '<span class="status-badge success">PDF tersedia</span>'
+    : '<span class="status-badge warning">Belum diunggah</span>';
+  const loanBadge=String(row.loanStatus||'TERSEDIA').toUpperCase()==='TERSEDIA'
+    ? '<span class="status-badge">Tersedia dipinjam</span>'
+    : '<span class="status-badge loan">'+escapeHtml(row.loanStatus)+'</span>';
+  $('archiveDetailBadges').innerHTML=fileBadge+loanBadge;
+
+  const fileLink=$('archiveDetailFileLink');
+  if(row.fileUrl){
+    fileLink.href=row.fileUrl;
+    fileLink.classList.remove('disabled');
+    fileLink.textContent='Buka PDF Alih Media';
+  }else{
+    fileLink.href='#';
+    fileLink.classList.add('disabled');
+    fileLink.textContent='PDF Belum Diunggah';
+  }
+  const folderLink=$('archiveDetailFolderLink');
+  if(row.folderUrl){
+    folderLink.href=row.folderUrl;
+    folderLink.classList.remove('disabled');
+  }else{
+    folderLink.href='#';
+    folderLink.classList.add('disabled');
+  }
+
+  $('archiveDetailModal').classList.add('open');
+}
+
+function closeArchiveDetail_(){
+  $('archiveDetailModal').classList.remove('open');
 }
 </script>
