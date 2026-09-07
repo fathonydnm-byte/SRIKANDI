@@ -171,12 +171,12 @@ function renderDashboardArchiveGroup_(group){
   return '<div class="dashboard-archive-group'+(open?' open':'')+'">'+
     '<button type="button" class="dashboard-archive-group-header" data-toggle-berkas-id="'+escapeHtml(group.berkasId)+'">'+
       '<span class="dashboard-archive-caret">▸</span>'+
-      '<div class="dashboard-archive-group-main"><strong>'+escapeHtml(group.berkasNumber)+' — '+escapeHtml(group.title)+'</strong>'+
-      '<span>'+escapeHtml(group.classificationCode||'–')+' · '+escapeHtml(group.kurunWaktu||'–')+' · '+escapeHtml(group.location)+'</span></div>'+
-      '<div class="dashboard-archive-group-meta">'+
+      '<span class="dashboard-archive-group-main"><strong>'+escapeHtml(group.berkasNumber)+' — '+escapeHtml(group.title)+'</strong>'+
+      '<span>'+escapeHtml(group.classificationCode||'–')+' · '+escapeHtml(group.kurunWaktu||'–')+' · '+escapeHtml(group.location)+'</span></span>'+
+      '<span class="dashboard-archive-group-meta">'+
         '<span>'+group.itemCount+' item · '+group.totalPages+' lembar</span>'+
         '<span class="status-badge'+(retensiClass?' '+retensiClass:'')+'">'+escapeHtml(retensiText)+'</span>'+
-      '</div>'+
+      '</span>'+
     '</button>'+
     '<div class="dashboard-archive-items">'+itemsHtml+'</div>'+
   '</div>';
