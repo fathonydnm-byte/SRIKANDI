@@ -18,10 +18,10 @@ record-center/                                    # aplikasi Arsip Inaktif (dipa
   appsscript.json, Code.js, Config.js, ...        # RC-00: installer, registry sumber, health/audit/backup
 ```
 
-## Status (21 Agustus 2026)
+## Status (14 September 2026)
 
-- **Central File**: source di `central-file/` ditarik langsung via `clasp pull` dari project Apps Script yang **sedang live di produksi pilot** (akun `bag.umum@uinsa.ac.id`, Bagian Umum Kantor Pusat – Biro AUPK). Terverifikasi cocok dengan baseline handoff: `VERSION 3.25.1`, `SCHEMA_VERSION 8`, 30 file, termasuk `ReceiptPrint.html` sebagai tipe HTML yang benar. Ini pertama kalinya kode ini masuk git — sebelumnya hanya hidup di Apps Script editor. Belum ada perubahan apa pun terhadap project live ini.
-- **Record Center**: paket lama `RC-00 + RC-01 v1.0.0 PILOT` yang disebut di handoff **tidak dapat dipulihkan** — tidak pernah masuk git dan direktori kerja sesi AI sebelumnya sudah tidak terjangkau. Sebagai gantinya, **RC-00 (fondasi instance) ditulis ulang dari nol** di `record-center/`, mengikuti spesifikasi handoff §13.2 dan pola engineering yang sudah terbukti di `central-file/`. **RC-00 terpasang dan Definition of Done §14 tuntas** (21 Agustus 2026) pada akun `bag.umum@uinsby.ac.id`: folder & sheet terbentuk, sumber Central File pilot (`INS-6d92f552-1d7e-4935-a4e5-a04161ef6a75`) terdaftar dengan shared secret, health check bersih (`WARNING` hanya untuk scope RC-01 yang memang belum dibangun), backup metadata terverifikasi. Lihat `record-center/README.md` untuk detail.
+- **Central File**: `VERSION 3.30.4`, `SCHEMA_VERSION 10`, kanal `STABLE`. Pada 14 September 2026, seluruh 31 berkas source Apps Script live telah diverifikasi satu per satu dan hash isinya identik dengan `central-file/` pada commit kode `7ba440a91523f2312b951949c99c81dc0c1e67fd`. Web App produksi juga terverifikasi menampilkan rilis `3.30.4` (deployment `@57`). Migrasi `REL-001` sampai `REL-012` tercatat `SUCCESS` pada `SYSTEM_MIGRATIONS`.
+- **Record Center**: `VERSION 1.1.0`, `SCHEMA_VERSION 2`, kanal `PILOT`. RC-00/RC-01 terpasang sebagai aplikasi terpisah dan menangani endpoint federatif, penerimaan usul pindah, keputusan, serta sinkronisasi balik melalui pola polling CF→RC. Lihat `record-center/README.md` untuk detail.
 - Protokol pengambilan keputusan RC→CF sudah diputuskan (**poll dari CF**, bukan push dari RC) — lihat `docs/ADDENDUM_2026-08-20_PROTOKOL_KEPUTUSAN_RC_CF.md`. Ini menggantikan bagian §12.5/§14 handoff yang sebelumnya masih terbuka.
 - **RC-01 dibangun, di-deploy, dan CF-06.1 (poll keputusan) selesai** (21 Agustus 2026) — lihat `docs/ADDENDUM_2026-08-21_RC01_DESAIN_ENDPOINT.md` untuk desain endpoint.
 - **Federasi CF↔RC LULUS UAT penuh dengan data nyata**: `UP-2026-0002` berhasil dikirim → diterima RC → retry idempoten teruji → ditolak petugas RC dengan alasan → CF berhasil polling dan menyinkronkan keputusan balik, termasuk melepas berkas ke kandidat usul lagi. Trigger polling otomatis (2 jam) aktif di CF. Detail lengkap di `record-center/README.md`.
@@ -33,5 +33,14 @@ record-center/                                    # aplikasi Arsip Inaktif (dipa
 - Perubahan kode selalu lewat git → `clasp push` ke project yang benar → **New version** deployment (bukan overwrite deployment ke head).
 - Jangan hard-code spreadsheet ID/secret/email unit di source bersama; konfigurasi instance ada di Script Properties/Settings masing-masing instance.
 - Jangan menjalankan migrasi atau transaksi apa pun pada data produksi tanpa izin eksplisit pemilik repo.
+
+## Tracking versi dan sinkronisasi
+
+- Nilai versi resmi tiap aplikasi berada di `central-file/Config.js` (`APP_RELEASE`) dan `record-center/Config.js` (`RC_RELEASE`).
+- Setiap perubahan dimulai dari branch git, dicatat dalam commit yang menjelaskan dampak kode, schema, pengujian, dan nomor deployment.
+- Jika struktur sheet berubah, naikkan `SCHEMA_VERSION` dan tambahkan migrasi idempoten baru; perubahan UI/logic tanpa perubahan struktur hanya menaikkan `VERSION`.
+- Setelah `clasp push`, cocokkan source Apps Script dengan commit git, lalu buat **versioned deployment** baru. Jangan memakai deployment HEAD untuk produksi.
+- Format commit yang dianjurkan: `fix(scope): ...`, `feat(scope): ...`, `perf(scope): ...`, atau `docs(scope): ...`.
+- Commit kode terakhir yang telah dicocokkan dengan Apps Script live: `7ba440a91523f2312b951949c99c81dc0c1e67fd` (`v3.30.4`, schema 10, deployment `@57`).
 
 Guardrail lengkap: lihat §20 di dokumen handoff.
