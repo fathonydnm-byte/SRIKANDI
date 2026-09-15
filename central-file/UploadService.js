@@ -447,6 +447,12 @@ function cancelEditReplacementUpload_(sessionId) {
 function validateEditUploadRequest_(request) {
   request = request || {};
   const form = sanitizeEditUploadForm_(request);
+  form.editSecurityClassification = validateArchiveSecurityClassification_(
+    form.editSecurityClassification, 'Klasifikasi keamanan dan akses arsip');
+  form.editCondition = String(form.editCondition || '').trim().toUpperCase();
+  if (form.editCondition && ['BAIK', 'RUSAK RINGAN', 'RUSAK SEDANG', 'RUSAK BERAT'].indexOf(form.editCondition) === -1) {
+    throw new Error('Kondisi fisik tidak valid.');
+  }
   const berkasId = cleanText_(requireValue_(form.editBerkasId, 'Berkas induk'), 80);
   const itemId = cleanText_(requireValue_(form.editItemId, 'Item arsip'), 80);
   const reason = cleanText_(requireValue_(form.editReason, 'Alasan perubahan'), 2000);
@@ -472,7 +478,7 @@ function validateEditUploadRequest_(request) {
 }
 
 function sanitizeEditUploadForm_(request) {
-  const allowed = ['editBerkasId', 'editItemId', 'editDocumentDate', 'editPageCount', 'editDevelopmentLevel', 'editDescription', 'editReason'];
+  const allowed = ['editBerkasId', 'editItemId', 'editDocumentDate', 'editPageCount', 'editDevelopmentLevel', 'editCondition', 'editSecurityClassification', 'editDescription', 'editReason'];
   const form = {};
   allowed.forEach(key => form[key] = request[key] === undefined || request[key] === null ? '' : String(request[key]));
   return form;
