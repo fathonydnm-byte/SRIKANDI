@@ -447,6 +447,12 @@ function cancelEditReplacementUpload_(sessionId) {
 function validateEditUploadRequest_(request) {
   request = request || {};
   const form = sanitizeEditUploadForm_(request);
+  form.editSecurityClassification = validateArchiveSecurityClassification_(
+    form.editSecurityClassification, 'Klasifikasi keamanan dan akses arsip');
+  form.editCondition = String(form.editCondition || '').trim().toUpperCase();
+  if (form.editCondition && ['BAIK', 'RUSAK RINGAN', 'RUSAK SEDANG', 'RUSAK BERAT'].indexOf(form.editCondition) === -1) {
+    throw new Error('Kondisi fisik tidak valid.');
+  }
   const berkasId = cleanText_(requireValue_(form.editBerkasId, 'Berkas induk'), 80);
   const itemId = cleanText_(requireValue_(form.editItemId, 'Item arsip'), 80);
   const reason = cleanText_(requireValue_(form.editReason, 'Alasan perubahan'), 2000);
@@ -472,7 +478,7 @@ function validateEditUploadRequest_(request) {
 }
 
 function sanitizeEditUploadForm_(request) {
-  const allowed = ['editBerkasId', 'editItemId', 'editDocumentDate', 'editPageCount', 'editDevelopmentLevel', 'editDescription', 'editReason'];
+  const allowed = ['editBerkasId', 'editItemId', 'editDocumentDate', 'editPageCount', 'editDevelopmentLevel', 'editCondition', 'editSecurityClassification', 'editDescription', 'editReason'];
   const form = {};
   allowed.forEach(key => form[key] = request[key] === undefined || request[key] === null ? '' : String(request[key]));
   return form;
@@ -491,6 +497,16 @@ function getEditUploadSession_(sessionId) {
   if (!value) throw new Error('UPLOAD_SESSION_NOT_FOUND: Sesi PDF pengganti tidak ditemukan. Klik Simpan Perubahan untuk memulai ulang.');
   const session = JSON.parse(value);
   if (session.userEmail && session.userEmail !== getCurrentUser_()) throw new Error('Sesi PDF pengganti dibuat oleh pengguna lain.');
+  // Sesi yang dibuat sebelum 3.30.5 tidak menyimpan dua field metadata ini.
+  // Jangan lanjutkan dengan nilai kosong atau menebak pilihan pengguna.
+  if (!session.form || session.form.editSecurityClassification === undefined ||
+      session.form.editCondition === undefined) {
+    if (session.driveFileId && !session.committed) {
+      try { DriveApp.getFileById(session.driveFileId).setTrashed(true); } catch (ignore) {}
+    }
+    PropertiesService.getScriptProperties().deleteProperty(editUploadPropertyKey_(sessionId));
+    throw new Error('UPLOAD_SESSION_EXPIRED: Sesi PDF pengganti dibuat oleh versi aplikasi lama. Klik Simpan Perubahan kembali untuk memulai upload baru.');
+  }
   return session;
 }
 
