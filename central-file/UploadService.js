@@ -497,6 +497,16 @@ function getEditUploadSession_(sessionId) {
   if (!value) throw new Error('UPLOAD_SESSION_NOT_FOUND: Sesi PDF pengganti tidak ditemukan. Klik Simpan Perubahan untuk memulai ulang.');
   const session = JSON.parse(value);
   if (session.userEmail && session.userEmail !== getCurrentUser_()) throw new Error('Sesi PDF pengganti dibuat oleh pengguna lain.');
+  // Sesi yang dibuat sebelum 3.30.5 tidak menyimpan dua field metadata ini.
+  // Jangan lanjutkan dengan nilai kosong atau menebak pilihan pengguna.
+  if (!session.form || session.form.editSecurityClassification === undefined ||
+      session.form.editCondition === undefined) {
+    if (session.driveFileId && !session.committed) {
+      try { DriveApp.getFileById(session.driveFileId).setTrashed(true); } catch (ignore) {}
+    }
+    PropertiesService.getScriptProperties().deleteProperty(editUploadPropertyKey_(sessionId));
+    throw new Error('UPLOAD_SESSION_EXPIRED: Sesi PDF pengganti dibuat oleh versi aplikasi lama. Klik Simpan Perubahan kembali untuk memulai upload baru.');
+  }
   return session;
 }
 

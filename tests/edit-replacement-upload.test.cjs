@@ -32,7 +32,8 @@ function fixture() {
     LockService: {getScriptLock: () => ({waitLock() {}, releaseLock() {}})},
     PropertiesService: {getScriptProperties: () => ({
       getProperty: key => properties.get(key),
-      setProperty: (key, value) => properties.set(key, value)
+      setProperty: (key, value) => properties.set(key, value),
+      deleteProperty: key => properties.delete(key)
     })},
     Utilities: {getUuid: () => 'test-session', base64Decode: s => [...Buffer.from(s, 'base64')]},
     purgeOldEditUploadSessions_: () => {},
@@ -112,4 +113,18 @@ test('editing metadata without a replacement still saves both fields', () => {
   assert.equal(item.DRIVE_FILE_ID, 'old-pdf');
   assert.equal(effects.uploads, 0);
   assert.deepEqual(effects.quarantined, []);
+});
+
+test('a pre-3.30.5 session is discarded instead of losing metadata', () => {
+  const {ctx, effects} = fixture();
+  ctx.saveEditUploadSession_({
+    sessionId: 'legacy-session', userEmail: 'test@example.invalid',
+    driveFileId: 'legacy-temp-pdf', committed: false,
+    form: {editBerkasId: 'berkas-test', editItemId: 'item-test'}
+  });
+  assert.throws(() => ctx.getEditReplacementUploadStatus_('legacy-session'),
+    /UPLOAD_SESSION_EXPIRED:.*versi aplikasi lama/);
+  assert.deepEqual(effects.trashed, ['legacy-temp-pdf']);
+  assert.throws(() => ctx.getEditUploadSession_('legacy-session'),
+    /UPLOAD_SESSION_NOT_FOUND/);
 });

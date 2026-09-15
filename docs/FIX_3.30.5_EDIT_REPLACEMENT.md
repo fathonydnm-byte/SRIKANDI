@@ -19,11 +19,13 @@ penyimpanan meskipun pilihan pada UI sudah terisi. Kondisi fisik juga hilang.
 `UploadService.js` kini mempertahankan kedua field dan memvalidasinya sebelum
 membuka sesi upload Drive. Validasi wajib klasifikasi tetap berlaku; nilai kosong
 tidak diganti otomatis menjadi Biasa/Terbuka. Tidak diperlukan migrasi sheet.
+Sesi upload yang dibuat oleh versi lama dideteksi dan dibuang agar tidak kembali
+menjalankan metadata kosong setelah deployment diperbarui.
 
 ## Pengujian
 
 Jalankan `node --test tests/edit-replacement-upload.test.cjs` dari root repository.
-Sembilan pengujian lulus dengan layanan Google diganti simulasi in-memory:
+Sepuluh pengujian lulus dengan layanan Google diganti simulasi in-memory:
 keempat klasifikasi, kondisi fisik, finalisasi berulang, input tidak valid sebelum
 upload, serta perubahan metadata tanpa PDF. Pada source 3.30.4, delapan pengujian
 tersebut gagal sehingga tes menangkap regresi yang dilaporkan.
