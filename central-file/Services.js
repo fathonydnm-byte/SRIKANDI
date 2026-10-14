@@ -56,8 +56,12 @@ function validateClassification_(classificationId) {
   const data = getClassificationData_();
   const selected = data.rows.find(row => row.KLASIFIKASI_ID === classificationId);
   if (!selected) throw new Error('Kode klasifikasi tidak aktif atau tidak ditemukan.');
-  if ((data.byParent[classificationId] || []).length > 0) {
-    throw new Error('Pilih kode klasifikasi sampai tingkat paling akhir yang tersedia.');
+  // Sekunder boleh dipakai meskipun mempunyai turunan tersier. Tentukan
+  // tingkat dari relasi master yang juga dipakai dropdown, bukan format kode.
+  const isSecondary = (data.byParent.ROOT || [])
+    .some(row => row.id === selected.PARENT_ID);
+  if (!isSecondary && (data.byParent[classificationId] || []).length > 0) {
+    throw new Error('Pilih kode klasifikasi sekunder atau tersier sesuai masalah arsip.');
   }
   return selected;
 }

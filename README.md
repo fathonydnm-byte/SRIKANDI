@@ -36,6 +36,7 @@ record-center/                                    # aplikasi Arsip Inaktif (dipa
 
 ## Tracking versi dan sinkronisasi
 
+- Perbaikan source **3.30.6/schema 10** mengizinkan klasifikasi sekunder meskipun tersedia tersier; petunjuk form diperbarui. **20 pengujian lokal lulus; belum dipasang/deploy live.** Lihat [catatan perbaikan dan pemasangan](docs/FIX_3.30.6_SECONDARY_CLASSIFICATION.md). Pengembangan Record Center kini dilanjutkan di repository [UINSA-Record-Center](https://github.com/fathonydnm-byte/UINSA-Record-Center).
 - Perbaikan source **3.30.5/schema 10** untuk penggantian PDF telah disiapkan dan diuji lokal, **belum di-deploy**. Baseline live terakhir tetap 3.30.4. Lihat [catatan perbaikan dan pemasangan](docs/FIX_3.30.5_EDIT_REPLACEMENT.md).
 - Nilai versi resmi tiap aplikasi berada di `central-file/Config.js` (`APP_RELEASE`) dan `record-center/Config.js` (`RC_RELEASE`).
 - Setiap perubahan dimulai dari branch git, dicatat dalam commit yang menjelaskan dampak kode, schema, pengujian, dan nomor deployment.
