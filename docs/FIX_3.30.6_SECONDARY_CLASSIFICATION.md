@@ -2,7 +2,7 @@
 
 Tanggal: 14 Oktober 2026. Schema tetap **10**. Baseline source: commit `1df26587866ec757939bc8b4dd801c5ef3adf7d9` (3.30.5).
 
-Status: source diperbaiki dan pengujian lokal lulus; **belum dipasang/deploy ke Apps Script**. Versi/source live terbaru belum diverifikasi. Koneksi browser ke URL editor beralih ke halaman informasi Apps Script yang belum login, sehingga tidak ada penulisan live pada sesi ini.
+Status: **dipasang melalui clasp oleh pengguna pada 14 Oktober 2026, deployment existing diperbarui dari @59 ke @60**. Screenshot PowerShell menunjukkan `Redeployed ... @60` dan keterangan `v3.30.6 - Klasifikasi sekunder tanpa wajib tersier`. Pengujian lokal 20/20 lulus; verifikasi tampilan Web App dan UAT registrasi oleh pengguna masih menunggu. Agent tidak mengakses Apps Script live langsung karena login browser terhambat 502.
 
 ## Keputusan bisnis terbaru
 
@@ -52,3 +52,11 @@ UAT yang membuat transaksi perlu memakai data uji yang disetujui pengguna. Janga
 ## Catatan handover
 
 Pengembangan Record Center tetap pada repository terpisah `fathonydnm-byte/UINSA-Record-Center`. Perubahan ini hanya Central File. Working tree lama berisi perubahan sesi sebelumnya dipertahankan; pekerjaan baru dilakukan pada worktree/branch `fix/secondary-classification` dari commit remote.
+
+## Bukti pemasangan 14 Oktober 2026
+
+- Screenshot awal pengguna: hasil clone `Config.js` menunjukkan 3.30.5/schema 10, dan list-deployments menunjukkan deployment versi @59 berlabel perbaikan Edit Arsip.
+- Pengguna menjalankan blok PowerShell yang memeriksa scriptId target, membuat cadangan lokal, dan membandingkan tiga file live (`Services.js`, `Index.html`, `Config.js`) dengan baseline git sebelum menyalin perbaikan dari commit `d089277da6b5d7d5de8c6f2d226f0a131afcdbb0`.
+- Screenshot akhir pukul sekitar 14.08 WIB menunjukkan redeploy existing berhasil ke @60, dengan deskripsi rilis 3.30.6. Tidak dibuat URL deployment baru dalam alur tersebut.
+- Schema tetap 10; tidak ada migrasi atau transaksi arsip dari perintah pemasangan.
+- Batas verifikasi: keberhasilan CLI didasarkan pada screenshot pengguna. Belum dilakukan readback seluruh source server, pemeriksaan rendered UI 3.30.6, atau transaksi UAT live oleh agent. Jangan menandai UAT lulus sebelum pengguna mengonfirmasi hasil.
