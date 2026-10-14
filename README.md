@@ -36,13 +36,13 @@ record-center/                                    # aplikasi Arsip Inaktif (dipa
 
 ## Tracking versi dan sinkronisasi
 
-- Perbaikan source **3.30.6/schema 10** mengizinkan klasifikasi sekunder meskipun tersedia tersier; petunjuk form diperbarui. **20 pengujian lokal lulus; belum dipasang/deploy live.** Lihat [catatan perbaikan dan pemasangan](docs/FIX_3.30.6_SECONDARY_CLASSIFICATION.md). Pengembangan Record Center kini dilanjutkan di repository [UINSA-Record-Center](https://github.com/fathonydnm-byte/UINSA-Record-Center).
-- Perbaikan source **3.30.5/schema 10** untuk penggantian PDF telah disiapkan dan diuji lokal, **belum di-deploy**. Baseline live terakhir tetap 3.30.4. Lihat [catatan perbaikan dan pemasangan](docs/FIX_3.30.5_EDIT_REPLACEMENT.md).
+- Perbaikan source **3.30.6/schema 10** mengizinkan klasifikasi sekunder meskipun tersedia tersier; petunjuk form diperbarui. **20 pengujian lokal lulus; pengguna berhasil memasang via clasp pada 14 Oktober 2026, deployment @59 → @60 (bukti screenshot CLI). UAT Web App masih menunggu.** Lihat [catatan perbaikan dan pemasangan](docs/FIX_3.30.6_SECONDARY_CLASSIFICATION.md). Pengembangan Record Center kini dilanjutkan di repository [UINSA-Record-Center](https://github.com/fathonydnm-byte/UINSA-Record-Center).
+- Perbaikan source **3.30.5/schema 10** untuk penggantian PDF adalah baseline sebelum rilis 3.30.6. Screenshot clone/list-deployments pengguna pada 14 Oktober 2026 menunjukkan source live 3.30.5/schema 10 dan deployment @59 sebelum pembaruan. Lihat [catatan perbaikan dan pemasangan](docs/FIX_3.30.5_EDIT_REPLACEMENT.md).
 - Nilai versi resmi tiap aplikasi berada di `central-file/Config.js` (`APP_RELEASE`) dan `record-center/Config.js` (`RC_RELEASE`).
 - Setiap perubahan dimulai dari branch git, dicatat dalam commit yang menjelaskan dampak kode, schema, pengujian, dan nomor deployment.
 - Jika struktur sheet berubah, naikkan `SCHEMA_VERSION` dan tambahkan migrasi idempoten baru; perubahan UI/logic tanpa perubahan struktur hanya menaikkan `VERSION`.
 - Setelah `clasp push`, cocokkan source Apps Script dengan commit git, lalu buat **versioned deployment** baru. Jangan memakai deployment HEAD untuk produksi.
 - Format commit yang dianjurkan: `fix(scope): ...`, `feat(scope): ...`, `perf(scope): ...`, atau `docs(scope): ...`.
-- Commit kode terakhir yang telah dicocokkan dengan Apps Script live: `7ba440a91523f2312b951949c99c81dc0c1e67fd` (`v3.30.4`, schema 10, deployment `@57`).
+- Perbandingan seluruh source live terakhir oleh agent (historis 14 September 2026): `7ba440a91523f2312b951949c99c81dc0c1e67fd` (`v3.30.4`, schema 10, deployment `@57`).
 
 Guardrail lengkap: lihat §20 di dokumen handoff.
