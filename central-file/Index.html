@@ -399,7 +399,7 @@
         <form id="searchForm" class="form-card">
           <div class="section-heading">
             <div><h2>Cari Arsip</h2><p>Temukan item berdasarkan nomor surat, uraian, judul berkas, kode klasifikasi, atau lokasi fisik.</p></div>
-            <button type="button" id="resetSearch" class="secondary">Bersihkan Filter</button>
+            <div><button type="button" class="secondary" data-content-berkas="">Cari Isi Berkas</button> <button type="button" id="resetSearch" class="secondary">Bersihkan Filter</button></div>
           </div>
           <div class="form-grid">
             <label class="field span-2">Kata kunci
@@ -957,6 +957,7 @@
         <div id="archiveDetailBadges" class="archive-detail-badges"></div>
       </div>
       <div class="modal-actions">
+        <button type="button" id="archiveDetailContent" class="secondary" data-content-berkas="">Cari Isi Berkas Ini</button>
         <a id="archiveDetailFolderLink" class="search-link secondary-link" href="#" target="_blank" rel="noopener">Buka Folder Berkas</a>
         <a id="archiveDetailFileLink" class="search-link" href="#" target="_blank" rel="noopener">Buka PDF Alih Media</a>
       </div>
@@ -973,6 +974,7 @@
   </div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <?!= include('Client'); ?>
+  <?!= include('ContentSearch'); ?>
   <?!= include('LabelLogo'); ?>
   <?!= include('LabelPrint'); ?>
   <?!= include('OutIndicatorPrint'); ?>
