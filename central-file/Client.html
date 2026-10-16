@@ -178,7 +178,7 @@ function renderDashboardArchiveGroup_(group){
         '<span class="status-badge'+(retensiClass?' '+retensiClass:'')+'">'+escapeHtml(retensiText)+'</span>'+
       '</span>'+
     '</button>'+
-    '<div class="dashboard-archive-items">'+itemsHtml+'</div>'+
+    '<div class="dashboard-archive-items"><button type="button" class="secondary" data-content-berkas="'+escapeHtml(group.berkasId)+'">Cari Isi Berkas Ini</button>'+itemsHtml+'</div>'+
   '</div>';
 }
 
@@ -1027,7 +1027,7 @@ function renderArchiveSearchRow(row){
     '<td><div class="search-description">'+escapeHtml(row.description)+'</div><span class="search-cell-sub">'+escapeHtml(row.pageCount)+' lembar · '+escapeHtml(row.developmentLevel)+(row.condition?' · '+escapeHtml(receiptTitleCase_(row.condition)):'')+'</span></td>'+
     '<td><span class="search-cell-main">'+escapeHtml(row.classificationCode||'–')+'</span><span class="search-cell-sub">'+escapeHtml(row.location)+'</span></td>'+
     '<td><div class="search-badges">'+fileBadge+loanBadge+'</div></td>'+
-    '<td><div class="search-actions"><a class="'+pdfClass+'" href="'+escapeHtml(row.fileUrl||'#')+'" target="_blank" rel="noopener">'+pdfLabel+'</a><a class="'+folderClass+'" href="'+escapeHtml(row.folderUrl||'#')+'" target="_blank" rel="noopener">Buka Folder</a></div></td>'+
+    '<td><div class="search-actions"><a class="'+pdfClass+'" href="'+escapeHtml(row.fileUrl||'#')+'" target="_blank" rel="noopener">'+pdfLabel+'</a><a class="'+folderClass+'" href="'+escapeHtml(row.folderUrl||'#')+'" target="_blank" rel="noopener">Buka Folder</a><button type="button" class="secondary" data-content-berkas="'+escapeHtml(row.berkasId)+'" data-content-item="'+escapeHtml(row.itemId)+'">Cari Isi</button></div></td>'+
   '</tr>';
 }
 
@@ -3677,6 +3677,8 @@ function renderSpotlightRow_(row){
 
 /* ===== Detail Arsip (dibuka dari Spotlight Search) ===== */
 function openArchiveDetail_(row){
+  $('archiveDetailContent').dataset.contentBerkas=row.berkasId;
+  $('archiveDetailContent').dataset.contentItem=row.itemId;
   $('archiveDetailTitle').textContent=(row.berkasNumber||'–')+' / '+(row.itemNumber||'–');
   $('archiveDetailSubtitle').textContent=row.title||'Tanpa judul berkas';
   $('archiveDetailDescription').textContent=row.description||'Tidak ada uraian.';
