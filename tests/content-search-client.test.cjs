@@ -52,3 +52,39 @@ test('partial scan stays explicit and exposes continuation button',async()=>{
   await ctx.runContentSearch_(false);
   assert.equal(node('contentSearchMore').hidden,false);assert.match(node('contentSearchStatus').textContent,/belum selesai/);assert.match(node('contentSearchStatus').textContent,/belum memiliki teks/);
 });
+
+test('fresh upload uses initial confirmed offset; resumed upload reconciles Drive first',async()=>{
+  for(const resume of [false,true]){
+    const {ctx,state,node}=fixture(),calls=[];
+    const file={name:'sample.docx',size:100,slice:()=>({})};
+    state.scope={berkasId:'b1',items:[{id:'i1',pdfId:'pdf1'}]};
+    node('contentUploadItem').value='i1';node('contentWordFile').files=[file];node('contentWordConfirm').checked=true;
+    if(resume)state.upload={file,sessionId:'session'};
+    ctx.fileSliceToBase64=async()=> 'bytes';ctx.loadContentScope_=async()=>{};
+    ctx.runServer=async(name)=>{
+      calls.push(name);
+      if(name==='apiStartContentWordUpload'||name==='apiGetContentWordUploadStatus')return {sessionId:'session',uploadedBytes:0,complete:false};
+      if(name==='apiUploadContentWordChunk')return {uploadedBytes:100,complete:true};
+      return {ok:true};
+    };
+    await ctx.uploadContentWord_();
+    assert.equal(calls.includes('apiGetContentWordUploadStatus'),resume);
+    assert.equal(calls.filter(x=>x==='apiFinalizeContentWordUpload').length,1);
+    assert.equal(state.upload,null);assert.equal(state.uploadBusy,false);
+    assert.equal(vm.runInContext('Object.keys(contentWaits_).length',ctx),0);
+  }
+});
+test('wait timer is disposed on query change and cannot overwrite final status',()=>{
+  const {ctx,node}=fixture();let callback,cleared=false;
+  ctx.setTimeout=fn=>{callback=fn;return 7};ctx.clearTimeout=id=>{if(id===7)cleared=true};
+  ctx.startContentWait_('contentSearchStatus','Mencari');
+  assert.match(node('contentSearchStatus').textContent,/detik/);
+  ctx.clearContentResults_('Changed');callback();
+  assert.equal(node('contentSearchStatus').textContent,'Changed');assert.equal(cleared,true);
+});
+test('poll is rescheduled during upload instead of silently stopping',()=>{
+  const {ctx,state}=fixture();const callbacks=[];
+  ctx.setTimeout=fn=>{callbacks.push(fn);return callbacks.length};ctx.clearTimeout=()=>{};
+  state.uploadBusy=true;ctx.scheduleContentPoll_();callbacks[0]();assert.equal(callbacks.length,2);
+  state.uploadBusy=false;let loads=0;ctx.loadContentScope_=()=>loads++;callbacks[1]();assert.equal(loads,1);
+});

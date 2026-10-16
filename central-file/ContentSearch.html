@@ -3,8 +3,13 @@
 #contentSearchModal .modal-card{width:min(1100px,100%)}
 .content-search-body{padding:22px 24px}
 .content-search-notice{padding:12px 16px;background:var(--green-50);border:1px solid var(--line);border-radius:10px;font-size:13px;margin:16px 0}
-.content-search-form{display:flex;gap:10px;align-items:end;margin:18px 0}
-.content-search-form .field{flex:1}
+.content-search-form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 10px;align-items:end;margin:18px 0}
+.content-query-help{grid-column:1/-1;color:var(--muted);font-size:11px}
+.content-busy::before{content:"";display:inline-block;width:12px;height:12px;border:2px solid #b9d8c8;border-top-color:var(--green-700,#0c5132);border-radius:50%;animation:content-spin .8s linear infinite;margin-right:8px;vertical-align:middle}
+@keyframes content-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.content-busy::before{animation:none}}
+.content-search-form .field{min-width:0}
+#contentSearchRun{height:40px}
 .content-result{border:1px solid var(--line);border-radius:12px;padding:18px;margin:14px 0;overflow-wrap:anywhere}
 .content-result h3{font-size:14px;margin:0 0 8px}
 .content-result p{white-space:pre-wrap;line-height:1.75;font-size:14px}
@@ -21,7 +26,7 @@
 .content-upload-confirm{display:flex;gap:8px;align-items:start;margin:12px 0;font-size:13px}
 .content-upload-confirm input{margin-top:3px}
 .content-search-status{font-size:13px;color:var(--muted);white-space:pre-line}
-@media(max-width:650px){.content-search-form{flex-wrap:wrap}.content-search-form .field{flex-basis:100%}.content-search-body{padding:16px}.content-item-row{flex-wrap:wrap}}
+@media(max-width:650px){.content-search-form{grid-template-columns:minmax(0,1fr) auto}.content-search-body{padding:16px}.content-item-row{flex-wrap:wrap}}
 </style>
 <div id="contentSearchModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="contentSearchTitle">
   <div class="modal-card">
@@ -36,8 +41,9 @@
       </div>
       <div class="content-search-notice" id="contentCoverage" aria-live="polite">Pilih berkas untuk melihat kesiapan teks.</div>
       <form id="contentSearchForm" class="content-search-form">
-        <label class="field">Kata atau frasa<input id="contentQuery" minlength="2" maxlength="120" required autocomplete="off" placeholder="Contoh: total, NPWP, atau denda keterlambatan"><small>Frasa dicari berurutan dalam satu paragraf; huruf besar/kecil dan spasi diabaikan.</small></label>
+        <label class="field">Kata atau frasa<input id="contentQuery" minlength="2" maxlength="120" required autocomplete="off" placeholder="Contoh: total, NPWP, atau denda keterlambatan" aria-describedby="contentQueryHelp"></label>
         <button id="contentSearchRun" type="submit" class="primary">Cari</button>
+        <small id="contentQueryHelp" class="content-query-help">Frasa dicari berurutan dalam satu paragraf; huruf besar/kecil dan spasi diabaikan.</small>
       </form>
       <p id="contentSearchStatus" class="content-search-status" aria-live="polite">Hasil akan menampilkan konteks paragraf. Nomor halaman belum tersedia.</p>
       <div id="contentResults"></div>
@@ -61,6 +67,43 @@
 <script>
 const contentSearchState={generation:0,openRequest:0,scopeRequest:0,scope:null,signature:'',cursor:null,query:'',filter:'',count:0,errors:[],busy:false,upload:null,uploadBusy:false,poll:null,opener:null};
 const CONTENT_STATUS_LABELS={READY:'Siap dicari',MISSING:'Belum ada Word',NO_PDF:'PDF belum tersedia',QUEUED:'Menunggu ekstraksi',PROCESSING:'Sedang diproses',STALE:'Perlu diperbarui — PDF berubah',FAILED:'Ekstraksi gagal'};
+
+// Timers describe waiting time, never invented server completion percentages.
+const contentWaits_={};
+function stopContentWait_(id){
+  const entry=contentWaits_[id];
+  if(entry)clearTimeout(entry.timer);
+  delete contentWaits_[id];
+  $(id).classList.remove('content-busy');
+}
+function startContentWait_(id,message){
+  stopContentWait_(id);
+  const entry={started:Date.now(),timer:null};contentWaits_[id]=entry;
+  $(id).classList.add('content-busy');
+  const tick=()=>{
+    if(contentWaits_[id]!==entry)return;
+    const seconds=Math.floor((Date.now()-entry.started)/1000);
+    $(id).textContent=message+' · '+seconds+' detik'+(seconds>=60?' — Respons server belum diterima. Tidak perlu refresh; tunggu hasil atau pesan kesalahan.':'');
+    entry.timer=setTimeout(tick,1000);
+  };tick();
+}
+function scheduleContentPoll_(){
+  const s=contentSearchState;clearTimeout(s.poll);
+  s.poll=setTimeout(()=>{
+    if(!$('contentSearchModal').classList.contains('open'))return;
+    if(s.uploadBusy||s.busy){scheduleContentPoll_();return}
+    loadContentScope_();
+  },10000);
+}
+function contentPendingLabel_(item){
+  if(!['QUEUED','PROCESSING'].includes(item.status))return '';
+  const since=Date.parse(item.statusSince||'');
+  const seconds=Number.isFinite(since)?Math.max(0,Math.floor((Date.now()-since)/1000)):null;
+  return '<small class="content-busy">'+(item.status==='QUEUED'?'Menunggu giliran worker; diperiksa otomatis setiap sekitar 1 menit.':'Ekstraksi teks berlangsung di latar belakang.')+
+    (seconds===null?'':' Status ini sejak '+seconds+' detik lalu.')+
+    (seconds!==null&&seconds>=600?' Proses lebih lama dari biasanya; menunggu pemeriksaan/pemulihan worker.':'')+
+    ' Status dicek setiap 10 detik. Tidak perlu refresh halaman.</small>';
+}
 
 document.addEventListener('DOMContentLoaded',()=>{
   document.addEventListener('click',event=>{
@@ -118,6 +161,7 @@ function closeContentSearch_(){
   const s=contentSearchState;
   if(s.uploadBusy||s.upload){toast('Selesaikan atau batalkan sesi unggah Word sebelum menutup.',true);return}
   s.generation++;s.openRequest++;s.scopeRequest++;s.busy=false;
+  Object.keys(contentWaits_).forEach(stopContentWait_);
   $('contentSearchRun').disabled=false;
   clearTimeout(s.poll);
   $('contentSearchModal').classList.remove('open');
@@ -127,6 +171,7 @@ function closeContentSearch_(){
 function clearContentResults_(message){
   const s=contentSearchState;
   s.generation++;s.cursor=null;s.count=0;s.errors=[];s.busy=false;
+  stopContentWait_('contentSearchStatus');
   $('contentResults').replaceChildren();
   $('contentSearchMore').hidden=true;
   $('contentSearchRun').disabled=false;
@@ -136,15 +181,17 @@ function clearContentResults_(message){
 async function loadContentScope_(preferredItem){
   const s=contentSearchState, id=$('contentBerkas').value, request=++s.scopeRequest;
   clearTimeout(s.poll);
+  stopContentWait_('contentCoverage');
   if(!id){s.scope=null;clearContentResults_('Pilih berkas terlebih dahulu.');$('contentItems').replaceChildren();$('contentItem').replaceChildren(new Option('Semua item dalam berkas ini',''));$('contentUploadItem').replaceChildren(new Option('Pilih item yang sudah memiliki PDF',''));$('contentCoverage').textContent='Belum ada berkas dipilih.';return}
   if(!s.scope||s.scope.berkasId!==id){s.scope=null;clearContentResults_('Memuat berkas…');$('contentItems').replaceChildren()}
-  $('contentCoverage').textContent='Memuat kesiapan teks…';
+  startContentWait_('contentCoverage','Memuat kesiapan teks…');
   try{
     const scope=await runServer('apiGetContentBerkas',id);
     if(request!==s.scopeRequest||id!==$('contentBerkas').value)return;
     const signature=JSON.stringify([id,scope.items.map(item=>[item.id,item.pdfId,item.documentId,item.status])]);
     if(signature!==s.signature)clearContentResults_('Kesiapan teks diperbarui. Tekan Cari untuk hasil terbaru.');
     s.signature=signature;s.scope=scope;
+    stopContentWait_('contentCoverage');
     const selected=typeof preferredItem==='string'?preferredItem:$('contentItem').value;
     const uploadSelected=$('contentUploadItem').value;
     $('contentItem').replaceChildren(new Option('Semua item dalam berkas ini',''));
@@ -156,9 +203,9 @@ async function loadContentScope_(preferredItem){
     $('contentItem').value=selected;
     $('contentUploadItem').value=uploadSelected||selected;
     $('contentCoverage').textContent=scope.ready+' dari '+scope.total+' item siap dicari. Hasil hanya mencakup teks yang siap dan sesuai PDF terkini.';
-    $('contentItems').innerHTML=scope.items.map(item=>'<div class="content-item-row"><div><strong>'+escapeHtml(item.label)+'</strong><small>'+escapeHtml(CONTENT_STATUS_LABELS[item.status]||item.status)+(item.wordName?' · '+escapeHtml(item.wordName):'')+'</small>'+(item.error?'<small>'+escapeHtml(item.error)+'</small>':'')+'</div>'+(item.status==='FAILED'?'<button type="button" class="secondary" data-content-retry="'+escapeHtml(item.documentId)+'">Coba ulang</button>':'')+'</div>').join('')||'Belum ada item dalam berkas ini.';
-    if(scope.items.some(item=>['QUEUED','PROCESSING'].includes(item.status)))s.poll=setTimeout(()=>{if($('contentSearchModal').classList.contains('open')&&!s.uploadBusy)loadContentScope_()},10000);
-  }catch(error){if(request===s.scopeRequest){s.scope=null;clearContentResults_(error.message);$('contentCoverage').textContent='Kesiapan teks belum dapat dimuat.'}}
+    $('contentItems').innerHTML=scope.items.map(item=>'<div class="content-item-row"><div><strong>'+escapeHtml(item.label)+'</strong><small>'+escapeHtml(CONTENT_STATUS_LABELS[item.status]||item.status)+(item.wordName?' · '+escapeHtml(item.wordName):'')+'</small>'+contentPendingLabel_(item)+(item.error?'<small>'+escapeHtml(item.error)+'</small>':'')+'</div>'+(item.status==='FAILED'?'<button type="button" class="secondary" data-content-retry="'+escapeHtml(item.documentId)+'">Coba ulang</button>':'')+'</div>').join('')||'Belum ada item dalam berkas ini.';
+    if(scope.items.some(item=>['QUEUED','PROCESSING'].includes(item.status)))scheduleContentPoll_();
+  }catch(error){if(request===s.scopeRequest){stopContentWait_('contentCoverage');$('contentCoverage').textContent='Status belum dapat diperbarui: '+error.message+'. Mencoba lagi dalam 10 detik.';scheduleContentPoll_()}}
 }
 
 async function runContentSearch_(more){
@@ -171,10 +218,11 @@ async function runContentSearch_(more){
   const generation=++s.generation;
   s.busy=true;s.query=query;s.filter=filter;
   $('contentSearchRun').disabled=true;$('contentSearchMore').hidden=true;
-  $('contentSearchStatus').textContent='Mencari dalam teks yang sudah disiapkan…';
+  startContentWait_('contentSearchStatus','Mencari dalam teks yang sudah disiapkan…');
   try{
     const result=await runServer('apiSearchContentBerkas',{berkasId:s.scope.berkasId,itemId:filter,query:query,cursor:more?s.cursor:null});
     if(generation!==s.generation)return;
+    stopContentWait_('contentSearchStatus');
     s.cursor=result.cursor;s.count+=result.results.length;s.errors.push(...result.errors);
     result.results.forEach(row=>$('contentResults').insertAdjacentHTML('beforeend',renderContentResult_(row,query)));
     const coverage=result.coverage;
@@ -188,7 +236,7 @@ async function runContentSearch_(more){
       if(result.errors.length)$('contentResults').appendChild(errors);
     }
     $('contentSearchMore').hidden=result.done;
-  }catch(error){if(generation===s.generation){s.cursor=null;$('contentResults').replaceChildren();$('contentSearchStatus').textContent=error.message+' Tekan Cari untuk memulai ulang.'}}
+  }catch(error){if(generation===s.generation){stopContentWait_('contentSearchStatus');s.cursor=null;$('contentResults').replaceChildren();$('contentSearchStatus').textContent=error.message+' Tekan Cari untuk memulai ulang.'}}
   finally{if(generation===s.generation){s.busy=false;$('contentSearchRun').disabled=false}}
 }
 
@@ -224,27 +272,31 @@ async function uploadContentWord_(){
   if(!$('contentWordConfirm').checked){toast('Konfirmasikan kesesuaian Word dengan PDF terkini.',true);return}
   s.uploadBusy=true;lockContentUploadUi_(true);
   try{
+    let progress;
+    startContentWait_('contentUploadStatus',s.upload?'Memeriksa unggahan sebelumnya…':'Menyiapkan sesi unggah Word…');
     if(!s.upload){
       const item=s.scope.items.find(row=>row.id===$('contentUploadItem').value);
       const session=await runServer('apiStartContentWordUpload',{berkasId:s.scope.berkasId,itemId:item.id,pdfId:item.pdfId,fileName:file.name,fileSize:file.size,confirmCurrentPdf:true});
       s.upload={file:file,sessionId:session.sessionId};
+      progress=session;
     }
     lockContentUploadUi_(true);
-    let progress=await runServer('apiGetContentWordUploadStatus',s.upload.sessionId);
+    if(!progress)progress=await runServer('apiGetContentWordUploadStatus',s.upload.sessionId);
     while(!progress.complete){
       const start=progress.uploadedBytes,end=Math.min(start+512*1024,file.size);
-      $('contentUploadStatus').textContent='Mengunggah Word: '+Math.floor(start/file.size*100)+'%';
+      startContentWait_('contentUploadStatus','Mengunggah Word: '+Math.floor(start/file.size*100)+'% terkonfirmasi');
       const base64=await fileSliceToBase64(file.slice(start,end));
       progress=await runServer('apiUploadContentWordChunk',{sessionId:s.upload.sessionId,start:start,end:end,total:file.size,base64:base64});
       if(!progress.complete&&progress.uploadedBytes<=start)throw new Error('Drive belum mengonfirmasi kemajuan unggah. Coba lanjutkan sesi ini.');
     }
-    $('contentUploadStatus').textContent='Word terunggah. Menyimpan antrean ekstraksi…';
+    startContentWait_('contentUploadStatus','Unggah 100%. Menyimpan antrean ekstraksi…');
     await runServer('apiFinalizeContentWordUpload',s.upload.sessionId);
     s.upload=null;
+    stopContentWait_('contentUploadStatus');
     $('contentWordFile').value='';$('contentWordConfirm').checked=false;
     $('contentUploadStatus').textContent='Word tersimpan. Teks akan diproses di latar belakang; status disegarkan otomatis selama jendela ini terbuka.';
     await loadContentScope_();
-  }catch(error){$('contentUploadStatus').textContent='Unggah belum selesai: '+error.message+' Klik Lanjutkan Unggah untuk mencoba sesi yang sama.'}
+  }catch(error){stopContentWait_('contentUploadStatus');$('contentUploadStatus').textContent='Unggah belum selesai: '+error.message+(s.upload?' Klik Lanjutkan Unggah untuk mencoba sesi yang sama.':' Klik Unggah Word untuk mencoba kembali.')}
   finally{s.uploadBusy=false;lockContentUploadUi_(Boolean(s.upload));$('contentUploadRun').textContent=s.upload?'Lanjutkan Unggah':'Unggah Word'}
 }
 
@@ -260,3 +312,4 @@ async function cancelContentWord_(){
   finally{s.uploadBusy=false;lockContentUploadUi_(Boolean(s.upload));$('contentUploadRun').textContent=s.upload?'Lanjutkan Unggah':'Unggah Word'}
 }
 </script>
+

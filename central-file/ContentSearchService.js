@@ -14,6 +14,7 @@ function getContentBerkas_(berkasId) {
     .map(item => {
       const document = latest[item.ITEM_ID], status = contentDocumentStatus_(item, document);
       return {id: String(item.ITEM_ID), label: (item.NO_ITEM_DEFINITIF || '–') + ' — ' + cleanText_(item.URAIAN_LENGKAP, 180),
+        statusSince: document ? String(document.LEASE_AT || document.UPDATED_AT || document.CREATED_AT || '') : '',
         status: status, hasPdf: Boolean(item.DRIVE_FILE_ID), pdfId: String(item.DRIVE_FILE_ID || ''), documentId: document ? document.DOCUMENT_ID : '',
         wordName: document ? document.WORD_NAME : '', error: document ? document.ERROR_MESSAGE || '' : '',
         wordUrl: document ? contentWordUrl_(document.WORD_FILE_ID) : '',
@@ -116,3 +117,4 @@ function searchContentBerkas_(criteria) {
     cursor: d >= ready.length ? null : {document: d, paragraph: p, snapshot: snapshot},
     coverage: {total: items.length, ready: ready.length, scanned: d}, elapsedMs: Date.now() - started};
 }
+

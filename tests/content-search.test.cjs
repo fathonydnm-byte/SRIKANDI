@@ -215,3 +215,10 @@ if(process.env.CONTENT_SEARCH_SAMPLE_DOCX)test('actual Nitro OCR attachment extr
   assert.ok(r.characters>3000);assert.match(r.paragraphs.map(x=>x.text).join('\n'),/Denda/i);
   console.log('Nitro sample:',r.characters,'characters;',r.paragraphs.length,'paragraphs; no page numbers inferred.');
 });
+
+test('schema validation reads headers once and still rejects missing columns',()=>{
+  const {ctx}=fixture();let count=0;
+  ctx.getHeaders_=()=>{count++;return vm.runInContext('CONTENT_DOCUMENT_HEADERS_.slice()',ctx)};
+  ctx.assertContentDocumentSchema_();assert.equal(count,1);
+  ctx.getHeaders_=()=>['DOCUMENT_ID'];assert.throws(()=>ctx.assertContentDocumentSchema_(),/REL-013/);
+});

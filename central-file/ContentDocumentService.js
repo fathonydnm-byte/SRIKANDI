@@ -15,7 +15,8 @@ function ensureContentDocumentSchema_() {
 
 function assertContentDocumentSchema_() {
   const sheet = getSpreadsheet_().getSheetByName(APP_CONFIG.SHEETS.CONTENT_DOCUMENTS);
-  if (!sheet || CONTENT_DOCUMENT_HEADERS_.some(header => getHeaders_(sheet).indexOf(header) < 0)) {
+  const headers = sheet ? getHeaders_(sheet) : [];
+  if (!sheet || CONTENT_DOCUMENT_HEADERS_.some(header => headers.indexOf(header) < 0)) {
     throw new Error('Fitur isi dokumen belum dipasang. Jalankan migrasi REL-013 dari menu Arsip Aktif di spreadsheet.');
   }
 }
@@ -263,3 +264,4 @@ function continueContentDocumentJobs() {
       failure || 'Teks siap dicari: ' + result.characters + ' karakter.', failure ? 'FAILED' : 'SUCCESS');
   } finally {lock.releaseLock();}
 }
+
