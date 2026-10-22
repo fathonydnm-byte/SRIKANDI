@@ -1,6 +1,6 @@
 # Perbaikan umpan balik pencarian isi — 16 Oktober 2026
 
-Status: source siap; BELUM dipasang di Apps Script. Baseline branch `feat/berkas-content-search`, commit `3a90e4e413e7016e829bccd3d82edc45e47fb84a`, rilis 3.31.0/schema 11. Akses browser saat pengerjaan tidak lagi login.
+Status terbaru 22 Oktober 2026: SUDAH dipasang pada deployment existing versi 62, pukul 09.22 WIB menurut dialog Apps Script. Source perbaikan commit `e3eeaadd00a1449536ff058d04ed3ef5d5492a88`, branch `feat/berkas-content-search`; rilis tetap 3.31.0/schema 11. Baseline sebelum patch `3a90e4e413e7016e829bccd3d82edc45e47fb84a`, deployment versi 61.
 
 ## Perubahan
 
@@ -28,3 +28,17 @@ Belum ada benchmark unggah/ekstraksi live. Belum dapat menyatakan besarnya perce
 3. Simpan baseline/cadangan source. Pasang ketiga file tersebut (ekstensi .js di git = .gs di editor). Tidak perlu migrasi/reset atau perubahan trigger.
 4. Update deployment existing menggunakan versi baru; pertahankan URL dan akses. Catat nomor versi aktual, jangan mengasumsikan @62.
 5. Verifikasi posisi Cari pada desktop/mobile, spinner/detik saat pencarian, antrean sampai READY/FAILED, dan resume unggah. Gunakan dokumen uji yang disetujui pengguna; jangan mengubah arsip lama untuk simulasi.
+
+## Bukti pemasangan 22 Oktober 2026
+
+- Login proyek terverifikasi bag.umum@uinsa.ac.id. Ketiga file target cocok dengan baseline sebelum edit. Tidak ditemukan perubahan pengguna pada ketiga file itu.
+- ContentSearch.html, ContentDocumentService.gs, ContentSearchService.gs diperbarui. Setelah editor dimuat ulang, ketiganya dibaca kembali melalui clipboard UI dan dibandingkan persis dengan source perbaikan: semuanya cocok (normalisasi CRLF).
+- Dialog Google menampilkan "Penerapan berhasil diperbarui. Versi 62 pada 22 Okt 2026, pukul 09.22". Deployment ID dan URL existing dipertahankan; execute-as pemilik, akses Hanya saya sendiri tetap.
+- URL: https://script.google.com/a/macros/uinsa.ac.id/s/AKfycby61nrRsmp5SyiTnySxIiHrf_DDAOdmqVJnNPwwq2BBY9EmCly_sTjR-9ZhLb3TRClv/exec
+- Uji baca saja pada berkas 15 Surveillance Audit: 1/5 item siap, item 5 SPMK. Query denda menghasilkan 2 paragraf/bagian, 1/1 item siap selesai diperiksa, tanpa error.
+- Spinner dan hitungan waktu pencarian terlihat; screenshot menangkap 4 detik. Ini waktu pada saat capture, bukan durasi total pencarian.
+- Pengukuran DOM desktop: input dan tombol top 335.625, bottom 375.625, height 40 piksel; sejajar tepat.
+- Belum menguji ulang unggah, resume, antrean sampai READY/FAILED dengan file baru; tidak menambah versi Word/data arsip untuk simulasi. Belum UAT mobile. Efek percepatan unggah/ekstraksi belum dibenchmark.
+- Rollback bila diperlukan: pilih deployment versi 61 pada ID existing tanpa reset schema/data. Source sebelum patch tetap tersedia di commit baseline di atas.
+
+Bagian "Lanjutkan pemasangan" di atas adalah instruksi historis sebelum pemasangan; jangan memasang ulang tanpa memeriksa kondisi terbaru.
