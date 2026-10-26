@@ -1,6 +1,6 @@
 # Dashboard drilldown — 26 Oktober 2026
 
-Status: source selesai dan 5 pengujian terarah lulus; belum dipasang. Login browser proyek diperlukan kembali. Baseline branch feat/berkas-content-search, commit 45c9bb51795c0df0780e151059d1cc82d346ccc5; deployment terverifikasi terakhir @62 (22 Oktober), rilis 3.31.0/schema 11.
+Status terbaru: SUDAH dipasang pada deployment existing versi 63, 26 Oktober 2026 pukul 11.42 WIB menurut dialog Apps Script. Source final commit f3875377f64969d84c1b4a77909a2c30045b6295 (kartu 557754cd2ee1a9c2dcd332433790cbe6c58c959c ditambah koreksi ID target monitoring agar unik). Baseline branch feat/berkas-content-search, commit 45c9bb51795c0df0780e151059d1cc82d346ccc5; deployment sebelumnya @62 (22 Oktober), rilis tetap 3.31.0/schema 11.
 
 ## Perilaku
 
@@ -18,3 +18,15 @@ central-file/Index.html, Client.html, Styles.html. Source lain tidak berubah. Se
 node --test tests/dashboard-shortcuts.test.cjs: 5 lulus. Mencakup batas -1/0/7/8 hari, proposed/transferred, filter biasa dan pencarian, navigasi dan pemuatan tunggal, daftar kosong, serta respons lambat setelah navigasi. Client.html lolos pemeriksaan sintaks Node VM.
 
 UAT live masih diperlukan: klik tiga kartu; cocokkan jumlah peminjaman dengan transaksi aktif berkelompok; H-7 nol menampilkan pesan kosong; daftar habis sesuai dashboard. Pastikan tindakan cetak/pengembalian/usul existing tersedia tanpa mengeksekusi transaksi untuk simulasi. Uji keyboard dan fokus/gulir. Angka bisa berubah jika data atau hari WIB berubah setelah dashboard dimuat.
+
+## Verifikasi live 26 Oktober 2026
+
+- Login pemilik bag.umum@uinsa.ac.id. Tiga file live baseline cocok SHA-256 (LF dinormalisasi) sebelum perubahan. Setelah disimpan dan editor direload, ketiga file dibaca lagi melalui UI, hash cocok source patch.
+- Dialog Google: Penerapan berhasil diperbarui. Versi 63 pada 26 Okt 2026 pukul 11.42. ID, URL existing, execute-as pemilik, dan akses Hanya saya sendiri dipertahankan.
+- URL aplikasi: https://script.google.com/a/macros/uinsa.ac.id/s/AKfycby61nrRsmp5SyiTnySxIiHrf_DDAOdmqVJnNPwwq2BBY9EmCly_sTjR-9ZhLb3TRClv/exec
+- Dashboard saat uji: 28 berkas, 138 item, 3 transaksi dipinjam, H-7 nol, habis aktif satu.
+- Klik Sedang Dipinjam: halaman Peminjaman, filter ACTIVE, 3 baris (ketiganya terlambat dan masih aktif); target loanTrackingSection fokus dan top 94px. Tombol tindakan existing tetap tersedia, tidak dieksekusi untuk simulasi.
+- Tekan Enter pada kartu H-7: halaman retensi, filter DASHBOARD_DUE, 0 baris, pesan tidak ada berkas yang masa aktifnya akan habis dalam 0–7 hari.
+- Klik Habis Aktif: filter DASHBOARD_EXPIRED, 1 baris berkas Pemeliharaan Kebersihan Gedung Bertingkat (Gondola) Kampus Gununganyar Tahun 2023; berstatus dipinjam. Target monitoring fokus dan top 94px. Tidak memverifikasi metadata/mengubah pinjaman/membuat usul untuk simulasi.
+- Pemeriksaan struktur sebelum pemasangan memastikan ID retentionMonitoringSection dan loanTrackingSection masing-masing hanya satu; Riwayat Usul memakai section existing tanpa ID monitoring.
+- Rollback deployment ke @62 pada ID existing jika diperlukan. Tidak perlu reset schema/data/trigger. UAT perangkat mobile belum dilakukan.
