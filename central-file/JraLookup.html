@@ -1,0 +1,92 @@
+<style>
+.jra-lookup{border:1px solid var(--line);border-radius:12px;padding:16px;margin:20px 0;background:var(--green-50)}
+.jra-lookup h3{margin:0 0 5px;font-size:14px}
+.jra-lookup p{font-size:12px;color:var(--muted);margin:6px 0 12px;line-height:1.6}
+.jra-lookup-controls{display:flex;align-items:end;gap:10px}
+.jra-lookup-controls .field{flex:1;min-width:0}
+.jra-lookup-controls button{height:40px;white-space:nowrap}
+.jra-lookup-status{font-size:12px;color:var(--muted);margin:12px 0;min-height:18px}
+.jra-lookup-busy::before{content:"";display:inline-block;width:12px;height:12px;border:2px solid #b9d8c8;border-top-color:var(--navy);border-radius:50%;animation:jra-lookup-spin .8s linear infinite;margin-right:8px;vertical-align:middle}
+@keyframes jra-lookup-spin{to{transform:rotate(360deg)}}
+.jra-lookup-results{max-height:420px;overflow:auto;border-radius:8px;background:var(--white)}
+.jra-lookup-results table{border-collapse:collapse;width:100%;font-size:12px}
+.jra-lookup-results th,.jra-lookup-results td{padding:12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line);white-space:pre-wrap;overflow-wrap:anywhere}
+.jra-lookup-results th{background:var(--green-100)}
+.jra-lookup-results td:first-child{min-width:240px;width:40%}
+.jra-lookup-results small{display:block;color:var(--muted);margin-top:6px}
+.jra-lookup-results a{color:var(--navy)}
+.jra-lookup-more{margin-top:10px}
+@media(max-width:650px){.jra-lookup{padding:12px}.jra-lookup-controls{flex-wrap:wrap}.jra-lookup-controls .field{flex-basis:100%}.jra-lookup-results table{min-width:620px}}
+@media(prefers-reduced-motion:reduce){.jra-lookup-busy::before{animation:none}}
+</style>
+<section class="jra-lookup" aria-labelledby="jraLookupTitle">
+  <h3 id="jraLookupTitle">Cek Jadwal Retensi Arsip (JRA)</h3>
+  <p>Cari jenis arsip sebagai referensi pengisian retensi di atas. Perhatikan syarat awal perhitungan; hasil tidak otomatis mengubah isian.</p>
+  <div class="jra-lookup-controls">
+    <label class="field">Kata kunci JRA<input id="jraLookupQuery" type="search" autocomplete="off" maxlength="120" placeholder="Contoh: rektor, kepegawaian, atau pengadaan" aria-describedby="jraLookupStatus"></label>
+    <button id="jraLookupRun" type="button" class="secondary" aria-controls="jraLookupResults">Cari JRA</button>
+  </div>
+  <div id="jraLookupStatus" class="jra-lookup-status" role="status" aria-live="polite">Masukkan minimal 2 karakter, lalu tekan Cari JRA atau Enter.</div>
+  <div id="jraLookupResults" class="jra-lookup-results" tabindex="0" aria-label="Hasil pencarian JRA" hidden></div>
+  <button id="jraLookupMore" type="button" class="secondary jra-lookup-more" hidden>Tampilkan selanjutnya</button>
+</section>
+<script>
+const jraLookupState_={generation:0,busy:false,query:'',next:null,snapshot:'',count:0,timer:null};
+document.addEventListener('DOMContentLoaded',()=>{
+  $('jraLookupRun').addEventListener('click',()=>runJraLookup_(false));
+  $('jraLookupMore').addEventListener('click',()=>runJraLookup_(true));
+  $('jraLookupQuery').addEventListener('keydown',event=>{
+    if(event.key==='Enter'){event.preventDefault();event.stopPropagation();runJraLookup_(false)}
+  });
+  $('jraLookupQuery').addEventListener('input',resetJraLookup_);
+});
+function stopJraLookupWait_(){
+  clearTimeout(jraLookupState_.timer);jraLookupState_.timer=null;
+  $('jraLookupStatus').classList.remove('jra-lookup-busy');
+}
+function resetJraLookup_(){
+  const s=jraLookupState_;s.generation++;s.busy=false;s.next=null;s.count=0;s.snapshot='';
+  stopJraLookupWait_();$('jraLookupRun').disabled=false;$('jraLookupMore').hidden=true;
+  $('jraLookupResults').replaceChildren();$('jraLookupResults').hidden=true;
+  $('jraLookupStatus').textContent='Tekan Cari JRA untuk mencari kata kunci ini.';
+}
+function renderJraLookupRow_(row){
+  const cell=value=>escapeHtml(String(value||'').trim()||'Tidak tercantum pada baris ini');
+  const meta=[row.section,row.number?'No. '+row.number:'','Baris '+row.row].filter(Boolean).join(' · ');
+  const url=/^https:\/\/docs\.google\.com\/spreadsheets\/d\//.test(row.sourceUrl)?row.sourceUrl:'';
+  return '<tr><td>'+cell(row.description)+'<small>'+escapeHtml(meta)+'</small>'+
+    (url?'<small><a href="'+escapeHtml(url)+'" target="_blank" rel="noopener">Lihat baris sumber</a></small>':'')+
+    (String(row.mergedRetention||'').trim()?'<small><strong>Retensi pada sel gabungan sumber:</strong> '+escapeHtml(row.mergedRetention)+'</small>':'')+
+    '</td><td>'+cell(row.active)+'</td><td>'+cell(row.inactive)+'</td><td>'+cell(row.disposition)+'</td></tr>';
+}
+async function runJraLookup_(more){
+  const s=jraLookupState_;if(s.busy)return;
+  const query=$('jraLookupQuery').value.trim();
+  if(query.length<2){$('jraLookupStatus').textContent='Masukkan minimal 2 karakter untuk mencari JRA.';return}
+  if(more&&(s.next===null||query!==s.query))return;
+  if(!more)resetJraLookup_();
+  const generation=++s.generation,started=Date.now();s.busy=true;s.query=query;
+  $('jraLookupRun').disabled=true;$('jraLookupMore').hidden=true;
+  $('jraLookupStatus').classList.add('jra-lookup-busy');
+  const tick=()=>{
+    if(generation!==s.generation)return;
+    const seconds=Math.floor((Date.now()-started)/1000);
+    $('jraLookupStatus').textContent='Mencari pada sumber JRA… · '+seconds+' detik'+(seconds>=30?' · Respons sumber belum diterima; mohon tunggu.':'');
+    s.timer=setTimeout(tick,1000);
+  };tick();
+  try{
+    const response=await runServer('apiSearchJraReference',{query:query,offset:more?s.next:0,snapshot:more?s.snapshot:''});
+    if(generation!==s.generation)return;
+    stopJraLookupWait_();s.snapshot=response.snapshot;s.next=response.nextOffset;s.count+=response.results.length;
+    if(!more)$('jraLookupResults').innerHTML='<table><thead><tr><th>Jenis arsip</th><th>Retensi aktif</th><th>Retensi inaktif</th><th>Nasib akhir / keterangan</th></tr></thead><tbody id="jraLookupRows"></tbody></table>';
+    response.results.forEach(row=>$('jraLookupRows').insertAdjacentHTML('beforeend',renderJraLookupRow_(row)));
+    $('jraLookupResults').hidden=!s.count;
+    $('jraLookupStatus').textContent=response.total
+      ? s.count+' dari '+response.total+' hasil untuk “'+query+'”. Sumber diperiksa '+response.checkedAt+'. Redaksi mengikuti data sumber; kolom kosong tidak ditafsirkan.'
+      : 'Tidak ditemukan hasil untuk “'+query+'”. Coba kata yang lebih umum atau ejaan lain.';
+    $('jraLookupMore').hidden=s.next===null;
+  }catch(error){
+    if(generation===s.generation){stopJraLookupWait_();$('jraLookupStatus').textContent='Pencarian belum berhasil: '+error.message+' Tekan Cari JRA untuk mencoba kembali.'}
+  }finally{if(generation===s.generation){s.busy=false;$('jraLookupRun').disabled=false}}
+}
+</script>

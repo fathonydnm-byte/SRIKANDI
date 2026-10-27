@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   bindSpotlightSearch();
   bindNavDropdown();
   bindDashboardArchiveList();
+  bindDashboardDetails_();
   loadBootstrap();
 });
 
@@ -96,6 +97,41 @@ function renderDashboard(){
   $('statLoan').textContent=d.activeLoans;
   $('statDue').textContent=d.retentionDueSoon;
   $('statExpired').textContent=d.expiredRetention;
+}
+
+/* Dashboard shortcuts use the existing lists and their actions. */
+let dashboardDetailRequest_=0;
+function bindDashboardDetails_(){
+  document.querySelectorAll('[data-dashboard-detail]').forEach(button=>{
+    button.addEventListener('click',()=>openDashboardDetail_(button.dataset.dashboardDetail));
+  });
+}
+async function openDashboardDetail_(kind){
+  const loan=kind==='loans';
+  if(!loan&&kind!=='due'&&kind!=='expired')return;
+  const page=loan?'loans':'retention';
+  $(loan?'loanSearch':'retentionSearch').value='';
+  $(loan?'loanStatusFilter':'retentionStatusFilter').value=loan?'ACTIVE':
+    kind==='due'?'DASHBOARD_DUE':'DASHBOARD_EXPIRED';
+  const request=dashboardDetailRequest_+1;
+  const pending=showPage(page,true);
+  const target=$(loan?'loanTrackingSection':'retentionMonitoringSection');
+  const reveal=()=>{
+    if(request!==dashboardDetailRequest_||!$(page+'Page').classList.contains('active'))return;
+    target.scrollIntoView({block:'start'});
+    target.focus({preventScroll:true});
+  };
+  reveal();
+  await pending;
+  reveal();
+}
+function matchesRetentionFilter_(row,status){
+  if(status==='ALL')return true;
+  if(status!=='DASHBOARD_DUE'&&status!=='DASHBOARD_EXPIRED')return row.statusCode===status;
+  // Match getDashboardSummary_: include proposed records, exclude transferred.
+  if(row.statusCode==='TRANSFERRED'||!row.activeLimit||!Number.isFinite(row.daysToActiveLimit))return false;
+  return status==='DASHBOARD_EXPIRED'?row.daysToActiveLimit<0:
+    row.daysToActiveLimit>=0&&row.daysToActiveLimit<=7;
 }
 
 /* ===== Dashboard: Daftar Isi Berkas (gabungan Daftar Berkas + Daftar Isi Berkas) ===== */
@@ -178,7 +214,7 @@ function renderDashboardArchiveGroup_(group){
         '<span class="status-badge'+(retensiClass?' '+retensiClass:'')+'">'+escapeHtml(retensiText)+'</span>'+
       '</span>'+
     '</button>'+
-    '<div class="dashboard-archive-items">'+itemsHtml+'</div>'+
+    '<div class="dashboard-archive-items"><button type="button" class="secondary" data-content-berkas="'+escapeHtml(group.berkasId)+'">Cari Isi Berkas Ini</button>'+itemsHtml+'</div>'+
   '</div>';
 }
 
@@ -231,7 +267,8 @@ function bindNavDropdown(){
   });
 }
 
-function showPage(page){
+function showPage(page,refresh=false){
+  dashboardDetailRequest_++;
   const titles={dashboard:['Dashboard','Ringkasan kondisi arsip Anda.'],receipts:['Penerimaan Arsip','Catat penyerahan fisik dan buat tanda terima secara otomatis.'],input:['Input Arsip','Buat berkas baru atau lanjutkan daftar isi berkas yang sudah ada.'],media:['Alih Media','Lengkapi PDF untuk item arsip yang sudah tersimpan.'],search:['Cari Arsip','Temukan arsip aktif dan akses alih medianya dengan cepat.'],labels:['Cetak Lidah Folder','Buat PDF label folder fisik dari nomor definitif terbaru.'],retention:['Usul Pemindahan','Pantau retensi aktif dan siapkan draft usul tanpa mengubah fase arsip.'],loans:['Peminjaman','Catat, pantau, dan selesaikan peminjaman berkas maupun item arsip.'],edit:['Edit Arsip','Perbaiki metadata dan file alih media item yang sudah tersimpan.'],deletion:['Koreksi & Pembatalan','Koreksi atau batalkan data arsip secara terkendali dan tercatat.'],masterlog:['Master Log Perubahan','Jejak audit permanen seluruh aktivitas petugas arsiparis.']};
   document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('.nav-button').forEach(x=>x.classList.toggle('active',x.dataset.page===page));
@@ -256,8 +293,8 @@ function showPage(page){
   if(page==='input')loadReceiptFilingOptions();
   if(page==='media')loadMediaOptions();
   if(page==='labels')loadFolderLabelOptions();
-  if(page==='retention')loadRetentionOptions();
-  if(page==='loans')loadLoanOptions();
+  if(page==='retention')return loadRetentionOptions(refresh);
+  if(page==='loans')return loadLoanOptions(refresh);
   if(page==='edit')loadEditOptions();
   if(page==='deletion')loadDeletionOptions();
   if(page==='masterlog')loadMasterLog();
@@ -1027,7 +1064,7 @@ function renderArchiveSearchRow(row){
     '<td><div class="search-description">'+escapeHtml(row.description)+'</div><span class="search-cell-sub">'+escapeHtml(row.pageCount)+' lembar · '+escapeHtml(row.developmentLevel)+(row.condition?' · '+escapeHtml(receiptTitleCase_(row.condition)):'')+'</span></td>'+
     '<td><span class="search-cell-main">'+escapeHtml(row.classificationCode||'–')+'</span><span class="search-cell-sub">'+escapeHtml(row.location)+'</span></td>'+
     '<td><div class="search-badges">'+fileBadge+loanBadge+'</div></td>'+
-    '<td><div class="search-actions"><a class="'+pdfClass+'" href="'+escapeHtml(row.fileUrl||'#')+'" target="_blank" rel="noopener">'+pdfLabel+'</a><a class="'+folderClass+'" href="'+escapeHtml(row.folderUrl||'#')+'" target="_blank" rel="noopener">Buka Folder</a></div></td>'+
+    '<td><div class="search-actions"><a class="'+pdfClass+'" href="'+escapeHtml(row.fileUrl||'#')+'" target="_blank" rel="noopener">'+pdfLabel+'</a><a class="'+folderClass+'" href="'+escapeHtml(row.folderUrl||'#')+'" target="_blank" rel="noopener">Buka Folder</a><button type="button" class="secondary" data-content-berkas="'+escapeHtml(row.berkasId)+'" data-content-item="'+escapeHtml(row.itemId)+'">Cari Isi</button></div></td>'+
   '</tr>';
 }
 
@@ -1263,7 +1300,7 @@ function visibleRetentionRows_(){
   const query=normalizeFolderLabelFilter_($('retentionSearch').value);
   const status=$('retentionStatusFilter').value;
   return rows.filter(row=>{
-    if(status!=='ALL'&&row.statusCode!==status)return false;
+    if(!matchesRetentionFilter_(row,status))return false;
     if(!query)return true;
     const corpus=normalizeFolderLabelFilter_([
       row.number,row.title,row.classificationCode,row.location,row.statusLabel,row.approvedBy
@@ -1278,9 +1315,14 @@ function renderRetentionTable(){
   $('retentionResultsBody').innerHTML=rows.map(renderRetentionRow_).join('');
   $('retentionTableEmpty').hidden=rows.length>0;
   $('retentionTableWrap').hidden=rows.length===0;
-  $('retentionTableEmpty').textContent=state.retentionOptions.total
-    ? 'Tidak ada berkas yang sesuai dengan pencarian atau filter status.'
-    : 'Belum ada berkas yang memiliki perhitungan retensi.';
+  const filter=$('retentionStatusFilter').value;
+  $('retentionTableEmpty').textContent=filter==='DASHBOARD_DUE'
+    ? 'Tidak ada berkas yang masa aktifnya akan habis dalam 0–7 hari sesuai pencarian ini.'
+    : filter==='DASHBOARD_EXPIRED'
+      ? 'Tidak ada berkas yang masa aktifnya sudah habis sesuai pencarian ini.'
+      : state.retentionOptions.total
+        ? 'Tidak ada berkas yang sesuai dengan pencarian atau filter status.'
+        : 'Belum ada berkas yang memiliki perhitungan retensi.';
 }
 
 function renderRetentionRow_(row){
@@ -1515,7 +1557,7 @@ function visibleRetentionRows_(){
   const query=normalizeFolderLabelFilter_($('retentionSearch').value);
   const status=$('retentionStatusFilter').value;
   return rows.filter(row=>{
-    if(status!=='ALL'&&row.statusCode!==status)return false;
+    if(!matchesRetentionFilter_(row,status))return false;
     if(!query)return true;
     const corpus=normalizeFolderLabelFilter_([
       row.number,row.title,row.classificationCode,row.creatorUnit,row.location,
@@ -1531,9 +1573,14 @@ function renderRetentionTable(){
   $('retentionResultsBody').innerHTML=rows.map(renderRetentionRow_).join('');
   $('retentionTableEmpty').hidden=rows.length>0;
   $('retentionTableWrap').hidden=rows.length===0;
-  $('retentionTableEmpty').textContent=state.retentionOptions.total
-    ? 'Tidak ada berkas yang sesuai dengan pencarian atau filter status.'
-    : 'Belum ada berkas yang memiliki perhitungan retensi.';
+  const filter=$('retentionStatusFilter').value;
+  $('retentionTableEmpty').textContent=filter==='DASHBOARD_DUE'
+    ? 'Tidak ada berkas yang masa aktifnya akan habis dalam 0–7 hari sesuai pencarian ini.'
+    : filter==='DASHBOARD_EXPIRED'
+      ? 'Tidak ada berkas yang masa aktifnya sudah habis sesuai pencarian ini.'
+      : state.retentionOptions.total
+        ? 'Tidak ada berkas yang sesuai dengan pencarian atau filter status.'
+        : 'Belum ada berkas yang memiliki perhitungan retensi.';
   updateRetentionSelection_();
 }
 
@@ -3677,6 +3724,8 @@ function renderSpotlightRow_(row){
 
 /* ===== Detail Arsip (dibuka dari Spotlight Search) ===== */
 function openArchiveDetail_(row){
+  $('archiveDetailContent').dataset.contentBerkas=row.berkasId;
+  $('archiveDetailContent').dataset.contentItem=row.itemId;
   $('archiveDetailTitle').textContent=(row.berkasNumber||'–')+' / '+(row.itemNumber||'–');
   $('archiveDetailSubtitle').textContent=row.title||'Tanpa judul berkas';
   $('archiveDetailDescription').textContent=row.description||'Tidak ada uraian.';
@@ -3723,3 +3772,4 @@ function closeArchiveDetail_(){
   $('archiveDetailModal').classList.remove('open');
 }
 </script>
+

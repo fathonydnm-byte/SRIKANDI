@@ -30,6 +30,7 @@ function onOpen() {
     .addItem('Cek Status Keputusan Record Center…', 'checkTransferDecisionViaPrompt')
     .addItem('Aktifkan Polling Otomatis Keputusan RC', 'installTransferDecisionPollTriggerViaMenu')
     .addItem('Jalankan Migrasi Tertunda', 'runPendingMigrationsViaMenu')
+    .addItem('Pasang / Perbaiki Pencarian Isi Dokumen', 'repairContentSearchViaMenu')
     .addItem('Atur Data Petugas & Pimpinan (Berita Acara)…', 'updateBeritaAcaraDefaultsViaPrompts')
     .addSeparator()
     .addItem('Perbaiki / Segarkan Laporan', 'repairReports')
@@ -305,6 +306,23 @@ function apiCancelMediaUpload(sessionId) {
 function apiSearchArchive(criteria) {
   return searchArchive_(criteria);
 }
+
+function repairContentSearchViaMenu() {
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {ensureContentDocumentSchema_();}
+  finally {lock.releaseLock();}
+  SpreadsheetApp.getUi().alert('Tabel dan pekerja pencarian isi dokumen siap. Jalankan Migrasi Tertunda jika schema belum 11.');
+}
+
+function apiGetContentSearchOptions() {return getContentSearchOptions_();}
+function apiGetContentBerkas(berkasId) {return getContentBerkas_(berkasId);}
+function apiSearchContentBerkas(criteria) {return searchContentBerkas_(criteria);}
+function apiStartContentWordUpload(request) {return startContentWordUpload_(request);}
+function apiUploadContentWordChunk(request) {return uploadContentWordChunk_(request);}
+function apiGetContentWordUploadStatus(sessionId) {return getContentWordUploadStatus_(sessionId);}
+function apiFinalizeContentWordUpload(sessionId) {return finalizeContentWordUpload_(sessionId);}
+function apiCancelContentWordUpload(sessionId) {return cancelContentWordUpload_(sessionId);}
+function apiRetryContentDocument(documentId) {return retryContentDocument_(documentId);}
 
 function apiGetMasterLog(limit) {
   return getMasterLog_(limit);

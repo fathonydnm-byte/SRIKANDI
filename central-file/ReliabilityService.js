@@ -422,6 +422,22 @@ function applyReliabilityMigrations_() {
           ['BA_PIMPINAN_NIP', '', 'STRING', 'NIP pimpinan unit kerja yang menandatangani Berita Acara']
         ]);
       }
+    },
+    {
+      id: 'REL-013',
+      version: 11,
+      description: 'Dokumen Word pendamping dan antrean ekstraksi untuk pencarian isi per berkas',
+      run: function() {
+        ensureContentDocumentSchema_();
+        upsertReliabilitySettingsBatch_([
+          ['SCHEMA_VERSION', APP_RELEASE.SCHEMA_VERSION, 'NUMBER', 'Versi struktur database'],
+          ['APP_RELEASE_VERSION', APP_RELEASE.VERSION, 'STRING', 'Versi paket aplikasi']
+        ]);
+        PropertiesService.getScriptProperties().setProperties({
+          INSTANCE_SCHEMA_VERSION: String(APP_RELEASE.SCHEMA_VERSION),
+          INSTANCE_RELEASE_VERSION: APP_RELEASE.VERSION
+        }, false);
+      }
     }
   ];
   const applied = readObjects_(APP_CONFIG.SHEETS.SYSTEM_MIGRATIONS);
@@ -1347,6 +1363,15 @@ function runReliabilityHealthCheck_(persist) {
         (centralFileMetadataHealth.missing.length > 8 ? ', …' : '')
   );
 
+  const contentSheet = spreadsheet.getSheetByName(APP_CONFIG.SHEETS.CONTENT_DOCUMENTS);
+  const contentHeaders = contentSheet ? getHeaders_(contentSheet) : [];
+  const contentSchemaOk = CONTENT_DOCUMENT_HEADERS_.every(header => contentHeaders.indexOf(header) !== -1);
+  const contentWorkerOk = ScriptApp.getProjectTriggers().some(trigger => trigger.getHandlerFunction() === CONTENT_WORKER_HANDLER_);
+  addReliabilityCheck_(checks, 'CONTENT_SEARCH_SCHEMA', contentSchemaOk ? 'OK' : 'ERROR',
+    contentSchemaOk ? 'Tabel dokumen pencarian tersedia.' : 'Jalankan migrasi REL-013.');
+  addReliabilityCheck_(checks, 'CONTENT_SEARCH_WORKER', contentWorkerOk ? 'OK' : 'WARNING',
+    contentWorkerOk ? 'Pemrosesan Word terjadwal aktif.' : 'Pasang ulang pekerja teks melalui menu spreadsheet.');
+
   const loanHeaders = sheetNames.indexOf(APP_CONFIG.SHEETS.PEMINJAMAN) === -1
     ? [] : getHeaders_(spreadsheet.getSheetByName(APP_CONFIG.SHEETS.PEMINJAMAN));
   const missingLoanHeaders = LOAN_REQUIRED_HEADERS_
@@ -1626,6 +1651,7 @@ function createDistributionTemplate_() {
       APP_CONFIG.SHEETS.SYSTEM_JOB_QUEUE,
       APP_CONFIG.SHEETS.SYSTEM_HEALTH,
       APP_CONFIG.SHEETS.SYSTEM_QUARANTINE,
+      APP_CONFIG.SHEETS.CONTENT_DOCUMENTS,
       'LOG_CETAK_LIDAH'
     ];
     rowTwoSheets.forEach(name => clearTemplateDataRows_(template, name, 2));

@@ -82,6 +82,11 @@ button,input,select,textarea{font:inherit}
 .stat-card.warning strong{color:var(--warning)}
 .stat-card.danger strong{color:var(--danger)}
 .stat-card.success strong{color:var(--success)}
+.stat-card.stat-link{font:inherit;text-align:left;cursor:pointer;width:100%;color:inherit}
+.stat-link:focus-visible{outline:3px solid var(--navy);outline-offset:3px}
+.stat-link-hint{display:block;font-size:10px;color:var(--muted);margin-top:3px}
+#loanTrackingSection,#retentionMonitoringSection{scroll-margin-top:24px}
+#loanTrackingSection:focus-visible,#retentionMonitoringSection:focus-visible{outline:2px solid var(--navy);outline-offset:3px}
 
 /* ==================== CARDS / FORMS ==================== */
 .empty-state,.form-card{background:var(--white);border:1px solid var(--line);border-radius:var(--radius-lg);margin-top:18px;padding:26px 28px;box-shadow:var(--shadow-subtle)}
@@ -404,3 +409,4 @@ button.secondary:hover{background:#F1F5F9;color:var(--ink)}
 .archive-detail-item strong{font-size:13.5px;color:var(--ink);font-weight:600}
 .archive-detail-badges{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
 </style>
+

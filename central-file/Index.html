@@ -85,9 +85,9 @@
         <div class="stat-grid">
           <article class="stat-card"><div class="stat-icon">📁</div><div><span>Total Berkas</span><strong id="statBerkas">–</strong></div></article>
           <article class="stat-card"><div class="stat-icon">📄</div><div><span>Total Item</span><strong id="statItem">–</strong></div></article>
-          <article class="stat-card"><div class="stat-icon">📋</div><div><span>Sedang Dipinjam</span><strong id="statLoan">–</strong></div></article>
-          <article class="stat-card warning"><div class="stat-icon">⏱️</div><div><span>Retensi H-7</span><strong id="statDue">–</strong></div></article>
-          <article class="stat-card danger"><div class="stat-icon">⚠️</div><div><span>Habis Aktif</span><strong id="statExpired">–</strong></div></article>
+          <button type="button" class="stat-card stat-link" data-dashboard-detail="loans" aria-controls="loanTrackingSection"><div class="stat-icon">📋</div><div><span>Sedang Dipinjam</span><strong id="statLoan">–</strong><small class="stat-link-hint">Lihat rincian →</small></div></button>
+          <button type="button" class="stat-card stat-link warning" data-dashboard-detail="due" aria-controls="retentionMonitoringSection"><div class="stat-icon">⏱️</div><div><span>Retensi H-7</span><strong id="statDue">–</strong><small class="stat-link-hint">Lihat rincian →</small></div></button>
+          <button type="button" class="stat-card stat-link danger" data-dashboard-detail="expired" aria-controls="retentionMonitoringSection"><div class="stat-icon">⚠️</div><div><span>Habis Aktif</span><strong id="statExpired">–</strong><small class="stat-link-hint">Lihat rincian →</small></div></button>
         </div>
         <div class="empty-state"><h2>Input berkas dan item dalam satu layar</h2><p>Buat berkas baru atau lanjutkan input item pada berkas yang sudah ada.</p><button class="primary" data-go="input">Mulai Input Arsip</button></div>
 
@@ -334,6 +334,8 @@
               <label class="field">Nasib akhir *<select id="finalDisposition" name="finalDisposition"><option value="">Pilih nasib akhir</option><option>MUSNAH</option><option>PERMANEN</option><option>DINILAI KEMBALI</option></select></label>
             </div>
 
+            <?!= include('JraLookup'); ?>
+
             <div class="section-heading compact"><div><h2>Lokasi Fisik</h2></div></div>
             <div class="form-grid three">
               <label class="field">No. Filling Cabinet<input id="filingCabinet" name="filingCabinet" autocomplete="off"></label>
@@ -399,7 +401,7 @@
         <form id="searchForm" class="form-card">
           <div class="section-heading">
             <div><h2>Cari Arsip</h2><p>Temukan item berdasarkan nomor surat, uraian, judul berkas, kode klasifikasi, atau lokasi fisik.</p></div>
-            <button type="button" id="resetSearch" class="secondary">Bersihkan Filter</button>
+            <div><button type="button" class="secondary" data-content-berkas="">Cari Isi Berkas</button> <button type="button" id="resetSearch" class="secondary">Bersihkan Filter</button></div>
           </div>
           <div class="form-grid">
             <label class="field span-2">Kata kunci
@@ -496,7 +498,7 @@
           <article class="stat-card success"><div class="stat-icon">📑</div><div><span>Dalam Usul</span><strong id="retentionStatProposed">–</strong></div></article>
         </div>
 
-        <section class="form-card retention-list-card">
+        <section id="retentionMonitoringSection" class="form-card retention-list-card" tabindex="-1" aria-label="Daftar berkas menurut retensi">
           <div class="section-heading">
             <div><h2>Monitoring Retensi Aktif</h2><p>Pilih berkas yang masa aktifnya telah habis untuk disiapkan sebagai usul pemindahan.</p></div>
             <button type="button" id="refreshRetention" class="secondary">Segarkan Data</button>
@@ -511,7 +513,9 @@
             </label>
             <label class="field">Status
               <select id="retentionStatusFilter">
-                <option value="ALL">Semua status</option>
+                <option value="DASHBOARD_DUE">H-7 berdasarkan tanggal (termasuk dalam usul)</option>
+                <option value="DASHBOARD_EXPIRED">Habis aktif berdasarkan tanggal (termasuk dalam usul)</option>
+                <option value="ALL" selected>Semua status</option>
                 <option value="EXPIRED">Habis aktif</option>
                 <option value="DUE">H-7</option>
                 <option value="ACTIVE">Masih aktif</option>
@@ -694,7 +698,7 @@
           </div>
         </form>
 
-        <section class="form-card loan-list-card">
+        <section id="loanTrackingSection" class="form-card loan-list-card" tabindex="-1" aria-label="Daftar rincian peminjaman">
           <div class="section-heading">
             <div><h2>Pelacakan Peminjaman</h2><p>Telusuri arsip yang masih dipinjam, terlambat, maupun sudah dikembalikan.</p></div>
             <button type="button" id="refreshLoans" class="secondary">Segarkan Data</button>
@@ -957,6 +961,7 @@
         <div id="archiveDetailBadges" class="archive-detail-badges"></div>
       </div>
       <div class="modal-actions">
+        <button type="button" id="archiveDetailContent" class="secondary" data-content-berkas="">Cari Isi Berkas Ini</button>
         <a id="archiveDetailFolderLink" class="search-link secondary-link" href="#" target="_blank" rel="noopener">Buka Folder Berkas</a>
         <a id="archiveDetailFileLink" class="search-link" href="#" target="_blank" rel="noopener">Buka PDF Alih Media</a>
       </div>
@@ -973,9 +978,12 @@
   </div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <?!= include('Client'); ?>
+  <?!= include('ContentSearch'); ?>
   <?!= include('LabelLogo'); ?>
   <?!= include('LabelPrint'); ?>
   <?!= include('OutIndicatorPrint'); ?>
   <?!= include('ReceiptPrint'); ?>
 </body>
 </html>
+
+
