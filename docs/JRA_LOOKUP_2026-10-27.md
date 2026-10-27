@@ -1,6 +1,8 @@
 # Cek Jadwal Retensi Arsip — 27 Oktober 2026
 
-Status: source selesai, belum dipasang. Browser pemasangan Google diarahkan ke verifikasi CAPTCHA (unusual traffic), sehingga perlu intervensi pengguna sebelum login. Baseline source branch feat/berkas-content-search commit 9126ee56e390462186de2b56361fc6ad0d4f284f; deployment live terakhir terverifikasi @63, rilis 3.31.0/schema 11.
+Status: terpasang dan terverifikasi live pada deployment @64, 27 Oktober 2026 pukul 10.09 WIB. Akun proyek bag.umum@uinsa.ac.id; rilis 3.31.0/schema 11. Source fitur commit 2a664302b2485be765eb1ebffb5e99ec6475d8d2 pada branch feat/berkas-content-search, baseline 9126ee56e390462186de2b56361fc6ad0d4f284f (@63). URL aplikasi dan akses Hanya saya sendiri tetap.
+
+Aplikasi: https://script.google.com/a/macros/uinsa.ac.id/s/AKfycby61nrRsmp5SyiTnySxIiHrf_DDAOdmqVJnNPwwq2BBY9EmCly_sTjR-9ZhLb3TRClv/exec
 
 ## Fitur
 
@@ -27,14 +29,24 @@ Sumber memuat salah ketik OCR, beberapa baris judul tanpa angka, dan kolom reten
 
 ## Pengujian
 
-node --test tests/jra-lookup.test.cjs: 6 lulus (conditional text, blank/merged cells, pagination/source change, validation/header mismatch, Enter/XSS, stale response/timer cleanup). Sintaks client berhasil. Pengujian parser pada snapshot asli 899 baris menghasilkan 5 rektor sesuai pembacaan sumber. Google I/O masih mock; akses akun deploying ke sumber harus diuji langsung.
+node --test tests/jra-lookup.test.cjs: 6 lulus (conditional text, blank/merged cells, pagination/source change, validation/header mismatch, Enter/XSS, stale response/timer cleanup). Sintaks client berhasil. Pengujian parser pada snapshot asli 899 baris menghasilkan 5 rektor sesuai pembacaan sumber. Akses SpreadsheetApp akun deploying juga telah lulus UAT langsung berikut.
 
-## Pemasangan berikutnya
+## Pemasangan dan UAT live
 
-1. Setelah CAPTCHA dan login selesai, gunakan akun proyek bag.umum@uinsa.ac.id. Baca/cadangkan Index live dan bandingkan baseline @63. Jika berbeda, rekonsiliasi.
-2. Tambah JraLookupService.gs dari .js dan JraLookup.html; lalu pasang Index.html yang memuat include. Pastikan nama file persis, modul lama lain tetap.
-3. Simpan source, update deployment existing menggunakan versi baru; catat versi aktual, jangan mengasumsikan @64. URL/akses dipertahankan, tanpa migrasi/reset.
-4. UAT baca saja: buka Registrasi Berkas Baru, mode Berkas Baru (jika layar Input Arsip menampilkan pilihan), cari rektor (5 hasil; syarat lengkap), query nihil, query umum >10 hasil untuk pagination, dan Enter tidak mengirim form. Pastikan angka retensi manual tidak berubah. Periksa posisi tepat sebelum Lokasi Fisik dan tampilan mobile/desktop.
-5. Jika akun aplikasi belum memiliki akses source, berikan akses melalui alur berbagi yang disetujui pemilik; jangan memperluas akses secara diam-diam. Endpoint menjelaskan kegagalan akses.
+- Login diverifikasi bag.umum@uinsa.ac.id. Index sebelum patch cocok dengan baseline @63 (SHA-256 normalisasi LF/trailing newline: 4fae0261e74ae12c4b482267075c600467a86fe4da17f4d59874d28730aba508).
+- Tambah JraLookupService.gs, JraLookup.html, dan include Index. Clipboard readback cocok dengan source teruji. Setelah reload editor, layanan masih cocok dan ketiga nama file ada. Tidak mengubah module lain, scope, trigger, data, atau pengaturan akses.
+- Deployment existing berhasil diperbarui @64 pada 27 Oktober pukul 10.09 WIB, deskripsi v3.31.0 PILOT - Cek JRA dari spreadsheet rujukan 2026-10-27.
+- Buka aplikasi live, Registrasi Berkas Baru > Buat Berkas Baru. Cek JRA tampil tepat setelah Retensi Manual dan sebelum Lokasi Fisik. Screenshot desktop memperlihatkan tombol Cari JRA sejajar dengan input.
+- Ketik rektor dan Enter: indikator Mencari pada sumber JRA dengan hitungan detik muncul, kemudian 5 dari 5 hasil. Baris 48,50,223,448,863 sesuai sumber. Retensi Keputusan Rektor tetap 1 Tahun setelah diperbarui / 4 tahun / Permanen; tautan tiap baris benar.
+- Isian seluruh input/select identitas berkas dibandingkan sebelum dan sesudah lookup: tidak berubah. Enter tidak mengirim form induk; tidak ada transaksi arsip yang disimpan dalam UAT.
+- Query zzqjratanpahasil menampilkan pesan hasil kosong dan saran ejaan.
+- Query tahun menghasilkan 694 kecocokan, awal 10 baris. Tampilkan selanjutnya menambah hingga 20 dari 694; 20 link sumber unik, tanpa duplikasi halaman.
+- Query rektor diulang sukses dan dibiarkan terbuka sebagai tampilan akhir. Screenshot bukti central-file-jra-live-20261027.jpg. Pengujian visual browser dilakukan pada desktop; aturan responsif tersedia, belum UAT di perangkat mobile.
+
+Hash source tersimpan (SHA-256, LF, trailing newline diabaikan):
+
+- JraLookupService.gs: 061202d586a87b9b7ac4f3eda4d2cc2618153505cf15bb125ef0f7aa2d07089e
+- JraLookup.html: 1f20b910a932e49062588cfabccee6c130d9637a81a34721368a5917537ede67
+- Index.html: 6005824a4a0f1ec6b35524b948382c56abc01d433bb300777bafb1c711637aa3
 
 Rollback tampilan melalui deployment @63; tidak ada perubahan data yang perlu dibatalkan. Snapshot referensi untuk verifikasi lokal bukan file sumber yang harus dimasukkan ke repository.
