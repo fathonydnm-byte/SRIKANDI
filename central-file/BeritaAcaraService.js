@@ -3,7 +3,7 @@ var LOAN_BA_LOG_HEADERS_ = [
   'PEMINJAMAN_IDS', 'PDF_FILE_ID', 'PDF_FILE_NAME', 'PDF_URL', 'STATUS'
 ];
 
-// Satu dokumen gabungan (BA Peminjaman + BA Pengembalian dalam 1 file, 1 PDF)
+// Satu dokumen gabungan (BA Peminjaman + BA Pengembalian dalam 1 file Google Docs)
 // sejak revisi ini — sebelumnya dua dokumen terpisah. Kunci lama tetap dibaca
 // untuk migrasi satu-kali (lihat getBeritaAcaraTemplateDocId_) supaya kop
 // surat/tata letak yang sudah dikustomisasi admin di template PEMINJAMAN
@@ -284,17 +284,14 @@ function fillBeritaAcaraItemsTable_(doc, sectionIndex, items, condition) {
   });
 }
 
-// Menghasilkan satu PDF gabungan (bagian Peminjaman + bagian Pengembalian
-// dalam satu dokumen/file) untuk satu transaksi (loanGroupId) dari template
-// master, menyimpannya di Drive, mencatat log cetak (dengan nomor cetak
-// ulang), dan menautkan URL PDF tsb kembali ke baris PEMINJAMAN terkait.
-// Dipanggil otomatis oleh klien setelah transaksi Pinjam/Kembali tersimpan,
-// dan juga dapat dipanggil ulang kapan saja (tombol Cetak) — setiap
-// pemanggilan membuat PDF baru dan menaikkan nomor cetakan. Field bagian
-// Pengembalian yang secara jujur belum diketahui (belum dikembalikan) TIDAK
-// ditebak/dipalsukan: tag tanggal & kolom kondisi tetap kosong/apa adanya,
-// siap diisi tangan; petugas memakai data petugas peminjaman sebagai isian
-// awal yang wajar sampai ada data petugas pengembalian sungguhan.
+// Membuat (atau membuka ulang) satu Berita Acara gabungan — bagian
+// Peminjaman + bagian Pengembalian — sebagai Google Docs di folder Central
+// File/Berita Acara Peminjaman Arsip, lalu menautkannya ke baris PEMINJAMAN.
+// Dipanggil otomatis setelah transaksi Pinjam/Kembali tersimpan dan lewat
+// tombol Cetak BA. Dokumen yang sudah ada dipakai ulang agar rapian petugas
+// tidak hilang; saat pengembalian dicatat, tag & kolom kondisi bagian
+// Pengembalian yang masih kosong diisikan ke dokumen yang sama. Data yang
+// belum diketahui tidak ditebak: tag dibiarkan sebagai isian tangan.
 function prepareLoanBeritaAcara_(loanGroupId) {
   ensureLoanSchema_();
   ensureLoanBeritaAcaraLogSchema_();
@@ -323,21 +320,10 @@ function prepareLoanBeritaAcara_(loanGroupId) {
   const returnDateParts = first.TANGGAL_KEMBALI
     ? beritaAcaraDateParts_(loanDateKey_(first.TANGGAL_KEMBALI, 'Tanggal kembali')) : null;
 
-  // Petugas pengembalian belum tentu tercatat saat BA ini pertama dicetak
-  // (dibuat sepasang dengan BA Peminjaman, sebelum arsip benar-benar
-  // kembali) — pakai petugas peminjaman sebagai isian awal yang wajar,
-  // digantikan data petugas pengembalian sungguhan begitu tersedia.
-  const returnOfficerName = first.PETUGAS_KEMBALI_NAMA || first.PETUGAS_PINJAM_NAMA;
-  const returnOfficerNip = first.PETUGAS_KEMBALI_NIP || first.PETUGAS_PINJAM_NIP;
-  const returnOfficerJabatan = first.PETUGAS_KEMBALI_JABATAN || first.PETUGAS_PINJAM_JABATAN;
-
   const tags = {
     'NAMA PETUGAS CENTRAL FILE': first.PETUGAS_PINJAM_NAMA || '–',
     'NIP PETUGAS CENTRAL FILE': first.PETUGAS_PINJAM_NIP || '–',
     'JABATAN PETUGAS CENTRAL FILE': first.PETUGAS_PINJAM_JABATAN || '–',
-    'NAMA PETUGAS CENTRAL FILE KEMBALI': returnOfficerName || '–',
-    'NIP PETUGAS CENTRAL FILE KEMBALI': returnOfficerNip || '–',
-    'JABATAN PETUGAS CENTRAL FILE KEMBALI': returnOfficerJabatan || '–',
     'NAMA PEMINJAM': first.NAMA_PEMINJAM || '–',
     'NIP PEMINJAM': first.NIP_NIK || '–',
     'JABATAN PEMINJAM': first.JABATAN_PEMINJAM || '–',
@@ -351,6 +337,14 @@ function prepareLoanBeritaAcara_(loanGroupId) {
     tags['BULAN'] = borrowDateParts.month;
     tags['TAHUN'] = borrowDateParts.year;
   }
+  // Data petugas penerima pengembalian baru diisikan setelah arsip benar-benar
+  // kembali (dokumen yang sama diperbarui), sama seperti tanggal kembali; sebelum
+  // itu tag dibiarkan sebagai isian tangan.
+  if (isReturned) {
+    tags['NAMA PETUGAS CENTRAL FILE KEMBALI'] = first.PETUGAS_KEMBALI_NAMA || first.PETUGAS_PINJAM_NAMA || '–';
+    tags['NIP PETUGAS CENTRAL FILE KEMBALI'] = first.PETUGAS_KEMBALI_NIP || first.PETUGAS_PINJAM_NIP || '–';
+    tags['JABATAN PETUGAS CENTRAL FILE KEMBALI'] = first.PETUGAS_KEMBALI_JABATAN || first.PETUGAS_PINJAM_JABATAN || '–';
+  }
   if (returnDateParts) {
     tags['HARI KEMBALI'] = returnDateParts.day;
     tags['TANGGAL KEMBALI'] = returnDateParts.date;
@@ -358,64 +352,139 @@ function prepareLoanBeritaAcara_(loanGroupId) {
     tags['TAHUN KEMBALI'] = returnDateParts.year;
   }
 
+  // Berita Acara disimpan sebagai Google Docs (bukan PDF) agar petugas dapat
+  // merapikan tata letaknya. Satu transaksi = satu dokumen: bila dokumen
+  // sudah ada, dokumen itu dipakai ulang sehingga rapian petugas tidak
+  // hilang; data pengembalian diisikan ke dokumen yang sama.
+  const existingDoc = findBeritaAcaraDoc_(first.BA_PDF_ID);
+  const timestamp = nowIso_();
+  if (existingDoc) {
+    const doc = DocumentApp.openById(existingDoc.getId());
+    // Hanya tag yang masih tersisa yang terganti; teks yang sudah diubah
+    // petugas tidak tersentuh.
+    fillBeritaAcaraTags_(doc, tags);
+    const updatedConditions = isReturned
+      ? fillBeritaAcaraReturnCondition_(doc, first.KONDISI_KEMBALI || '') : 0;
+    doc.saveAndClose();
+    linkBeritaAcaraDoc_(records, existingDoc);
+    audit_('UPDATE', 'PEMINJAMAN', 'BERITA_ACARA', loanGroupId,
+      'Memperbarui Berita Acara (Google Docs) yang sudah ada',
+      isReturned ? 'Data pengembalian diisikan; ' + updatedConditions + ' kolom kondisi diperbarui' : 'Dibuka ulang',
+      'SUCCESS');
+    return {
+      ok: true,
+      loanGroupId: loanGroupId,
+      fileName: existingDoc.getName(),
+      docUrl: existingDoc.getUrl(),
+      pdfUrl: existingDoc.getUrl(),
+      reused: true,
+      printSequence: 0,
+      isReprint: false,
+      isReturned: isReturned,
+      message: isReturned
+        ? 'Data pengembalian sudah diisikan ke Berita Acara (Google Docs) yang sama.'
+        : 'Berita Acara (Google Docs) dibuka. Perubahan rapian Anda tetap tersimpan di dokumen ini.'
+    };
+  }
+
   const templateDocId = getBeritaAcaraTemplateDocId_(false);
   const previousPrints = readObjects_(APP_CONFIG.SHEETS.LOAN_BA_LOG)
     .filter(row => String(row.LOAN_GROUP_ID) === loanGroupId);
   const printSequence = previousPrints.length + 1;
-  const fileNameBase = ('BA_Peminjaman_Pengembalian_' + loanGroupId +
+  const fileName = ('BA_Peminjaman_Pengembalian_' + loanGroupId +
     (printSequence > 1 ? '_Cetak_Ulang_' + printSequence : '')).replace(/[^A-Za-z0-9._-]+/g, '_');
   const folder = getBeritaAcaraFolder_();
-
-  const copy = DriveApp.getFileById(templateDocId).makeCopy(fileNameBase, folder);
-  let pdfBlob;
+  const docFile = DriveApp.getFileById(templateDocId).makeCopy(fileName, folder);
   try {
-    const copyDoc = DocumentApp.openById(copy.getId());
-    fillBeritaAcaraTags_(copyDoc, tags);
-    fillBeritaAcaraItemsTable_(copyDoc, 0, items, first.KONDISI_PINJAM || '');
-    fillBeritaAcaraItemsTable_(copyDoc, 1, items, first.KONDISI_KEMBALI || '');
-    copyDoc.saveAndClose();
-    pdfBlob = DriveApp.getFileById(copy.getId()).getAs('application/pdf');
-  } finally {
-    try { copy.setTrashed(true); } catch (cleanupError) {}
+    const doc = DocumentApp.openById(docFile.getId());
+    fillBeritaAcaraTags_(doc, tags);
+    fillBeritaAcaraItemsTable_(doc, 0, items, first.KONDISI_PINJAM || '');
+    fillBeritaAcaraItemsTable_(doc, 1, items, first.KONDISI_KEMBALI || '');
+    doc.saveAndClose();
+  } catch (error) {
+    // Jangan tinggalkan salinan setengah terisi bila pengisian gagal.
+    try { docFile.setTrashed(true); } catch (cleanupError) {}
+    throw error;
   }
-  const pdfFile = folder.createFile(pdfBlob).setName(fileNameBase + '.pdf');
 
-  const timestamp = nowIso_();
   appendObject_(APP_CONFIG.SHEETS.LOAN_BA_LOG, {
     PRINT_ID: 'BA-' + Utilities.getUuid(),
     TIMESTAMP: timestamp,
     USER_EMAIL: getCurrentUser_(),
     LOAN_GROUP_ID: loanGroupId,
-    TYPE: 'GABUNGAN',
+    TYPE: 'GABUNGAN_DOCS',
     PEMINJAMAN_IDS: records.map(row => row.PEMINJAMAN_ID).join(', '),
-    PDF_FILE_ID: pdfFile.getId(),
-    PDF_FILE_NAME: pdfFile.getName(),
-    PDF_URL: pdfFile.getUrl(),
-    STATUS: 'PDF_DIBUAT'
+    PDF_FILE_ID: docFile.getId(),
+    PDF_FILE_NAME: docFile.getName(),
+    PDF_URL: docFile.getUrl(),
+    STATUS: 'DOCS_DIBUAT'
   });
-
-  updateObjectsAtRows_(APP_CONFIG.SHEETS.PEMINJAMAN, records.map(row => ({
-    rowNumber: row._rowNumber,
-    changes: {BA_PDF_ID: pdfFile.getId(), BA_PDF_URL: pdfFile.getUrl()}
-  })));
-
-  audit_('GENERATE_PDF', 'PEMINJAMAN', 'BERITA_ACARA', loanGroupId,
-    'Membuat Berita Acara Peminjaman & Pengembalian arsip (satu dokumen)',
-    'Cetakan ke-' + printSequence, 'SUCCESS');
+  linkBeritaAcaraDoc_(records, docFile);
+  audit_('GENERATE_DOC', 'PEMINJAMAN', 'BERITA_ACARA', loanGroupId,
+    'Membuat Berita Acara Peminjaman & Pengembalian arsip (Google Docs)',
+    'Dokumen ke-' + printSequence, 'SUCCESS');
 
   return {
     ok: true,
     loanGroupId: loanGroupId,
-    fileName: pdfFile.getName(),
-    pdfUrl: pdfFile.getUrl(),
+    fileName: docFile.getName(),
+    docUrl: docFile.getUrl(),
+    pdfUrl: docFile.getUrl(),
+    reused: false,
     printSequence: printSequence,
     isReprint: printSequence > 1,
     isReturned: isReturned,
     message: (isReturned
-      ? 'Berita Acara Peminjaman & Pengembalian berhasil dibuat'
-      : 'Berita Acara Peminjaman berhasil dibuat (bagian Pengembalian masih formulir kosong)') +
-      (printSequence > 1 ? ' (cetak ulang ke-' + printSequence + ')' : '') + '.'
+      ? 'Berita Acara Peminjaman & Pengembalian (Google Docs) berhasil dibuat'
+      : 'Berita Acara Peminjaman (Google Docs) berhasil dibuat; bagian Pengembalian terisi otomatis saat arsip dikembalikan') +
+      '. Rapikan dan cetak langsung dari Google Docs.'
   };
+}
+
+// Dokumen BA yang tercatat pada transaksi, bila masih ada dan berupa Google
+// Docs. PDF lama (sebelum rilis Docs) atau file yang sudah dihapus diabaikan
+// sehingga dibuatkan dokumen baru.
+function findBeritaAcaraDoc_(fileId) {
+  fileId = cleanText_(fileId, 200);
+  if (!fileId) return null;
+  try {
+    const file = DriveApp.getFileById(fileId);
+    if (file.isTrashed()) return null;
+    if (String(file.getMimeType()) !== 'application/vnd.google-apps.document') return null;
+    return file;
+  } catch (error) {
+    return null;
+  }
+}
+
+function linkBeritaAcaraDoc_(records, file) {
+  const changes = {BA_PDF_ID: file.getId(), BA_PDF_URL: file.getUrl()};
+  const updates = records
+    .filter(row => row.BA_PDF_ID !== changes.BA_PDF_ID || row.BA_PDF_URL !== changes.BA_PDF_URL)
+    .map(row => ({rowNumber: row._rowNumber, changes: changes}));
+  if (updates.length) updateObjectsAtRows_(APP_CONFIG.SHEETS.PEMINJAMAN, updates);
+}
+
+// Mengisi kolom "Kondisi Arsip" tabel bagian Pengembalian pada dokumen yang
+// sudah ada. Hanya sel yang masih kosong/"–" yang diisi agar isian manual
+// petugas tidak tertimpa.
+function fillBeritaAcaraReturnCondition_(doc, condition) {
+  if (!condition) return 0;
+  const tables = findBeritaAcaraItemsTables_(doc.getBody());
+  if (tables.length < 2) return 0;
+  const table = tables[1];
+  let updated = 0;
+  for (let index = 1; index < table.getNumRows(); index++) {
+    const row = table.getRow(index);
+    if (row.getNumCells() < 4) continue;
+    const cell = row.getCell(3);
+    const text = cleanText_(cell.getText(), 50);
+    if (text && text !== '–' && text !== '-') continue;
+    cell.editAsText().setText(condition);
+    cell.editAsText().setFontFamily('Arial').setFontSize(9).setBold(false);
+    updated++;
+  }
+  return updated;
 }
 
 // Menyimpan salinan Out Indicator (dibuat client-side di OutIndicatorPrint.html)

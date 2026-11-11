@@ -251,29 +251,130 @@ test('single-berkas Out Indicator payload is unchanged', () => {
   assert.equal(payload.originalLocation, 'Kabinet 2 · Laci A1 · Folder 2');
 });
 
-test('Berita Acara lists every object, prefixed with its berkas when several berkas are borrowed', () => {
-  const {ctx} = fixture();
-  const filled = [];
-  const file = {getId: () => 'doc', getUrl: () => 'https://example.invalid/ba', getName: () => 'BA.pdf',
-    setName() {return this;}, makeCopy() {return {getId: () => 'copy', setTrashed() {}};},
-    getAs: () => 'pdf-blob', setTrashed() {}};
+// Drive & Docs tiruan untuk Berita Acara Google Docs.
+function docsFixture(ctx) {
+  const files = new Map();
+  const docs = new Map();
+  const effects = {copies: 0, pdfs: 0, trashed: [], tags: [], tables: []};
+  const makeFile = (id, mime) => {
+    const file = {
+      trashed: false, mime: mime,
+      getId: () => id, getUrl: () => 'https://docs.invalid/' + id, getName: () => 'BA_' + id,
+      getMimeType: () => file.mime, isTrashed: () => file.trashed,
+      setTrashed(value) {file.trashed = value; effects.trashed.push(id); return file;},
+      makeCopy() {effects.copies++; return makeFile('doc-' + effects.copies, 'application/vnd.google-apps.document');},
+      getAs() {effects.pdfs++; return 'blob';}
+    };
+    files.set(id, file);
+    return file;
+  };
+  makeFile('template', 'application/vnd.google-apps.document');
+  const table = rows => ({
+    getNumRows: () => rows.length,
+    getRow: index => ({
+      getNumCells: () => rows[index].length,
+      getCell: column => ({
+        getText: () => rows[index][column],
+        editAsText: () => ({
+          setText(value) {rows[index][column] = value; return this;},
+          setFontFamily() {return this;}, setFontSize() {return this;}, setBold() {return this;}
+        })
+      })
+    })
+  });
   Object.assign(ctx, {
     getBeritaAcaraTemplateDocId_: () => 'template',
-    getBeritaAcaraFolder_: () => ({createFile: () => file}),
-    DriveApp: {getFileById: () => file},
-    DocumentApp: {openById: () => ({saveAndClose() {}})},
-    fillBeritaAcaraTags_: () => {},
-    fillBeritaAcaraItemsTable_: (doc, section, items) => filled.push(items)
+    getBeritaAcaraFolder_: () => ({createFile: () => {effects.pdfs++; return makeFile('pdf-new', 'application/pdf');}}),
+    DriveApp: {getFileById: id => {
+      if (!files.has(id)) throw new Error('File tidak ditemukan');
+      return files.get(id);
+    }},
+    DocumentApp: {openById: id => {
+      if (!docs.has(id)) docs.set(id, {
+        pinjam: [['No.', 'Judul', 'Hal', 'Kondisi'], ['1', 'A', '3', 'BAIK']],
+        kembali: [['No.', 'Judul', 'Hal', 'Kondisi'], ['1', 'A', '3', '–'], ['2', 'B', '4', 'RUSAK RINGAN']]
+      });
+      const doc = docs.get(id);
+      return {saveAndClose() {}, getBody: () => ({getTables: () =>
+        [table(doc.pinjam), table([['PIHAK KEDUA', 'PIHAK PERTAMA']]), table(doc.kembali)]})};
+    }},
+    fillBeritaAcaraTags_: (doc, tags) => effects.tags.push(Object.keys(tags)),
+    fillBeritaAcaraItemsTable_: (doc, section, items) => effects.tables.push(items)
   });
+  return {files, docs, effects, makeFile};
+}
+
+const returnForm = {returnLoanId: 'LOAN-TEST', returnConfirmation: 'KEMBALIKAN', returnDate: TODAY,
+  returnCondition: 'BAIK', returnOfficerName: 'Petugas Kembali', returnOfficerJabatan: 'Arsiparis'};
+
+test('Berita Acara is saved as an editable Google Doc listing every object across berkas', () => {
+  const {ctx, tables} = fixture();
+  const {effects, files} = docsFixture(ctx);
   ctx.createLoan_(baseForm(selections([
     {objectType: 'ITEM', berkasId: 'BRK-3', itemIds: ['ITM-3A']},
     {objectType: 'BERKAS', berkasId: 'BRK-1'}
   ])));
   const result = ctx.prepareLoanBeritaAcara_('LOAN-TEST');
   assert.equal(result.ok, true);
-  assert.equal(filled.length, 2);
-  assert.deepEqual(Array.from(filled[0], item => item.number), ['Berkas 1 (lengkap)', 'Berkas 3 / Item 1']);
-  assert.equal(filled[0][0].description, 'Berkas Satu');
+  assert.equal(result.reused, false);
+  assert.equal(result.docUrl, 'https://docs.invalid/doc-1');
+  assert.equal(effects.pdfs, 0, 'tidak ada PDF yang dibuat');
+  assert.equal(files.get('doc-1').isTrashed(), false, 'dokumen Docs disimpan, tidak dibuang');
+  assert.ok(tables.PEMINJAMAN.every(row => row.BA_PDF_ID === 'doc-1' && row.BA_PDF_URL === result.docUrl));
+  assert.equal(tables.LOG_CETAK_BERITA_ACARA[0].STATUS, 'DOCS_DIBUAT');
+  assert.equal(effects.tables.length, 2);
+  assert.deepEqual(Array.from(effects.tables[0], item => item.number), ['Berkas 1 (lengkap)', 'Berkas 3 / Item 1']);
+  assert.equal(effects.tables[0][0].description, 'Berkas Satu');
+  // Sebelum kembali, data petugas penerima pengembalian dibiarkan sebagai isian tangan.
+  assert.equal(effects.tags[0].includes('NAMA PETUGAS CENTRAL FILE KEMBALI'), false);
+  assert.equal(effects.tags[0].includes('NAMA PETUGAS CENTRAL FILE'), true);
+});
+
+test('opening the Berita Acara again reuses the same Doc so manual edits are kept', () => {
+  const {ctx} = fixture();
+  const {effects} = docsFixture(ctx);
+  ctx.createLoan_(baseForm({loanObjectType: 'BERKAS', loanBerkasId: 'BRK-1'}));
+  const first = ctx.prepareLoanBeritaAcara_('LOAN-TEST');
+  const again = ctx.prepareLoanBeritaAcara_('LOAN-TEST');
+  assert.equal(again.reused, true);
+  assert.equal(again.docUrl, first.docUrl);
+  assert.equal(effects.copies, 1);
+  assert.equal(effects.tables.length, 2, 'tabel tidak disusun ulang pada dokumen yang sudah ada');
+});
+
+test('recording the return fills the same Doc without overwriting manual entries', () => {
+  const {ctx, tables} = fixture();
+  const {effects, docs} = docsFixture(ctx);
+  ctx.createLoan_(baseForm({loanObjectType: 'BERKAS', loanBerkasId: 'BRK-1'}));
+  ctx.prepareLoanBeritaAcara_('LOAN-TEST');
+  ctx.returnLoan_(returnForm);
+  const result = ctx.prepareLoanBeritaAcara_('LOAN-TEST');
+  assert.equal(result.reused, true);
+  assert.equal(result.isReturned, true);
+  assert.equal(effects.copies, 1);
+  const tags = effects.tags[1];
+  assert.ok(tags.includes('TANGGAL KEMBALI'));
+  assert.ok(tags.includes('NAMA PETUGAS CENTRAL FILE KEMBALI'));
+  const kembali = docs.get('doc-1').kembali;
+  assert.equal(kembali[1][3], 'BAIK', 'kolom kondisi kosong diisi kondisi kembali');
+  assert.equal(kembali[2][3], 'RUSAK RINGAN', 'isian manual petugas tidak ditimpa');
+  assert.equal(docs.get('doc-1').pinjam[1][3], 'BAIK');
+  assert.ok(tables.PEMINJAMAN.every(row => row.BA_PDF_ID === 'doc-1'));
+});
+
+test('a legacy PDF or deleted Doc is replaced by a new Google Doc', () => {
+  for (const setup of ['pdf', 'trashed', 'missing']) {
+    const {ctx, tables} = fixture();
+    const {effects, makeFile} = docsFixture(ctx);
+    ctx.createLoan_(baseForm({loanObjectType: 'BERKAS', loanBerkasId: 'BRK-1'}));
+    if (setup === 'pdf') makeFile('old', 'application/pdf');
+    if (setup === 'trashed') makeFile('old', 'application/vnd.google-apps.document').trashed = true;
+    tables.PEMINJAMAN.forEach(row => {row.BA_PDF_ID = 'old'; row.BA_PDF_URL = 'https://docs.invalid/old';});
+    const result = ctx.prepareLoanBeritaAcara_('LOAN-TEST');
+    assert.equal(result.reused, false, setup);
+    assert.equal(effects.copies, 1, setup);
+    assert.equal(tables.PEMINJAMAN[0].BA_PDF_ID, 'doc-1', setup);
+  }
 });
 
 test('single-berkas Berita Acara keeps the original numbering', () => {
