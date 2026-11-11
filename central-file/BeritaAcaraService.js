@@ -292,7 +292,8 @@ function fillBeritaAcaraItemsTable_(doc, sectionIndex, items, condition) {
 // tidak hilang; saat pengembalian dicatat, tag & kolom kondisi bagian
 // Pengembalian yang masih kosong diisikan ke dokumen yang sama. Data yang
 // belum diketahui tidak ditebak: tag dibiarkan sebagai isian tangan.
-function prepareLoanBeritaAcara_(loanGroupId) {
+function prepareLoanBeritaAcara_(loanGroupId, options) {
+  options = options || {};
   ensureLoanSchema_();
   ensureLoanBeritaAcaraLogSchema_();
   loanGroupId = cleanText_(requireValue_(loanGroupId, 'ID transaksi peminjaman'), 80);
@@ -356,7 +357,9 @@ function prepareLoanBeritaAcara_(loanGroupId) {
   // merapikan tata letaknya. Satu transaksi = satu dokumen: bila dokumen
   // sudah ada, dokumen itu dipakai ulang sehingga rapian petugas tidak
   // hilang; data pengembalian diisikan ke dokumen yang sama.
-  const existingDoc = findBeritaAcaraDoc_(first.BA_PDF_ID);
+  // regenerate: petugas sengaja meminta dokumen baru dari template terbaru
+  // (mis. setelah kop/footer template diubah). Dokumen lama tidak dihapus.
+  const existingDoc = options.regenerate ? null : findBeritaAcaraDoc_(first.BA_PDF_ID);
   const timestamp = nowIso_();
   if (existingDoc) {
     const doc = DocumentApp.openById(existingDoc.getId());
@@ -443,9 +446,12 @@ function prepareLoanBeritaAcara_(loanGroupId) {
     printSequence: printSequence,
     isReprint: printSequence > 1,
     isReturned: isReturned,
-    message: (isReturned
-      ? 'Berita Acara Peminjaman & Pengembalian (Google Docs) berhasil dibuat'
-      : 'Berita Acara Peminjaman (Google Docs) berhasil dibuat; bagian Pengembalian terisi otomatis saat arsip dikembalikan') +
+    regenerated: Boolean(options.regenerate),
+    message: (options.regenerate
+      ? 'Berita Acara dibuat ulang dari template terbaru (dokumen lama tetap tersimpan di Drive)'
+      : isReturned
+        ? 'Berita Acara Peminjaman & Pengembalian (Google Docs) berhasil dibuat'
+        : 'Berita Acara Peminjaman (Google Docs) berhasil dibuat; bagian Pengembalian terisi otomatis saat arsip dikembalikan') +
       '. Rapikan dan cetak langsung dari Google Docs.'
   };
 }

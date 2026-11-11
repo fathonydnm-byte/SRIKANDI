@@ -47,3 +47,13 @@ Catatan: ukuran kertas template saat ini **Letter** (8,5 × 11 inci); bila stand
 Setelah 3.32.3 dipasang, pengguna menekan Cetak BA dan hasilnya masih tidak rapi. Penyebab yang paling mungkin: transaksi tersebut sudah mempunyai dokumen BA dari 3.32.2, dan dokumen itu dibuka ulang (perilaku pakai-ulang), sehingga perapian yang hanya berjalan untuk dokumen baru tidak pernah diterapkan.
 
 Perbaikan: dokumen BA ditandai `BA_LAYOUT_V1` pada keterangan (description) file setelah dirapikan. Saat dibuka ulang, dokumen yang belum bertanda dirapikan **satu kali** lalu ditandai; dokumen bertanda tidak disentuh lagi sehingga rapian manual sesudahnya aman. `node --test tests/*.test.cjs` → **85/85 lulus**.
+
+## 3.32.5 — template mengikuti perubahan & link template aktif (11 November 2026)
+
+Laporan pengguna: footer template diubah, BA dicetak kembali, tetapi footer baru tidak muncul. Penyebab: kop/footer **tidak dikunci kode** — keduanya tersalin dari template saat dokumen BA dibuat — tetapi tombol Cetak BA membuka ulang dokumen yang sudah ada untuk transaksi itu (dibuat sebelum template diubah). Selain itu metadata Drive menunjukkan template gabungan terakhir diubah 4 September, sehingga ada kemungkinan dokumen yang diedit bukan template yang dipakai aplikasi.
+
+- Link **Edit Template BA** di kepala tabel Pelacakan Peminjaman selalu membuka template master yang dipakai aplikasi (`BA_TEMPLATE_COMBINED_DOC_ID` di SETTINGS).
+- Tombol **Buat Ulang BA** per transaksi (dengan konfirmasi) membuat dokumen baru dari template terbaru dan menautkannya ke transaksi; dokumen lama tidak dihapus.
+- `apiPrepareLoanBeritaAcara(loanGroupId, {regenerate: true})`.
+
+`node --test tests/*.test.cjs` → **87/87 lulus**.

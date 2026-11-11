@@ -1955,6 +1955,14 @@ function bindLoanPage(){
     if(printButton){prepareAndDownloadLoanOutIndicator_(printButton.dataset.printOutIndicator);return}
     const baButton=event.target.closest('[data-print-ba]');
     if(baButton){prepareAndDownloadLoanBeritaAcara_(baButton.dataset.printBa,false,'loanFormStatus',baButton);return}
+    const regenerateButton=event.target.closest('[data-regenerate-ba]');
+    if(regenerateButton){
+      const confirmed=window.confirm('Buat ulang Berita Acara dari template terbaru?\n\n'+
+        'Gunakan ini setelah kop/footer/isi template diubah. Rapian manual pada dokumen BA lama tidak ikut terbawa; '+
+        'dokumen lama tetap tersimpan di Drive.');
+      if(confirmed)prepareAndDownloadLoanBeritaAcara_(regenerateButton.dataset.regenerateBa,false,'loanFormStatus',regenerateButton,{regenerate:true});
+      return;
+    }
     const button=event.target.closest('[data-return-loan]');
     if(button)startLoanReturn_(button.dataset.returnLoan);
   });
@@ -2601,7 +2609,7 @@ async function prepareAndDownloadLoanOutIndicator_(loanGroupId,automatic=false){
   }
 }
 
-async function prepareAndDownloadLoanBeritaAcara_(loanGroupId,automatic=false,statusFieldId,button){
+async function prepareAndDownloadLoanBeritaAcara_(loanGroupId,automatic=false,statusFieldId,button,options){
   if(!loanGroupId)throw new Error('ID transaksi peminjaman tidak tersedia.');
   const statusField=statusFieldId||'loanFormStatus';
   const originalButtonText=button?button.textContent:'';
@@ -2619,7 +2627,7 @@ async function prepareAndDownloadLoanBeritaAcara_(loanGroupId,automatic=false,st
     showBeritaAcaraOverlay_();
   }
   try{
-    const result=await runServerWithTimeout_(60000,'apiPrepareLoanBeritaAcara',loanGroupId);
+    const result=await runServerWithTimeout_(60000,'apiPrepareLoanBeritaAcara',loanGroupId,options||{});
     if($(statusField))$(statusField).textContent=result.message;
     toast(result.message);
     // window.open otomatis (tanpa klik langsung) sering diblokir browser sebagai
@@ -2644,6 +2652,11 @@ async function prepareAndDownloadLoanBeritaAcara_(loanGroupId,automatic=false,st
 
 function renderLoanTable_(){
   if(!state.loanOptions)return;
+  const templateLink=$('baTemplateLink');
+  if(templateLink){
+    templateLink.hidden=!state.loanOptions.baTemplateUrl;
+    if(state.loanOptions.baTemplateUrl)templateLink.href=state.loanOptions.baTemplateUrl;
+  }
   const query=normalizeFolderLabelFilter_($('loanSearch').value);
   const filter=$('loanStatusFilter').value;
   const rows=(state.loanOptions.loans||[]).filter(row=>{
@@ -2707,7 +2720,9 @@ function renderLoanRow_(row){
   const printAction='<button type="button" class="loan-action-button secondary" data-print-out-indicator="'+
     escapeHtml(row.groupId||row.id)+'">'+(row.statusCode==='RETURNED'?'Cetak Riwayat':'Cetak Out Indicator')+'</button>';
   const baAction='<button type="button" class="loan-action-button secondary" title="Buka Berita Acara di Google Docs untuk dirapikan dan dicetak" data-print-ba="'+
-    escapeHtml(row.groupId||row.id)+'">Cetak BA Peminjaman</button>';
+    escapeHtml(row.groupId||row.id)+'">Cetak BA Peminjaman</button>'+
+    '<button type="button" class="loan-action-button secondary" title="Buat dokumen BA baru dari template terbaru" data-regenerate-ba="'+
+    escapeHtml(row.groupId||row.id)+'">Buat Ulang BA</button>';
   const itemDetail=multiBerkas
     ?'<span class="search-cell-sub">'+escapeHtml((row.objects||[]).map(loanObjectShortLabel_).join(' · '))+'</span>'
     :row.itemCount>1

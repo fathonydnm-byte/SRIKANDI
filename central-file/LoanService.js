@@ -90,7 +90,12 @@ function getLoanOptions_() {
       name: cleanText_(settings.BA_PIMPINAN_NAMA, 250),
       nip: cleanText_(settings.BA_PIMPINAN_NIP, 100),
       unitName: cleanText_(settings.UNIT_NAME, 250)
-    }
+    },
+    // Template master BA yang benar-benar dipakai saat membuat dokumen baru.
+    baTemplateUrl: cleanText_(settings.BA_TEMPLATE_COMBINED_DOC_ID, 200)
+      ? 'https://docs.google.com/document/d/' +
+        encodeURIComponent(cleanText_(settings.BA_TEMPLATE_COMBINED_DOC_ID, 200)) + '/edit'
+      : ''
   };
 }
 

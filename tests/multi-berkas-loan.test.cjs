@@ -482,3 +482,26 @@ test('BA layout: an existing page break before Pengembalian is not duplicated', 
   assert.equal(result.pageBreakInserted, false);
   assert.equal(children.filter(element => element.breakAfter).length, 1);
 });
+
+test('Buat Ulang BA creates a fresh Doc from the latest template and keeps the old one', () => {
+  const {ctx, tables} = fixture();
+  const {effects, files} = docsFixture(ctx);
+  ctx.createLoan_(baseForm({loanObjectType: 'BERKAS', loanBerkasId: 'BRK-1'}));
+  const first = ctx.prepareLoanBeritaAcara_('LOAN-TEST');
+  const again = ctx.prepareLoanBeritaAcara_('LOAN-TEST', {regenerate: true});
+  assert.equal(again.reused, false);
+  assert.equal(again.regenerated, true);
+  assert.notEqual(again.docUrl, first.docUrl);
+  assert.equal(effects.copies, 2);
+  assert.equal(files.get('doc-1').isTrashed(), false, 'dokumen lama tidak dihapus');
+  assert.ok(tables.PEMINJAMAN.every(row => row.BA_PDF_ID === 'doc-2'));
+  assert.equal(ctx.prepareLoanBeritaAcara_('LOAN-TEST').docUrl, again.docUrl, 'sesudahnya dokumen baru yang dibuka');
+});
+
+test('loan options expose the active Berita Acara template link', () => {
+  const {ctx} = fixture();
+  ctx.readSettings_ = () => ({BA_TEMPLATE_COMBINED_DOC_ID: 'tpl-123'});
+  assert.equal(ctx.getLoanOptions_().baTemplateUrl, 'https://docs.google.com/document/d/tpl-123/edit');
+  ctx.readSettings_ = () => ({});
+  assert.equal(ctx.getLoanOptions_().baTemplateUrl, '');
+});
