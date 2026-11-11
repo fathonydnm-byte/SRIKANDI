@@ -1,8 +1,13 @@
-# Central File 3.31.0 — peminjaman beberapa berkas/item dalam satu transaksi
+# Central File 3.32.0 — peminjaman beberapa berkas/item dalam satu transaksi
 
-Tanggal: 11 November 2026. Schema tetap **10** (tidak ada perubahan sheet/header, tidak ada migrasi). Baseline source: commit `e30c96e` (3.30.6, deployment @60).
+> **Pembaruan 11 November 2026 — insiden & rilis gabungan.** Fitur ini awalnya disiapkan sebagai "3.31.0/schema 10" dari baseline 3.30.6 (`e30c96e`), tanpa mengetahui bahwa live sudah menjalankan pilot **3.31.0/schema 11** dari branch `feat/berkas-content-search` (pencarian isi berkas, shortcut dashboard, cek JRA; deployment @61–@64). Pengguna memasangnya sebagai **@65**, sehingga fitur pilot @64 tertimpa di live dan kode schema 10 berjalan di atas spreadsheet yang sudah schema 11. Perbaikan: branch pilot di-merge ke branch ini menjadi rilis **3.32.0/schema 11 (PILOT)** — isi central-file = pilot @64 + perubahan peminjaman saja (diverifikasi dengan `git diff`). Pengujian gabungan: **79/79 lulus** (40 pilot + 39 peminjaman). Tidak ada migrasi baru; migrasi schema 11 milik pilot sudah tercatat di produksi. Data yang ditulis saat @65 aktif tetap valid.
+>
+> **Pelajaran:** sebelum `clasp push`, selalu bandingkan `clasp deployments` dan versi `Config.js` hasil `clasp clone` dengan baseline branch yang akan dipasang; bila deployment produksi lebih baru dari baseline, hentikan dan gabungkan dulu.
 
-Status: **source siap di git, belum dipasang ke Apps Script.** Container agent pada sesi ini tidak mempunyai clasp/kredensial Google, sehingga pemasangan dilakukan pengguna (alur yang sama dengan 3.30.6).
+
+Tanggal: 11 November 2026. Fitur peminjaman tidak mengubah sheet/header dan tidak memerlukan migrasi. Rilis gabungan memakai schema **11** dari pilot. Baseline: pilot 3.31.0 `e8f9e90` (deployment @64) + fitur ini.
+
+Status: **@65 terpasang (versi tanpa pilot — insiden di atas); rilis gabungan 3.32.0 siap di git, menunggu pemasangan pengguna sebagai @66.**
 
 ## Kebutuhan bisnis
 
@@ -40,7 +45,7 @@ Sebelumnya satu transaksi peminjaman hanya bisa memuat **satu berkas lengkap** a
 | `central-file/Client.html` | Daftar Pinjam, payload baru, tabel & form pengembalian |
 | `central-file/OutIndicatorPrint.html` | PDF satu lembar per berkas |
 | `central-file/Index.html`, `central-file/Styles.html` | Markup & gaya Daftar Pinjam |
-| `central-file/Config.js` → `Config.gs` | Versi 3.31.0, tanggal rilis; schema 10 |
+| `central-file/Config.js` → `Config.gs` | Versi 3.32.0, kanal PILOT, schema 11 (dari pilot) |
 
 ## Pengujian
 
@@ -56,15 +61,15 @@ Perintah: `node --test tests/*.test.cjs`. Hasil 11 November 2026: **39/39 lulus*
 - Berita Acara: nomor objek berawalan nomor berkas untuk transaksi lintas berkas; penomoran satu berkas tetap.
 - Klien: tambah/gabung/tolak benturan di Daftar Pinjam, pilihan aktif ikut tersimpan, payload berisi seluruh pilihan + field lama, simpan tanpa pilihan ditolak.
 
-## Pemasangan
+## Pemasangan rilis gabungan 3.32.0
 
-1. Pastikan project adalah Central File yang benar (scriptId `1_Z8ZfkDU1lIGuI5hlOCp4eeNaXiFR-3zJjO8XL60lSeIotbcaKljRLvb`).
-2. Backup source live dan bandingkan dengan baseline 3.30.6 (`e30c96e`) agar perubahan live di luar git tidak tertimpa.
-3. Jika live sesuai baseline: dari folder `central-file` jalankan `clasp push`, lalu redeploy deployment produksi yang sudah ada sebagai **versi baru** (`clasp deploy -i <deploymentId> -d "v3.31.0 - Peminjaman multi berkas"`) — URL Web App tetap sama. Tidak perlu installer, repair schema, atau reset data.
-4. Buka ulang Web App (hard refresh), cocokkan rilis 3.31.0/schema 10.
+1. Ambil branch `claude/arsip-input-app-uinsa-m3uigw` terbaru (commit merge yang memuat pilot + peminjaman). `central-file/Config.js` harus menunjukkan `VERSION: '3.32.0'`, `SCHEMA_VERSION: 11`.
+2. Pastikan ada file `ContentSearch.html`, `JraLookup.html`, `ContentSearchService.js`, `ContentDocumentService.js`, `DocxTextService.js`, `JraLookupService.js` di `central-file`.
+3. Dari folder `central-file`: `clasp push`, lalu `clasp deploy -i <deploymentId produksi> -d "v3.32.0 PILOT - Pilot pencarian isi/JRA + peminjaman multi berkas"`. URL Web App tetap.
+4. Hard refresh Web App; cocokkan rilis 3.32.0 dan keberadaan tombol *Cari Isi Berkas*, kartu dashboard yang bisa diklik, cek JRA di form registrasi, serta tombol *Tambahkan ke Daftar Pinjam*.
 
 ## UAT yang disarankan
 
 Gunakan data uji yang disetujui. Catat satu peminjaman berisi: satu berkas lengkap + dua item dari berkas lain. Periksa: satu baris di tabel Pelacakan; sheet PEMINJAMAN berisi baris per objek dengan `LOAN_GROUP_ID` sama; status berkas/item di Daftar Isi Berkas; Out Indicator berisi satu lembar per berkas; Berita Acara memuat seluruh objek. Lalu Catat Kembali dan pastikan seluruh berkas/item kembali TERSEDIA. Ulangi peminjaman satu berkas biasa (alur lama) dan peminjaman dengan file bukti persetujuan.
 
-Rollback: pilih versi deployment sebelumnya (@60). Transaksi multi-berkas yang sudah tercatat tetap valid dibaca versi lama sebagai baris-baris per objek, tetapi tabel versi lama akan menampilkan ringkasannya seolah satu berkas dan pengembaliannya hanya menyinkronkan status berkas pertama — selesaikan pengembalian transaksi multi-berkas sebelum rollback, atau jalankan sinkronisasi status dengan membuka menu Peminjaman.
+Rollback: pilih versi deployment @64 (pilot tanpa peminjaman multi-berkas) — **jangan** @60/@65 karena keduanya schema 10. Transaksi multi-berkas yang sudah tercatat tetap valid dibaca versi lama sebagai baris-baris per objek, tetapi tabel versi lama akan menampilkan ringkasannya seolah satu berkas dan pengembaliannya hanya menyinkronkan status berkas pertama — selesaikan pengembalian transaksi multi-berkas sebelum rollback, atau jalankan sinkronisasi status dengan membuka menu Peminjaman.
