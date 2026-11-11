@@ -400,6 +400,7 @@ function prepareLoanBeritaAcara_(loanGroupId) {
     fillBeritaAcaraTags_(doc, tags);
     fillBeritaAcaraItemsTable_(doc, 0, items, first.KONDISI_PINJAM || '');
     fillBeritaAcaraItemsTable_(doc, 1, items, first.KONDISI_KEMBALI || '');
+    normalizeBeritaAcaraLayout_(doc);
     doc.saveAndClose();
   } catch (error) {
     // Jangan tinggalkan salinan setengah terisi bila pengisian gagal.
@@ -439,6 +440,77 @@ function prepareLoanBeritaAcara_(loanGroupId) {
       : 'Berita Acara Peminjaman (Google Docs) berhasil dibuat; bagian Pengembalian terisi otomatis saat arsip dikembalikan') +
       '. Rapikan dan cetak langsung dari Google Docs.'
   };
+}
+
+// Template BA lama mengatur tata letak dengan menumpuk banyak baris kosong
+// (Enter) agar tiap bagian jatuh ke halaman berikutnya. Karena panjang tabel
+// daftar arsip berbeda di tiap transaksi, tumpukan itu ikut terdorong dan
+// mengacaukan halaman. Pada dokumen yang baru dibuat: tumpukan >= 5 baris
+// kosong diringkas menjadi satu (ruang tanda tangan 3 baris tidak tersentuh),
+// lalu sisipkan page break asli sebelum judul bagian Pengembalian agar bagian
+// itu selalu mulai di halaman baru apa pun panjang tabelnya.
+var LOAN_BA_BLANK_RUN_LIMIT_ = 5;
+
+function normalizeBeritaAcaraLayout_(doc) {
+  const body = doc.getBody();
+  const types = DocumentApp.ElementType;
+  const isBlankParagraph = element => {
+    if (element.getType() !== types.PARAGRAPH) return false;
+    const paragraph = element.asParagraph();
+    for (let index = 0; index < paragraph.getNumChildren(); index++) {
+      if (paragraph.getChild(index).getType() !== types.TEXT) return false;
+    }
+    return paragraph.getText().replace(/\s/g, '') === '';
+  };
+  const hasPageBreak = element => {
+    if (element.getType() !== types.PARAGRAPH) return false;
+    const paragraph = element.asParagraph();
+    for (let index = 0; index < paragraph.getNumChildren(); index++) {
+      if (paragraph.getChild(index).getType() === types.PAGE_BREAK) return true;
+    }
+    return false;
+  };
+
+  let removed = 0;
+  let index = 0;
+  while (index < body.getNumChildren()) {
+    let end = index;
+    while (end < body.getNumChildren() && isBlankParagraph(body.getChild(end))) end++;
+    const runLength = end - index;
+    // Elemen terakhir body wajib paragraf dan tidak boleh dihapus.
+    const lastIndex = body.getNumChildren() - 1;
+    if (runLength >= LOAN_BA_BLANK_RUN_LIMIT_) {
+      for (let remove = end - 1; remove > index; remove--) {
+        if (remove >= lastIndex) continue;
+        body.getChild(remove).removeFromParent();
+        removed++;
+      }
+      index++;
+    } else {
+      index = Math.max(end, index + 1);
+    }
+  }
+
+  let pageBreakInserted = false;
+  const titleIndex = [];
+  for (let position = 0; position < body.getNumChildren(); position++) {
+    const element = body.getChild(position);
+    if (element.getType() !== types.PARAGRAPH) continue;
+    const text = cleanText_(element.asParagraph().getText(), 100).toUpperCase();
+    if (text === 'BERITA ACARA PENGEMBALIAN ARSIP') titleIndex.push(position);
+  }
+  if (titleIndex.length) {
+    const position = titleIndex[0];
+    let previous = position - 1;
+    while (previous >= 0 && isBlankParagraph(body.getChild(previous))) previous--;
+    const alreadyBroken = hasPageBreak(body.getChild(position)) ||
+      (previous >= 0 && hasPageBreak(body.getChild(previous)));
+    if (!alreadyBroken && position > 0) {
+      body.insertPageBreak(position);
+      pageBreakInserted = true;
+    }
+  }
+  return {removedBlankParagraphs: removed, pageBreakInserted: pageBreakInserted};
 }
 
 // Dokumen BA yang tercatat pada transaksi, bila masih ada dan berupa Google

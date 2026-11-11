@@ -255,7 +255,7 @@ test('single-berkas Out Indicator payload is unchanged', () => {
 function docsFixture(ctx) {
   const files = new Map();
   const docs = new Map();
-  const effects = {copies: 0, pdfs: 0, trashed: [], tags: [], tables: []};
+  const effects = {copies: 0, pdfs: 0, trashed: [], tags: [], tables: [], normalized: 0};
   const makeFile = (id, mime) => {
     const file = {
       trashed: false, mime: mime,
@@ -299,7 +299,8 @@ function docsFixture(ctx) {
         [table(doc.pinjam), table([['PIHAK KEDUA', 'PIHAK PERTAMA']]), table(doc.kembali)]})};
     }},
     fillBeritaAcaraTags_: (doc, tags) => effects.tags.push(Object.keys(tags)),
-    fillBeritaAcaraItemsTable_: (doc, section, items) => effects.tables.push(items)
+    fillBeritaAcaraItemsTable_: (doc, section, items) => effects.tables.push(items),
+    normalizeBeritaAcaraLayout_: () => {effects.normalized++; return {};}
   });
   return {files, docs, effects, makeFile};
 }
@@ -340,6 +341,7 @@ test('opening the Berita Acara again reuses the same Doc so manual edits are kep
   assert.equal(again.docUrl, first.docUrl);
   assert.equal(effects.copies, 1);
   assert.equal(effects.tables.length, 2, 'tabel tidak disusun ulang pada dokumen yang sudah ada');
+  assert.equal(effects.normalized, 1, 'tata letak dirapikan hanya saat dokumen dibuat, tidak menimpa rapian petugas');
 });
 
 test('recording the return fills the same Doc without overwriting manual entries', () => {
@@ -395,4 +397,70 @@ test('evidence upload validation receives every required field and the selection
   assert.equal(form.loanOfficerName, 'Petugas CF');
   assert.equal(form.loanCondition, 'BAIK');
   assert.equal(ctx.resolveLoanContext_(form).selections.length, 2);
+});
+
+// Body Google Docs tiruan untuk normalisasi tata letak BA.
+function fakeBody(spec) {
+  const types = {PARAGRAPH: 'PARAGRAPH', TABLE: 'TABLE', TEXT: 'TEXT', PAGE_BREAK: 'PAGE_BREAK', LIST_ITEM: 'LIST_ITEM'};
+  const children = [];
+  const paragraph = (text, extra) => {
+    const parts = text === null ? [] : [{getType: () => types.TEXT}];
+    if (extra) parts.push({getType: () => extra});
+    const element = {
+      kind: 'P', text: text || '', breakAfter: extra === types.PAGE_BREAK,
+      getType: () => types.PARAGRAPH,
+      asParagraph: () => ({
+        getNumChildren: () => parts.length, getChild: index => parts[index],
+        getText: () => element.text
+      }),
+      removeFromParent: () => children.splice(children.indexOf(element), 1)
+    };
+    return element;
+  };
+  spec.forEach(entry => {
+    if (entry === 'TABLE') children.push({kind: 'T', getType: () => types.TABLE, removeFromParent() {}});
+    else if (entry === 'LIST') children.push({kind: 'L', getType: () => types.LIST_ITEM, removeFromParent() {}});
+    else if (entry === 'IMG') children.push(paragraph('', 'INLINE_IMAGE'));
+    else children.push(paragraph(entry));
+  });
+  const body = {
+    getNumChildren: () => children.length,
+    getChild: index => children[index],
+    insertPageBreak: index => children.splice(index, 0, paragraph(null, types.PAGE_BREAK))
+  };
+  return {types, body, children};
+}
+
+const blanks = count => Array(count).fill('');
+
+test('BA layout: stacked blank lines are collapsed and Pengembalian starts on a new page', () => {
+  const {ctx} = fixture();
+  const spec = ['BERITA ACARA PEMINJAMAN ARSIP', '', 'Pada hari ini', 'TABLE', ...blanks(19),
+    'Demikian berita acara', '', '', 'TABLE', ...blanks(3), 'Menyetujui,', 'Pimpinan', ...blanks(3),
+    '[NAMA PIMPINAN]', ...blanks(15), 'Tembusan:', 'LIST', 'IMG', ...blanks(6),
+    'BERITA ACARA PENGEMBALIAN ARSIP', '', 'TABLE', ...blanks(19), 'Demikian berita acara',
+    'TABLE', ...blanks(17), 'Tembusan:', 'LIST'];
+  const {types, body, children} = fakeBody(spec);
+  ctx.DocumentApp = {ElementType: types};
+  const result = ctx.normalizeBeritaAcaraLayout_({getBody: () => body});
+  assert.equal(result.pageBreakInserted, true);
+  const kinds = children.map(element => element.breakAfter ? 'BREAK' : element.kind === 'P' ? (element.text || '·') : element.kind);
+  // Tumpukan baris kosong tinggal satu; ruang tanda tangan (3 baris) dan gambar tetap.
+  assert.deepEqual(kinds.slice(0, 8), ['BERITA ACARA PEMINJAMAN ARSIP', '·', 'Pada hari ini', 'T', '·', 'Demikian berita acara', '·', '·']);
+  assert.equal(kinds.indexOf('Menyetujui,') - kinds.lastIndexOf('T', kinds.indexOf('Menyetujui,')), 4);
+  const title = kinds.indexOf('BERITA ACARA PENGEMBALIAN ARSIP');
+  assert.equal(kinds[title - 1], 'BREAK', 'page break tepat sebelum judul Pengembalian');
+  assert.ok(kinds.includes('') === false && children.some(element => element.kind === 'P' && element.text === '' && !element.breakAfter));
+  assert.equal(kinds.filter(kind => kind === 'BREAK').length, 1);
+  assert.ok(children.length < spec.length - 60);
+});
+
+test('BA layout: an existing page break before Pengembalian is not duplicated', () => {
+  const {ctx} = fixture();
+  const {types, body, children} = fakeBody(['Isi', 'BERITA ACARA PENGEMBALIAN ARSIP', 'Isi']);
+  ctx.DocumentApp = {ElementType: types};
+  body.insertPageBreak(1);
+  const result = ctx.normalizeBeritaAcaraLayout_({getBody: () => body});
+  assert.equal(result.pageBreakInserted, false);
+  assert.equal(children.filter(element => element.breakAfter).length, 1);
 });

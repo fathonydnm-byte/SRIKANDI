@@ -28,3 +28,16 @@ Hasil PDF Berita Acara Peminjaman & Pengembalian sering tidak rapi (pemutusan ha
 ## Pemasangan
 
 Dari folder `central-file`: `clasp push`, lalu `clasp deploy -i <deploymentId produksi> -d "v3.32.2 PILOT - Berita Acara Google Docs"`. Tidak perlu migrasi atau izin baru (scope Drive & Docs sudah ada).
+
+## 3.32.3 — perapian tata letak otomatis (11 November 2026)
+
+Laporan pengguna: walau sudah disisipi page break, halaman pertama tetap "menyundul" halaman berikutnya. Analisis struktur template `TEMPLATE BERITA ACARA PEMINJAMAN & PENGEMBALIAN ARSIP` (ekspor .docx, dibaca seluruhnya): **tidak ada page break maupun keep-with-next**; perpindahan halaman diatur dengan menumpuk baris kosong — 19 baris antara tabel dan "Demikian…", 15 baris sebelum "Tembusan", 19 dan 17 baris di bagian Pengembalian. Tumpukan itu hanya pas untuk tabel satu baris; tabel yang lebih panjang mendorongnya ke halaman berikutnya dan menggeser seluruh isi.
+
+Perbaikan `normalizeBeritaAcaraLayout_()` (hanya pada dokumen BA yang **baru dibuat**, tidak pada dokumen yang sedang/ sudah dirapikan petugas):
+
+- Tumpukan ≥ 5 paragraf kosong berturut-turut diringkas menjadi satu. Ruang tanda tangan (3 baris), gambar, daftar, dan tabel tidak disentuh.
+- Page break asli disisipkan tepat sebelum judul "BERITA ACARA PENGEMBALIAN ARSIP" (tidak digandakan bila sudah ada).
+
+Simulasi pada struktur template asli: 140 → 73 elemen, 68 baris kosong dihapus, satu page break sebelum bagian Pengembalian. `node --test tests/*.test.cjs` → **84/84 lulus**.
+
+Catatan: ukuran kertas template saat ini **Letter** (8,5 × 11 inci); bila standar unit A4/F4, ubah lewat *File → Page setup* pada template.
