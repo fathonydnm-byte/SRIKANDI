@@ -36,6 +36,7 @@ record-center/                                    # aplikasi Arsip Inaktif (dipa
 
 ## Tracking versi dan sinkronisasi
 
+- **3.32.4/schema 11 (PILOT)**: dokumen BA yang dibuat sebelum perapian otomatis ikut dirapikan satu kali saat dibuka ulang (penanda `BA_LAYOUT_V1` pada keterangan file).
 - **3.32.3/schema 11 (PILOT)**: BA Google Docs dirapikan otomatis saat dibuat — tumpukan baris kosong dari template diringkas dan page break asli disisipkan sebelum bagian Pengembalian, sehingga tabel panjang tidak lagi menggeser halaman. Lihat [catatan](docs/UI_3.32.2_BERITA_ACARA_GOOGLE_DOCS.md).
 - **3.32.2/schema 11 (PILOT)**: Berita Acara Peminjaman & Pengembalian dibuat sebagai Google Docs yang dapat dirapikan (satu dokumen per transaksi, dipakai ulang; data pengembalian diisikan ke dokumen yang sama). Lihat [catatan](docs/UI_3.32.2_BERITA_ACARA_GOOGLE_DOCS.md).
 - **3.32.1/schema 11 (PILOT)**: desain ulang Out Indicator dengan palet logo UINSA (hijau zamrud & emas), ornamen bintang segi delapan, kartu identitas berkas, dan metrik font Helvetica yang presisi. Lihat [catatan desain](docs/UI_3.32.1_OUT_INDICATOR_REDESIGN.md).

@@ -258,8 +258,9 @@ function docsFixture(ctx) {
   const effects = {copies: 0, pdfs: 0, trashed: [], tags: [], tables: [], normalized: 0};
   const makeFile = (id, mime) => {
     const file = {
-      trashed: false, mime: mime,
+      trashed: false, mime: mime, description: '',
       getId: () => id, getUrl: () => 'https://docs.invalid/' + id, getName: () => 'BA_' + id,
+      getDescription: () => file.description, setDescription(value) {file.description = value; return file;},
       getMimeType: () => file.mime, isTrashed: () => file.trashed,
       setTrashed(value) {file.trashed = value; effects.trashed.push(id); return file;},
       makeCopy() {effects.copies++; return makeFile('doc-' + effects.copies, 'application/vnd.google-apps.document');},
@@ -362,6 +363,23 @@ test('recording the return fills the same Doc without overwriting manual entries
   assert.equal(kembali[2][3], 'RUSAK RINGAN', 'isian manual petugas tidak ditimpa');
   assert.equal(docs.get('doc-1').pinjam[1][3], 'BAIK');
   assert.ok(tables.PEMINJAMAN.every(row => row.BA_PDF_ID === 'doc-1'));
+});
+
+test('a Doc created before automatic layout is tidied once when reopened', () => {
+  const {ctx, tables} = fixture();
+  const {effects, makeFile, files} = docsFixture(ctx);
+  ctx.createLoan_(baseForm({loanObjectType: 'BERKAS', loanBerkasId: 'BRK-1'}));
+  makeFile('old-doc', 'application/vnd.google-apps.document');
+  tables.PEMINJAMAN.forEach(row => {row.BA_PDF_ID = 'old-doc'; row.BA_PDF_URL = 'https://docs.invalid/old-doc';});
+  const first = ctx.prepareLoanBeritaAcara_('LOAN-TEST');
+  assert.equal(first.reused, true);
+  assert.equal(first.layoutFixed, true);
+  assert.equal(effects.normalized, 1);
+  assert.match(files.get('old-doc').getDescription(), /BA_LAYOUT_V1/);
+  const second = ctx.prepareLoanBeritaAcara_('LOAN-TEST');
+  assert.equal(second.layoutFixed, false);
+  assert.equal(effects.normalized, 1, 'dokumen yang sudah dirapikan tidak disentuh lagi');
+  assert.equal(effects.copies, 0);
 });
 
 test('a legacy PDF or deleted Doc is replaced by a new Google Doc', () => {

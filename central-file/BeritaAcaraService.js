@@ -365,7 +365,12 @@ function prepareLoanBeritaAcara_(loanGroupId) {
     fillBeritaAcaraTags_(doc, tags);
     const updatedConditions = isReturned
       ? fillBeritaAcaraReturnCondition_(doc, first.KONDISI_KEMBALI || '') : 0;
+    // Dokumen yang dibuat sebelum perapian otomatis tersedia dirapikan satu
+    // kali; dokumen yang sudah ditandai tidak disentuh lagi.
+    const layoutFixed = !hasBeritaAcaraLayoutMarker_(existingDoc);
+    if (layoutFixed) normalizeBeritaAcaraLayout_(doc);
     doc.saveAndClose();
+    if (layoutFixed) markBeritaAcaraLayout_(existingDoc);
     linkBeritaAcaraDoc_(records, existingDoc);
     audit_('UPDATE', 'PEMINJAMAN', 'BERITA_ACARA', loanGroupId,
       'Memperbarui Berita Acara (Google Docs) yang sudah ada',
@@ -381,9 +386,11 @@ function prepareLoanBeritaAcara_(loanGroupId) {
       printSequence: 0,
       isReprint: false,
       isReturned: isReturned,
-      message: isReturned
+      layoutFixed: layoutFixed,
+      message: (isReturned
         ? 'Data pengembalian sudah diisikan ke Berita Acara (Google Docs) yang sama.'
-        : 'Berita Acara (Google Docs) dibuka. Perubahan rapian Anda tetap tersimpan di dokumen ini.'
+        : 'Berita Acara (Google Docs) dibuka. Perubahan rapian Anda tetap tersimpan di dokumen ini.') +
+        (layoutFixed ? ' Tata letak dokumen ini baru saja dirapikan otomatis.' : '')
     };
   }
 
@@ -402,6 +409,7 @@ function prepareLoanBeritaAcara_(loanGroupId) {
     fillBeritaAcaraItemsTable_(doc, 1, items, first.KONDISI_KEMBALI || '');
     normalizeBeritaAcaraLayout_(doc);
     doc.saveAndClose();
+    markBeritaAcaraLayout_(docFile);
   } catch (error) {
     // Jangan tinggalkan salinan setengah terisi bila pengisian gagal.
     try { docFile.setTrashed(true); } catch (cleanupError) {}
@@ -450,6 +458,22 @@ function prepareLoanBeritaAcara_(loanGroupId) {
 // lalu sisipkan page break asli sebelum judul bagian Pengembalian agar bagian
 // itu selalu mulai di halaman baru apa pun panjang tabelnya.
 var LOAN_BA_BLANK_RUN_LIMIT_ = 5;
+var LOAN_BA_LAYOUT_MARKER_ = 'BA_LAYOUT_V1';
+
+function hasBeritaAcaraLayoutMarker_(file) {
+  try {
+    return String(file.getDescription() || '').indexOf(LOAN_BA_LAYOUT_MARKER_) !== -1;
+  } catch (error) {
+    return false;
+  }
+}
+
+function markBeritaAcaraLayout_(file) {
+  try {
+    file.setDescription('Berita Acara Central File - tata letak dirapikan otomatis (' +
+      LOAN_BA_LAYOUT_MARKER_ + ')');
+  } catch (error) {}
+}
 
 function normalizeBeritaAcaraLayout_(doc) {
   const body = doc.getBody();

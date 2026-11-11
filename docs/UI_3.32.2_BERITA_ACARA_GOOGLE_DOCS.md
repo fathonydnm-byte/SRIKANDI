@@ -41,3 +41,9 @@ Perbaikan `normalizeBeritaAcaraLayout_()` (hanya pada dokumen BA yang **baru dib
 Simulasi pada struktur template asli: 140 → 73 elemen, 68 baris kosong dihapus, satu page break sebelum bagian Pengembalian. `node --test tests/*.test.cjs` → **84/84 lulus**.
 
 Catatan: ukuran kertas template saat ini **Letter** (8,5 × 11 inci); bila standar unit A4/F4, ubah lewat *File → Page setup* pada template.
+
+## 3.32.4 — dokumen lama ikut dirapikan (11 November 2026)
+
+Setelah 3.32.3 dipasang, pengguna menekan Cetak BA dan hasilnya masih tidak rapi. Penyebab yang paling mungkin: transaksi tersebut sudah mempunyai dokumen BA dari 3.32.2, dan dokumen itu dibuka ulang (perilaku pakai-ulang), sehingga perapian yang hanya berjalan untuk dokumen baru tidak pernah diterapkan.
+
+Perbaikan: dokumen BA ditandai `BA_LAYOUT_V1` pada keterangan (description) file setelah dirapikan. Saat dibuka ulang, dokumen yang belum bertanda dirapikan **satu kali** lalu ditandai; dokumen bertanda tidak disentuh lagi sehingga rapian manual sesudahnya aman. `node --test tests/*.test.cjs` → **85/85 lulus**.
