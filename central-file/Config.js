@@ -1,5 +1,5 @@
 const APP_RELEASE = Object.freeze({
-  VERSION: '3.32.0',
+  VERSION: '3.32.1',
   SCHEMA_VERSION: 11,
   CHANNEL: 'PILOT',
   RELEASE_DATE: '2026-11-11'

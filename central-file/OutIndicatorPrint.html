@@ -1,4 +1,3 @@
-
 <script>
 function downloadLoanOutIndicatorPdf_(payload){
   const result=buildLoanOutIndicatorPdf_(payload||{});
@@ -23,6 +22,24 @@ function bytesToBase64_(bytes){
   return btoa(binary);
 }
 
+// Palet mengikuti logo UIN Sunan Ampel Surabaya: hijau zamrud + emas.
+const LOAN_OUT_COLORS_={
+  green900:'0.024 0.180 0.114',
+  green800:'0.043 0.302 0.173',
+  green700:'0.071 0.388 0.235',
+  greenSoft:'0.133 0.427 0.282',
+  green50:'0.953 0.973 0.961',
+  gold:'0.769 0.631 0.388',
+  goldDark:'0.580 0.424 0.149',
+  goldBg:'0.984 0.969 0.929',
+  goldLine:'0.906 0.847 0.722',
+  ink:'0.118 0.161 0.231',
+  muted:'0.392 0.455 0.545',
+  line:'0.878 0.906 0.886',
+  red:'0.706 0.137 0.094',
+  white:'1 1 1'
+};
+
 // Satu transaksi multi-berkas menghasilkan satu lembar Out Indicator per
 // berkas (payload.sheets), masing-masing untuk diletakkan di lokasi asal
 // berkasnya. Payload lama tanpa `sheets` dicetak sebagai satu lembar.
@@ -41,15 +58,18 @@ function loanOutIndicatorSheets_(payload){
   }));
 }
 
+const LOAN_OUT_PAGE_={width:419.528,height:595.276,margin:24};
+const LOAN_OUT_TABLE_={number:26,item:66,pages:34,rowFont:6.8,lineHeight:8.2,maxLines:5};
+
 function buildLoanOutIndicatorPdf_(payload){
-  const pageWidth=419.528;
-  const pageHeight=595.276;
-  const margin=24;
+  const {width:pageWidth,height:pageHeight,margin}=LOAN_OUT_PAGE_;
   const tableWidth=pageWidth-margin*2;
   const sheetPages=[];
   loanOutIndicatorSheets_(payload).forEach(sheet=>{
     const itemRows=sheet.items.map((item,index)=>loanOutItemLayout_(item,index,tableWidth));
-    const pages=paginateLoanOutItems_(itemRows,132,438);
+    // Ruang baris tabel: halaman pertama di bawah kartu identitas, halaman
+    // lanjutan di bawah kepala ringkas; keduanya berhenti di atas footer.
+    const pages=paginateLoanOutItems_(itemRows,118,370);
     pages.forEach((rows,pageIndex)=>sheetPages.push({sheet:sheet,rows:rows,pageIndex:pageIndex,pageCount:pages.length}));
   });
   const objects=[null,null,null];
@@ -62,9 +82,14 @@ function buildLoanOutIndicatorPdf_(payload){
 
   sheetPages.forEach(({sheet,rows,pageIndex,pageCount})=>{
     const commands=[];
-    if(pageIndex===0)commands.push(drawLoanOutFirstHeader_(sheet,pageWidth,pageHeight,margin));
-    else commands.push(drawLoanOutContinuationHeader_(sheet,pageIndex+1,pageCount,pageWidth,pageHeight,margin));
-    const tableTop=pageIndex===0?228:508;
+    let tableTop;
+    if(pageIndex===0){
+      commands.push(drawLoanOutFirstHeader_(sheet,pageWidth,pageHeight,margin));
+      tableTop=213;
+    }else{
+      commands.push(drawLoanOutContinuationHeader_(sheet,pageIndex+1,pageCount,pageWidth,pageHeight,margin));
+      tableTop=470;
+    }
     commands.push(drawLoanOutItemsTable_(rows,tableTop,margin,tableWidth));
     commands.push(drawLoanOutFooter_(sheet,pageIndex+1,pageCount,pageWidth,margin));
     const contentObject=addObject(pdfStreamObjectBytes_('',pdfAsciiBytes_(commands.join('\n'))));
@@ -81,21 +106,22 @@ function buildLoanOutIndicatorPdf_(payload){
 }
 
 function loanOutItemLayout_(item,index,tableWidth){
-  const description=normalizeFolderLabelPdfText_(item.description||'Item arsip');
-  const descriptionWidth=tableWidth-28-42-40-22;
-  const lines=wrapFolderLabelPdfText_(description,descriptionWidth,6.5,false);
-  const limited=lines.slice(0,5);
-  if(lines.length>5){
-    let last=limited[4]||'';
-    while(last&&measureFolderLabelPdfText_(last+'...',6.5,false)>descriptionWidth)last=last.slice(0,-1);
-    limited[4]=last+'...';
+  const description=loanOutNormalize_(item.description||'Item arsip');
+  const descriptionWidth=tableWidth-LOAN_OUT_TABLE_.number-LOAN_OUT_TABLE_.item-LOAN_OUT_TABLE_.pages-16;
+  const lines=loanOutWrap_(description,descriptionWidth,LOAN_OUT_TABLE_.rowFont,false);
+  const limited=lines.slice(0,LOAN_OUT_TABLE_.maxLines);
+  if(lines.length>LOAN_OUT_TABLE_.maxLines){
+    let last=limited[limited.length-1]||'';
+    while(last&&loanOutMeasure_(last+'...',LOAN_OUT_TABLE_.rowFont,false)>descriptionWidth)last=last.slice(0,-1);
+    limited[limited.length-1]=last+'...';
   }
+  const numberLines=loanOutWrap_(loanOutNormalize_(item.number||'–'),LOAN_OUT_TABLE_.item-12,7,true).slice(0,2);
   return {
     index:index+1,
-    number:normalizeFolderLabelPdfText_(item.number||'–'),
+    numberLines:numberLines,
     descriptionLines:limited,
     pageCount:Number(item.pageCount||0),
-    height:Math.max(28,13+limited.length*7.4)
+    height:Math.max(24,10+Math.max(limited.length,numberLines.length)*LOAN_OUT_TABLE_.lineHeight)
   };
 }
 
@@ -119,109 +145,305 @@ function paginateLoanOutItems_(rows,firstBudget,nextBudget){
 }
 
 function drawLoanOutFirstHeader_(payload,pageWidth,pageHeight,margin){
+  const C=LOAN_OUT_COLORS_;
   const commands=[];
-  commands.push('q 0.055 0.231 0.365 rg '+pdfNumber_(margin)+' '+pdfNumber_(pageHeight-82)+' '+
-    pdfNumber_(pageWidth-margin*2)+' 58 re f Q');
-  commands.push('q 34 0 0 34 '+pdfNumber_(margin+10)+' '+pdfNumber_(pageHeight-70)+' cm /Im1 Do Q');
-  commands.push(loanOutText_(payload.unitName||'UIN SUNAN AMPEL SURABAYA',margin+52,pageHeight-45,10,true,270,1,'1 1 1'));
-  commands.push(loanOutText_('CENTRAL FILE · ARSIP AKTIF',margin+52,pageHeight-61,7,false,270,1,'0.82 0.91 0.96'));
-  commands.push(loanOutText_('OUT INDICATOR',margin,pageHeight-108,18,true,pageWidth-margin*2,1,'0.055 0.231 0.365'));
-  commands.push(loanOutText_('PENANDA KELUAR ARSIP',margin,pageHeight-124,8.5,true,pageWidth-margin*2,1,'0.12 0.43 0.60'));
-  if(payload.isReprint)commands.push(loanOutText_('CETAK ULANG KE-'+payload.printSequence,pageWidth-margin-112,pageHeight-109,7,true,112,1,'0.75 0.18 0.12'));
-  if(payload.sheetCount>1)commands.push(loanOutText_('LEMBAR BERKAS '+payload.sheetIndex+' DARI '+payload.sheetCount,pageWidth-margin-150,pageHeight-124,7,true,150,1,'0.055 0.231 0.365'));
+  const contentWidth=pageWidth-margin*2;
+  const right=pageWidth-margin;
 
-  const statusColor=payload.statusCode==='OVERDUE'?'0.78 0.16 0.12':
-    payload.statusCode==='RETURNED'?'0.20 0.48 0.29':'0.91 0.48 0.10';
-  commands.push('q '+statusColor+' rg '+pdfNumber_(margin)+' '+pdfNumber_(pageHeight-159)+' '+
-    pdfNumber_(pageWidth-margin*2)+' 22 re f Q');
-  commands.push(loanOutText_(payload.statusLabel||'DIPINJAM',margin+9,pageHeight-151,8.5,true,120,1,'1 1 1'));
-  commands.push(loanOutText_('Letakkan penanda ini pada lokasi asal arsip',margin+125,pageHeight-151,7.5,false,230,1,'1 1 1'));
+  // Pita kepala hijau dengan ornamen bintang segi delapan (motif logo).
+  const bandTop=pageHeight-margin;
+  const bandBottom=bandTop-74;
+  const band=loanOutRoundRect_(margin,bandBottom,contentWidth,74,9);
+  commands.push(loanOutFill_(C.green800,band));
+  commands.push('q '+band+' W n');
+  commands.push(loanOutStar_(right-30,bandBottom+37,70,C.greenSoft,1.4));
+  commands.push(loanOutStar_(right-30,bandBottom+37,34,C.gold,0.9));
+  commands.push('Q');
+  commands.push(loanOutFill_(C.white,loanOutRoundRect_(margin+14,bandBottom+15,44,44,8)));
+  commands.push('q 36 0 0 36 '+pdfNumber_(margin+18)+' '+pdfNumber_(bandBottom+19)+' cm /Im1 Do Q');
+  // Nama unit: satu baris bila muat (font diperkecil seperlunya), selain itu dua baris.
+  const unitName=loanOutNormalize_(payload.unitName||'UIN SUNAN AMPEL SURABAYA');
+  const unitWidth=right-76-(margin+70);
+  let unitSize=11.5;
+  while(unitSize>10&&loanOutMeasure_(unitName,unitSize,true)>unitWidth)unitSize-=0.5;
+  const unitLines=loanOutWrap_(unitName,unitWidth,unitSize,true).slice(0,2);
+  const unitTop=unitLines.length>1?bandBottom+49:bandBottom+42;
+  unitLines.forEach((line,index)=>commands.push(loanOutText_(line,margin+70,unitTop-index*13,unitSize,true,unitWidth,1,C.white)));
+  commands.push(loanOutText_('CENTRAL FILE · ARSIP AKTIF',margin+70,unitTop-(unitLines.length-1)*13-15,6.8,true,unitWidth,1,C.gold,{spacing:1.3}));
+  commands.push(loanOutLine_(margin,bandBottom-6,right,bandBottom-6,C.gold,1.2));
 
+  // Judul dan status.
+  const titleBase=bandBottom-46;
+  commands.push(loanOutText_('PENANDA KELUAR ARSIP',margin,titleBase+21,7,true,200,1,C.goldDark,{spacing:1.6}));
+  commands.push(loanOutText_('OUT INDICATOR',margin,titleBase,24,true,240,1,C.green900));
+  const status=loanOutStatusStyle_(payload.statusCode);
+  const statusLabel=loanOutNormalize_(payload.statusLabel||'DIPINJAM');
+  const pillWidth=loanOutMeasure_(statusLabel,8.5,true,1.2)+30;
+  commands.push(loanOutFill_(status.fill,loanOutRoundRect_(right-pillWidth,titleBase-4,pillWidth,23,11.5)));
+  commands.push(loanOutFill_(status.dot,loanOutCircle_(right-pillWidth+12,titleBase+7.5,2.6)));
+  commands.push(loanOutText_(statusLabel,right-pillWidth+20,titleBase+4.5,8.5,true,pillWidth,1,status.text,{spacing:1.2}));
+  const flags=[];
+  if(payload.sheetCount>1)flags.push('LEMBAR BERKAS '+payload.sheetIndex+' DARI '+payload.sheetCount);
+  if(payload.isReprint)flags.push('CETAK ULANG KE-'+payload.printSequence);
+  if(flags.length){
+    commands.push(loanOutText_(flags.join('  ·  '),right,titleBase-16,6.4,true,220,1,
+      payload.isReprint?C.red:C.muted,{align:'right',spacing:0.8}));
+  }
+  commands.push(loanOutText_('Letakkan kartu ini di lokasi asal arsip.',margin,titleBase-16,7.4,false,200,1,C.muted));
+
+  // Kartu identitas: nomor berkas, lokasi asal, batas kembali.
+  const cardTop=titleBase-30;
+  const cardHeight=62;
+  const cardBottom=cardTop-cardHeight;
+  commands.push(loanOutFill_(C.goldBg,loanOutRoundRect_(margin,cardBottom,contentWidth,cardHeight,9)));
+  commands.push(loanOutStroke_(C.goldLine,0.7,loanOutRoundRect_(margin,cardBottom,contentWidth,cardHeight,9)));
+  commands.push(loanOutFill_(C.gold,loanOutRoundRect_(margin+12,cardBottom+14,3,cardHeight-28,1.5)));
+  const col1=margin+26;
+  const col2=margin+110;
+  const col3=right-98;
+  commands.push(loanOutLine_(col2-12,cardBottom+14,col2-12,cardTop-14,C.goldLine,0.7));
+  commands.push(loanOutLine_(col3-12,cardBottom+14,col3-12,cardTop-14,C.goldLine,0.7));
+  const labelY=cardTop-17;
+  commands.push(loanOutText_('NOMOR BERKAS',col1,labelY,6.2,true,80,1,C.goldDark,{spacing:1}));
+  commands.push(loanOutText_(payload.berkasNumber||'DRAFT',col1,cardBottom+15,25,true,82,1,C.green900));
+  commands.push(loanOutText_('LOKASI ASAL',col2,labelY,6.2,true,120,1,C.goldDark,{spacing:1}));
+  commands.push(loanOutText_(payload.originalLocation||'Lokasi belum dicatat',col2,labelY-15,9,true,col3-col2-22,2,C.ink));
+  commands.push(loanOutText_(payload.classificationCode?'Klasifikasi '+payload.classificationCode:'',col2,cardBottom+14,7,false,col3-col2-22,1,C.muted));
+  commands.push(loanOutText_('WAJIB KEMBALI',col3,labelY,6.2,true,100,1,C.goldDark,{spacing:1}));
+  commands.push(loanOutText_(formatLoanOutDate_(payload.dueDate),col3,labelY-17,12,true,104,1,
+    payload.statusCode==='OVERDUE'?C.red:C.green900));
+  commands.push(loanOutText_('Dipinjam '+formatLoanOutDate_(payload.borrowDate),col3,cardBottom+14,7,false,104,1,C.muted));
+
+  // Rincian peminjam dua kolom.
+  const half=(contentWidth-16)/2;
   const left=margin;
-  const mid=214;
-  let y=pageHeight-181;
-  commands.push(drawLoanOutMeta_(left,y,'ID TRANSAKSI',payload.loanGroupId,174));
-  commands.push(drawLoanOutMeta_(mid,y,'LOKASI ASAL',payload.originalLocation,181));
-  y-=32;
-  commands.push(drawLoanOutMeta_(left,y,'NOMOR BERKAS',payload.berkasNumber||'DRAFT',174));
-  commands.push(drawLoanOutMeta_(mid,y,'KODE KLASIFIKASI',payload.classificationCode||'–',181));
-  y-=32;
-  commands.push(drawLoanOutMeta_(left,y,'PEMINJAM',payload.borrowerName,174));
-  commands.push(drawLoanOutMeta_(mid,y,'UNIT KERJA',payload.borrowerUnit,181));
-  y-=32;
-  commands.push(drawLoanOutMeta_(left,y,'TANGGAL PINJAM',formatLoanOutDate_(payload.borrowDate),174));
-  commands.push(drawLoanOutMeta_(mid,y,'WAJIB KEMBALI',formatLoanOutDate_(payload.dueDate),181));
-  y-=35;
-  commands.push('q 0.93 0.96 0.98 rg '+pdfNumber_(left)+' '+pdfNumber_(y-31)+' '+
-    pdfNumber_(pageWidth-margin*2)+' 36 re f Q');
-  commands.push(loanOutText_('KEPERLUAN',left+7,y-8,6.5,true,80,1,'0.12 0.43 0.60'));
-  commands.push(loanOutText_(payload.purpose||'–',left+7,y-20,7.2,false,pageWidth-margin*2-14,2,'0.10 0.18 0.24'));
-  commands.push(loanOutText_('DAFTAR ARSIP YANG KELUAR',left,242,8,true,pageWidth-margin*2,1,'0.055 0.231 0.365'));
+  const mid=margin+half+16;
+  let y=cardBottom-17;
+  commands.push(drawLoanOutMeta_(left,y,'PEMINJAM',payload.borrowerName,half,
+    payload.borrowerIdentity?'NIP/NIK '+payload.borrowerIdentity:''));
+  commands.push(drawLoanOutMeta_(mid,y,'UNIT KERJA',payload.borrowerUnit,half,
+    payload.whatsapp?'WA '+payload.whatsapp:''));
+  y-=36;
+  commands.push(drawLoanOutMeta_(left,y,'ID TRANSAKSI',payload.loanGroupId,half,'',7.2));
+  commands.push(drawLoanOutMeta_(mid,y,'JUDUL BERKAS',payload.berkasTitle,half,'',7.6));
+  const purposeTop=y-33;
+  commands.push(loanOutFill_(C.green50,loanOutRoundRect_(left,purposeTop-36,contentWidth,36,7)));
+  commands.push(loanOutText_('KEPERLUAN',left+10,purposeTop-11,6.2,true,90,1,C.green700,{spacing:1}));
+  commands.push(loanOutText_(payload.purpose||'–',left+10,purposeTop-22,7.6,false,contentWidth-20,2,C.ink));
+
+  // Judul daftar arsip.
+  const listTitleY=223;
+  commands.push(loanOutFill_(C.gold,loanOutDiamond_(left+3,listTitleY+2.6,3.4)));
+  commands.push(loanOutText_('DAFTAR ARSIP YANG KELUAR',left+11,listTitleY,7.6,true,200,1,C.green900,{spacing:1.1}));
+  const itemCount=(payload.items||[]).length;
+  const totalPages=(payload.items||[]).reduce((sum,item)=>sum+Number(item.pageCount||0),0);
+  commands.push(loanOutText_(itemCount+' objek · '+totalPages+' lembar',right,listTitleY,7,false,150,1,C.muted,{align:'right'}));
   return commands.join('\n');
 }
 
 function drawLoanOutContinuationHeader_(payload,pageNumber,pageCount,pageWidth,pageHeight,margin){
+  const C=LOAN_OUT_COLORS_;
   const commands=[];
-  commands.push('q 0.055 0.231 0.365 rg '+pdfNumber_(margin)+' '+pdfNumber_(pageHeight-66)+' '+
-    pdfNumber_(pageWidth-margin*2)+' 42 re f Q');
-  commands.push(loanOutText_('OUT INDICATOR · '+(payload.loanGroupId||''),margin+10,pageHeight-43,10,true,270,1,'1 1 1'));
-  commands.push(loanOutText_('Lanjutan '+pageNumber+'/'+pageCount,pageWidth-margin-95,pageHeight-43,7.5,true,85,1,'1 1 1'));
-  commands.push(loanOutText_('Lokasi asal: '+(payload.originalLocation||'–'),margin,pageHeight-82,8,false,pageWidth-margin*2,2,'0.10 0.18 0.24'));
-  commands.push(loanOutText_('DAFTAR ARSIP YANG KELUAR (LANJUTAN)',margin,522,8,true,pageWidth-margin*2,1,'0.055 0.231 0.365'));
+  const contentWidth=pageWidth-margin*2;
+  const right=pageWidth-margin;
+  const bandTop=pageHeight-margin;
+  const bandBottom=bandTop-50;
+  const band=loanOutRoundRect_(margin,bandBottom,contentWidth,50,9);
+  commands.push(loanOutFill_(C.green800,band));
+  commands.push('q '+band+' W n');
+  commands.push(loanOutStar_(right-22,bandBottom+25,52,C.greenSoft,1.2));
+  commands.push('Q');
+  commands.push(loanOutText_('OUT INDICATOR · LANJUTAN',margin+16,bandBottom+28,11,true,250,1,C.white,{spacing:0.6}));
+  commands.push(loanOutText_('Berkas '+(payload.berkasNumber||'DRAFT')+' · '+(payload.loanGroupId||''),margin+16,bandBottom+14,7,false,250,1,C.gold));
+  commands.push(loanOutText_('HALAMAN '+pageNumber+'/'+pageCount,right-62,bandBottom+21,7,true,90,1,C.gold,{align:'right',spacing:0.8}));
+  commands.push(loanOutLine_(margin,bandBottom-6,right,bandBottom-6,C.gold,1.2));
+  commands.push(loanOutText_('Lokasi asal: '+(payload.originalLocation||'–'),margin,bandBottom-22,8,true,contentWidth,1,C.ink));
+  const listTitleY=486;
+  commands.push(loanOutFill_(C.gold,loanOutDiamond_(margin+3,listTitleY+2.6,3.4)));
+  commands.push(loanOutText_('DAFTAR ARSIP YANG KELUAR (LANJUTAN)',margin+11,listTitleY,7.6,true,260,1,C.green900,{spacing:1.1}));
   return commands.join('\n');
 }
 
-function drawLoanOutMeta_(x,y,label,value,width){
-  return [
-    loanOutText_(label,x,y,6.2,true,width,1,'0.35 0.45 0.52'),
-    loanOutText_(value||'–',x,y-13,8,false,width,2,'0.08 0.15 0.20'),
-    'q 0.80 0.86 0.89 RG 0.5 w '+pdfNumber_(x)+' '+pdfNumber_(y-24)+' m '+pdfNumber_(x+width)+' '+pdfNumber_(y-24)+' l S Q'
-  ].join('\n');
+function drawLoanOutMeta_(x,y,label,value,width,note,valueSize){
+  const C=LOAN_OUT_COLORS_;
+  const commands=[
+    loanOutText_(label,x,y,6.2,true,width,1,C.goldDark,{spacing:1}),
+    loanOutText_(value||'–',x,y-12,valueSize||8.8,true,width,1,C.ink)
+  ];
+  if(note)commands.push(loanOutText_(note,x,y-22,6.8,false,width,1,C.muted));
+  commands.push(loanOutLine_(x,y-27,x+width,y-27,C.line,0.6));
+  return commands.join('\n');
 }
 
 function drawLoanOutItemsTable_(rows,top,left,width){
-  const columns=[28,42,width-110,40];
-  const x=[left,left+columns[0],left+columns[0]+columns[1],left+columns[0]+columns[1]+columns[2],left+width];
+  const C=LOAN_OUT_COLORS_;
+  const T=LOAN_OUT_TABLE_;
+  const x=[left,left+T.number,left+T.number+T.item,left+width-T.pages,left+width];
   const commands=[];
-  commands.push('q 0.12 0.43 0.60 rg '+pdfNumber_(left)+' '+pdfNumber_(top-20)+' '+pdfNumber_(width)+' 20 re f Q');
-  ['NO','ITEM','URAIAN INFORMASI ARSIP','HAL.'].forEach((label,index)=>
-    commands.push(loanOutText_(label,x[index]+4,top-13,5.9,true,columns[index]-8,1,'1 1 1')));
-  let y=top-20;
-  rows.forEach(row=>{
+  const headerHeight=18;
+  commands.push(loanOutFill_(C.green800,loanOutRoundRect_(left,top-headerHeight,width,headerHeight,5)));
+  commands.push(loanOutText_('NO',x[0]+8,top-12,6,true,T.number,1,C.white,{spacing:0.8}));
+  commands.push(loanOutText_('BERKAS / ITEM',x[1]+6,top-12,6,true,T.item,1,C.white,{spacing:0.8}));
+  commands.push(loanOutText_('URAIAN INFORMASI ARSIP',x[2]+6,top-12,6,true,x[3]-x[2],1,C.white,{spacing:0.8}));
+  commands.push(loanOutText_('HAL.',x[4]-8,top-12,6,true,T.pages,1,C.white,{align:'right',spacing:0.8}));
+  let y=top-headerHeight;
+  rows.forEach((row,index)=>{
     const bottom=y-row.height;
-    commands.push('q 0.75 0.82 0.86 RG 0.45 w '+pdfNumber_(left)+' '+pdfNumber_(bottom)+' '+pdfNumber_(width)+' '+pdfNumber_(row.height)+' re S Q');
-    x.slice(1,-1).forEach(value=>commands.push('q 0.75 0.82 0.86 RG 0.45 w '+pdfNumber_(value)+' '+pdfNumber_(bottom)+' m '+pdfNumber_(value)+' '+pdfNumber_(y)+' l S Q'));
-    commands.push(loanOutText_(row.index,x[0]+4,y-13,7,false,columns[0]-8,1,'0.08 0.15 0.20'));
-    commands.push(loanOutText_(row.number,x[1]+4,y-13,7,true,columns[1]-8,2,'0.08 0.15 0.20'));
-    row.descriptionLines.forEach((line,index)=>commands.push(loanOutText_(line,x[2]+4,y-12-index*7.4,6.5,false,columns[2]-12,1,'0.08 0.15 0.20')));
-    commands.push(loanOutText_(row.pageCount,x[3]+4,y-13,7,false,columns[3]-8,1,'0.08 0.15 0.20'));
+    if(index%2===1)commands.push(loanOutFill_(C.green50,pdfNumber_(left)+' '+pdfNumber_(bottom)+' '+pdfNumber_(width)+' '+pdfNumber_(row.height)+' re'));
+    commands.push(loanOutLine_(left,bottom,left+width,bottom,C.line,0.6));
+    commands.push(loanOutText_(row.index,x[0]+8,y-12,7,false,T.number,1,C.muted));
+    row.numberLines.forEach((line,lineIndex)=>commands.push(loanOutText_(line,x[1]+6,y-12-lineIndex*T.lineHeight,7,true,T.item-10,1,C.green800)));
+    row.descriptionLines.forEach((line,lineIndex)=>commands.push(loanOutText_(line,x[2]+6,y-12-lineIndex*T.lineHeight,T.rowFont,false,x[3]-x[2]-10,1,C.ink)));
+    commands.push(loanOutText_(row.pageCount,x[4]-8,y-12,7,true,T.pages,1,C.ink,{align:'right'}));
     y=bottom;
   });
+  commands.push(loanOutLine_(left,y,left+width,y,C.green800,0.9));
   return commands.join('\n');
 }
 
 function drawLoanOutFooter_(payload,pageNumber,pageCount,pageWidth,margin){
+  const C=LOAN_OUT_COLORS_;
   const commands=[];
-  commands.push('q 0.93 0.96 0.98 rg '+pdfNumber_(margin)+' 24 '+pdfNumber_(pageWidth-margin*2)+' 43 re f Q');
-  commands.push(loanOutText_('SIMPAN DI LOKASI ASAL',margin+8,53,8,true,150,1,'0.78 0.16 0.12'));
-  commands.push(loanOutText_('Jangan pindahkan penanda sampai seluruh arsip pada transaksi ini dikembalikan.',margin+8,40,6.7,false,285,2,'0.20 0.30 0.36'));
-  commands.push(loanOutText_('A5 · '+pageNumber+'/'+pageCount,pageWidth-margin-55,40,6.5,true,55,1,'0.35 0.45 0.52'));
+  const right=pageWidth-margin;
+  const top=72;
+  commands.push(loanOutLine_(margin,top,right,top,C.goldLine,0.8));
+  commands.push(loanOutFill_(C.green800,loanOutRoundRect_(margin,top-30,4,22,2)));
+  commands.push(loanOutText_('SIMPAN DI LOKASI ASAL',margin+12,top-15,8,true,200,1,C.green800,{spacing:1.2}));
+  commands.push(loanOutText_('Jangan pindahkan penanda sampai seluruh arsip pada transaksi ini dikembalikan.',margin+12,top-27,6.8,false,250,2,C.muted));
+  commands.push(loanOutText_('A5 · '+pageNumber+'/'+pageCount,right,top-15,7,true,90,1,C.green800,{align:'right',spacing:0.8}));
+  const printed=formatLoanOutDate_(String(payload.generatedAt||'').slice(0,10));
+  if(printed&&printed!=='–')commands.push(loanOutText_('Dicetak '+printed,right,top-27,6.6,false,90,1,C.muted,{align:'right'}));
+  commands.push(loanOutText_('Central File · Bagian dari sistem kearsipan UIN Sunan Ampel Surabaya',pageWidth/2,margin+4,5.8,false,320,1,C.goldDark,{align:'center',spacing:0.4}));
   return commands.join('\n');
 }
 
-function loanOutText_(value,x,y,size,bold,maxWidth,maxLines,color){
-  const normalized=normalizeFolderLabelPdfText_((value===undefined||value===null?'':String(value))
-    .replace(/[·•]/g,' - ').replace(/[–—]/g,'-'));
-  let lines=wrapFolderLabelPdfText_(normalized,maxWidth,size,bold).slice(0,maxLines||1);
-  if(!lines.length)lines=[''];
-  if(wrapFolderLabelPdfText_(normalized,maxWidth,size,bold).length>(maxLines||1)){
+/* ---------- Primitif gambar PDF ---------- */
+function loanOutStatusStyle_(statusCode){
+  const C=LOAN_OUT_COLORS_;
+  if(statusCode==='OVERDUE')return {fill:C.red,text:C.white,dot:C.white};
+  if(statusCode==='RETURNED')return {fill:C.green700,text:C.white,dot:C.gold};
+  return {fill:C.gold,text:C.green900,dot:C.green800};
+}
+
+function loanOutFill_(color,path){
+  return 'q '+color+' rg '+path+' f Q';
+}
+
+function loanOutStroke_(color,lineWidth,path){
+  return 'q '+color+' RG '+pdfNumber_(lineWidth)+' w '+path+' S Q';
+}
+
+function loanOutLine_(x1,y1,x2,y2,color,lineWidth){
+  return loanOutStroke_(color,lineWidth,pdfNumber_(x1)+' '+pdfNumber_(y1)+' m '+pdfNumber_(x2)+' '+pdfNumber_(y2)+' l');
+}
+
+function loanOutRoundRect_(x,y,width,height,radius){
+  const r=Math.min(radius,width/2,height/2);
+  const k=r*0.5523;
+  const n=pdfNumber_;
+  return [
+    n(x+r)+' '+n(y)+' m',
+    n(x+width-r)+' '+n(y)+' l',
+    n(x+width-r+k)+' '+n(y)+' '+n(x+width)+' '+n(y+r-k)+' '+n(x+width)+' '+n(y+r)+' c',
+    n(x+width)+' '+n(y+height-r)+' l',
+    n(x+width)+' '+n(y+height-r+k)+' '+n(x+width-r+k)+' '+n(y+height)+' '+n(x+width-r)+' '+n(y+height)+' c',
+    n(x+r)+' '+n(y+height)+' l',
+    n(x+r-k)+' '+n(y+height)+' '+n(x)+' '+n(y+height-r+k)+' '+n(x)+' '+n(y+height-r)+' c',
+    n(x)+' '+n(y+r)+' l',
+    n(x)+' '+n(y+r-k)+' '+n(x+r-k)+' '+n(y)+' '+n(x+r)+' '+n(y)+' c',
+    'h'
+  ].join(' ');
+}
+
+function loanOutCircle_(cx,cy,radius){
+  return loanOutRoundRect_(cx-radius,cy-radius,radius*2,radius*2,radius);
+}
+
+function loanOutDiamond_(cx,cy,radius){
+  const n=pdfNumber_;
+  return n(cx)+' '+n(cy+radius)+' m '+n(cx+radius)+' '+n(cy)+' l '+n(cx)+' '+n(cy-radius)+' l '+n(cx-radius)+' '+n(cy)+' l h';
+}
+
+// Bintang segi delapan (Rub el Hizb) seperti pada logo: dua bujur sangkar,
+// salah satunya diputar 45 derajat.
+function loanOutStar_(cx,cy,size,color,lineWidth){
+  const n=pdfNumber_;
+  const h=size/2;
+  const d=size/Math.SQRT2;
+  const square=n(cx-h)+' '+n(cy-h)+' '+n(size)+' '+n(size)+' re';
+  const diamond=n(cx)+' '+n(cy+d)+' m '+n(cx+d)+' '+n(cy)+' l '+n(cx)+' '+n(cy-d)+' l '+n(cx-d)+' '+n(cy)+' l h';
+  return loanOutStroke_(color,lineWidth,square+' '+diamond);
+}
+
+/* ---------- Teks dengan metrik Helvetica sesungguhnya ---------- */
+const LOAN_OUT_HELVETICA_=[278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584];
+const LOAN_OUT_HELVETICA_BOLD_=[278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584];
+
+function loanOutMeasure_(text,size,bold,spacing){
+  const table=bold?LOAN_OUT_HELVETICA_BOLD_:LOAN_OUT_HELVETICA_;
+  const characters=Array.from(String(text));
+  const units=characters.reduce((sum,character)=>{
+    const code=character.charCodeAt(0);
+    if(code===0x96)return sum+556;
+    if(code===0xB7)return sum+278;
+    return sum+(code>=32&&code<=126?table[code-32]:556);
+  },0);
+  return units/1000*size+(spacing||0)*Math.max(0,characters.length-1);
+}
+
+function loanOutWrap_(text,maxWidth,size,bold){
+  const words=String(text||'').split(/\s+/).filter(Boolean);
+  const lines=[];
+  let current='';
+  words.forEach(word=>{
+    const candidate=current?current+' '+word:word;
+    if(loanOutMeasure_(candidate,size,bold)<=maxWidth){current=candidate;return}
+    if(current){lines.push(current);current=''}
+    if(loanOutMeasure_(word,size,bold)<=maxWidth){current=word;return}
+    let part='';
+    Array.from(word).forEach(character=>{
+      if(part&&loanOutMeasure_(part+character,size,bold)>maxWidth){lines.push(part);part=character}
+      else part+=character;
+    });
+    current=part;
+  });
+  if(current)lines.push(current);
+  return lines.length?lines:[''];
+}
+
+// Teks dikodekan WinAnsi: tanda pisah (–) dan titik tengah (·) dipertahankan.
+function loanOutNormalize_(value){
+  return String(value===undefined||value===null?'':value)
+    .replace(/[–—]/g,'\x96')
+    .replace(/[·•]/g,'\xB7')
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g,'')
+    .replace(/[“”]/g,'"')
+    .replace(/[‘’]/g,"'")
+    .replace(/[^\x20-\x7E\x96\xB7]/g,'?')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+
+function loanOutText_(value,x,y,size,bold,maxWidth,maxLines,color,options){
+  options=options||{};
+  const spacing=options.spacing||0;
+  const normalized=loanOutNormalize_(value);
+  const limit=maxLines||1;
+  const wrapped=spacing?[normalized]:loanOutWrap_(normalized,maxWidth,size,bold);
+  const lines=wrapped.slice(0,limit);
+  if(wrapped.length>limit){
     let last=lines[lines.length-1];
-    while(last&&measureFolderLabelPdfText_(last+'...',size,bold)>maxWidth)last=last.slice(0,-1);
+    while(last&&loanOutMeasure_(last+'...',size,bold,spacing)>maxWidth)last=last.slice(0,-1);
     lines[lines.length-1]=last+'...';
   }
-  return lines.map((line,index)=>'BT '+(color||'0 0 0')+' rg /'+(bold?'F2':'F1')+' '+
-    pdfNumber_(size)+' Tf '+pdfNumber_(x)+' '+pdfNumber_(y-index*size*1.15)+' Td ('+
-    pdfEscapeText_(line)+') Tj ET').join('\n');
+  return lines.map((line,index)=>{
+    const lineWidth=loanOutMeasure_(line,size,bold,spacing);
+    const startX=options.align==='right'?x-lineWidth:options.align==='center'?x-lineWidth/2:x;
+    return 'BT '+(color||'0 0 0')+' rg /'+(bold?'F2':'F1')+' '+pdfNumber_(size)+' Tf '+
+      pdfNumber_(spacing)+' Tc '+pdfNumber_(startX)+' '+pdfNumber_(y-index*size*1.18)+' Td ('+
+      pdfEscapeText_(line)+') Tj ET';
+  }).join('\n');
 }
 
 function formatLoanOutDate_(value){
