@@ -615,7 +615,7 @@
         <form id="loanForm" class="form-card loan-form-card" enctype="multipart/form-data">
           <input type="hidden" id="loanPreviewId" name="loanPreviewId">
           <div class="section-heading">
-            <div><h2>Catat Peminjaman Arsip</h2><p>Pilih satu berkas lengkap atau satu/beberapa item, lalu catat peminjam dan tanggal wajib kembali.</p></div>
+            <div><h2>Catat Peminjaman Arsip</h2><p>Pilih berkas lengkap atau item arsip. Bila peminjam meminjam lebih dari satu berkas/item, tekan <strong>Tambahkan ke Daftar Pinjam</strong> untuk setiap berkas, lalu simpan sekali.</p></div>
             <button type="button" id="clearLoanForm" class="secondary">Bersihkan Form</button>
           </div>
           <div class="info-panel">
@@ -623,17 +623,17 @@
             <span>Berkas yang dipinjam seluruhnya tidak dapat dipinjam per item. Jika satu item sedang dipinjam, berkas tidak dapat dipinjam seluruhnya sampai item tersebut kembali.</span>
           </div>
           <div class="form-grid">
-            <label class="field">Objek peminjaman *
-              <select id="loanObjectType" name="loanObjectType" required>
+            <label class="field">Objek peminjaman
+              <select id="loanObjectType" name="loanObjectType">
                 <option value="BERKAS">Satu berkas lengkap</option>
                 <option value="ITEM">Satu / beberapa item arsip</option>
               </select>
             </label>
-            <label class="field">Berkas induk *
-              <select id="loanBerkasId" name="loanBerkasId" required><option value="">Memuat daftar berkas…</option></select>
+            <label class="field">Berkas induk
+              <select id="loanBerkasId" name="loanBerkasId"><option value="">Memuat daftar berkas…</option></select>
             </label>
             <div id="loanItemField" class="field span-2" hidden>
-              <span>Item arsip *</span>
+              <span>Item arsip</span>
               <div class="loan-item-picker-toolbar">
                 <input id="loanItemSearch" autocomplete="off" maxlength="250" placeholder="Cari nomor, tanggal, atau uraian item">
                 <button type="button" id="selectAllLoanItems" class="secondary">Pilih Semua Tersedia</button>
@@ -643,6 +643,22 @@
               <small id="loanItemSelectionSummary" class="helper">Belum ada item dipilih.</small>
             </div>
             <div id="loanObjectInfo" class="loan-object-info span-2">Pilih berkas atau item yang akan dipinjam.</div>
+            <div class="loan-cart-actions span-2">
+              <button type="button" id="addLoanSelection" class="secondary">+ Tambahkan ke Daftar Pinjam</button>
+              <small class="helper">Meminjam beberapa berkas/item sekaligus? Tambahkan satu per satu ke daftar — semuanya tercatat dalam satu transaksi, satu Berita Acara, dan Out Indicator per berkas.</small>
+            </div>
+            <div id="loanCart" class="loan-cart span-2" hidden>
+              <div class="loan-cart-header">
+                <div><strong>Daftar arsip yang dipinjam</strong><span id="loanCartSummary" class="helper"></span></div>
+                <button type="button" id="clearLoanCart" class="secondary">Kosongkan Daftar</button>
+              </div>
+              <div class="loan-cart-table-wrap">
+                <table class="loan-cart-table">
+                  <thead><tr><th>No.</th><th>Berkas / Item</th><th>Uraian</th><th>Lembar</th><th>Lokasi Asal</th><th></th></tr></thead>
+                  <tbody id="loanCartBody"></tbody>
+                </table>
+              </div>
+            </div>
           </div>
 
           <div class="section-heading compact"><div><h2>Data Peminjam</h2></div></div>
@@ -663,7 +679,7 @@
             <label class="field">Tanggal wajib kembali *<input id="loanDueDate" name="loanDueDate" type="date" required></label>
             <label class="field">Jumlah halaman/item yang dipinjam *
               <input id="loanPageCount" name="loanPageCount" type="number" min="1" step="1" required>
-              <small class="helper">Diisi otomatis dari database dan dapat dikoreksi bila yang dipinjam hanya sebagian.</small>
+              <small class="helper">Diisi otomatis dari total seluruh berkas/item di daftar pinjam dan dapat dikoreksi bila yang dipinjam hanya sebagian.</small>
             </label>
             <label class="field">Kondisi fisik saat dipinjam *
               <select id="loanCondition" name="loanCondition" required>

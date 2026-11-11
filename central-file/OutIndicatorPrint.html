@@ -23,16 +23,35 @@ function bytesToBase64_(bytes){
   return btoa(binary);
 }
 
-function buildLoanOutIndicatorPdf_(payload){
-  const items=Array.isArray(payload.items)&&payload.items.length?payload.items:[{
-    number:'–',description:payload.berkasTitle||'Arsip dipinjam',pageCount:payload.pageCount||0
+// Satu transaksi multi-berkas menghasilkan satu lembar Out Indicator per
+// berkas (payload.sheets), masing-masing untuk diletakkan di lokasi asal
+// berkasnya. Payload lama tanpa `sheets` dicetak sebagai satu lembar.
+function loanOutIndicatorSheets_(payload){
+  const sheets=Array.isArray(payload.sheets)&&payload.sheets.length?payload.sheets:[{
+    berkasNumber:payload.berkasNumber,classificationCode:payload.classificationCode,
+    berkasTitle:payload.berkasTitle,originalLocation:payload.originalLocation,
+    pageCount:payload.pageCount,items:payload.items
   }];
+  return sheets.map((sheet,index)=>Object.assign({},payload,sheet,{
+    items:Array.isArray(sheet.items)&&sheet.items.length?sheet.items:[{
+      number:'–',description:sheet.berkasTitle||payload.berkasTitle||'Arsip dipinjam',pageCount:sheet.pageCount||0
+    }],
+    sheetIndex:index+1,
+    sheetCount:sheets.length
+  }));
+}
+
+function buildLoanOutIndicatorPdf_(payload){
   const pageWidth=419.528;
   const pageHeight=595.276;
   const margin=24;
   const tableWidth=pageWidth-margin*2;
-  const itemRows=items.map((item,index)=>loanOutItemLayout_(item,index,tableWidth));
-  const pages=paginateLoanOutItems_(itemRows,132,438);
+  const sheetPages=[];
+  loanOutIndicatorSheets_(payload).forEach(sheet=>{
+    const itemRows=sheet.items.map((item,index)=>loanOutItemLayout_(item,index,tableWidth));
+    const pages=paginateLoanOutItems_(itemRows,132,438);
+    pages.forEach((rows,pageIndex)=>sheetPages.push({sheet:sheet,rows:rows,pageIndex:pageIndex,pageCount:pages.length}));
+  });
   const objects=[null,null,null];
   const addObject=value=>{objects.push(typeof value==='string'?pdfAsciiBytes_(value):value);return objects.length-1};
   const regularFont=addObject('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
@@ -41,13 +60,13 @@ function buildLoanOutIndicatorPdf_(payload){
   const logoObject=addObject(pdfStreamObjectBytes_('/Type /XObject /Subtype /Image /Name /Im1 /Width 319 /Height 315 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Interpolate true',logoBytes));
   const pageObjects=[];
 
-  pages.forEach((rows,pageIndex)=>{
+  sheetPages.forEach(({sheet,rows,pageIndex,pageCount})=>{
     const commands=[];
-    if(pageIndex===0)commands.push(drawLoanOutFirstHeader_(payload,pageWidth,pageHeight,margin));
-    else commands.push(drawLoanOutContinuationHeader_(payload,pageIndex+1,pages.length,pageWidth,pageHeight,margin));
+    if(pageIndex===0)commands.push(drawLoanOutFirstHeader_(sheet,pageWidth,pageHeight,margin));
+    else commands.push(drawLoanOutContinuationHeader_(sheet,pageIndex+1,pageCount,pageWidth,pageHeight,margin));
     const tableTop=pageIndex===0?228:508;
     commands.push(drawLoanOutItemsTable_(rows,tableTop,margin,tableWidth));
-    commands.push(drawLoanOutFooter_(payload,pageIndex+1,pages.length,pageWidth,margin));
+    commands.push(drawLoanOutFooter_(sheet,pageIndex+1,pageCount,pageWidth,margin));
     const contentObject=addObject(pdfStreamObjectBytes_('',pdfAsciiBytes_(commands.join('\n'))));
     const pageObject=addObject('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+
       pdfNumber_(pageWidth)+' '+pdfNumber_(pageHeight)+'] /Resources << /ProcSet [/PDF /Text /ImageC] '+
@@ -109,6 +128,7 @@ function drawLoanOutFirstHeader_(payload,pageWidth,pageHeight,margin){
   commands.push(loanOutText_('OUT INDICATOR',margin,pageHeight-108,18,true,pageWidth-margin*2,1,'0.055 0.231 0.365'));
   commands.push(loanOutText_('PENANDA KELUAR ARSIP',margin,pageHeight-124,8.5,true,pageWidth-margin*2,1,'0.12 0.43 0.60'));
   if(payload.isReprint)commands.push(loanOutText_('CETAK ULANG KE-'+payload.printSequence,pageWidth-margin-112,pageHeight-109,7,true,112,1,'0.75 0.18 0.12'));
+  if(payload.sheetCount>1)commands.push(loanOutText_('LEMBAR BERKAS '+payload.sheetIndex+' DARI '+payload.sheetCount,pageWidth-margin-150,pageHeight-124,7,true,150,1,'0.055 0.231 0.365'));
 
   const statusColor=payload.statusCode==='OVERDUE'?'0.78 0.16 0.12':
     payload.statusCode==='RETURNED'?'0.20 0.48 0.29':'0.91 0.48 0.10';

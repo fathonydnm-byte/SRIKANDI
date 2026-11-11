@@ -1,5 +1,5 @@
 <script>
-const state={bootstrap:null,bootstrapRequestId:0,pendingUpload:null,lockedBerkasId:'',lockedBerkasLabel:'',deletionOptions:null,editOptions:null,deletionUpload:null,editUpload:null,mediaOptions:null,mediaUpload:null,searchResults:null,labelOptions:null,selectedLabelIds:new Set(),retentionOptions:null,selectedRetentionIds:new Set(),transferSubmissionUpload:null,loanOptions:null,loanOptionsPromise:null,loanUpload:null,selectedLoanItemIds:new Set(),selectedReturnLoanId:'',receiptOptions:null,receiptUpload:null,receiptCancelUpload:null,receiptItemSequence:0,receiptSaveRequestId:'',receiptFilingOptions:null,selectedReceiptItemIds:new Set(),receiptFilingRequestId:'',inputSourceMode:'RECEIPT',spotlightResults:[],spotlightQuery:'',dashboardArchiveOverview:null,dashboardArchiveExpanded:new Set()};
+const state={bootstrap:null,bootstrapRequestId:0,pendingUpload:null,lockedBerkasId:'',lockedBerkasLabel:'',deletionOptions:null,editOptions:null,deletionUpload:null,editUpload:null,mediaOptions:null,mediaUpload:null,searchResults:null,labelOptions:null,selectedLabelIds:new Set(),retentionOptions:null,selectedRetentionIds:new Set(),transferSubmissionUpload:null,loanOptions:null,loanOptionsPromise:null,loanUpload:null,selectedLoanItemIds:new Set(),loanCart:[],loanCartSequence:0,selectedReturnLoanId:'',receiptOptions:null,receiptUpload:null,receiptCancelUpload:null,receiptItemSequence:0,receiptSaveRequestId:'',receiptFilingOptions:null,selectedReceiptItemIds:new Set(),receiptFilingRequestId:'',inputSourceMode:'RECEIPT',spotlightResults:[],spotlightQuery:'',dashboardArchiveOverview:null,dashboardArchiveExpanded:new Set()};
 const ARCHIVE_MEDIA_MAX_BYTES=100*1024*1024;
 const $=id=>document.getElementById(id);
 let loadingStageTimers=[];
@@ -1884,6 +1884,19 @@ function bindLoanPage(){
     renderLoanObjectInfo_();
     updateLoanItemSelectionSummary_();
   });
+  $('addLoanSelection').addEventListener('click',addLoanSelectionToCart_);
+  $('clearLoanCart').addEventListener('click',()=>{
+    state.loanCart=[];
+    resetLoanUpload_();
+    renderLoanBerkasOptions_();
+  });
+  $('loanCartBody').addEventListener('click',event=>{
+    const button=event.target.closest('[data-remove-loan-cart]');
+    if(!button)return;
+    state.loanCart=state.loanCart.filter(entry=>entry.key!==button.dataset.removeLoanCart);
+    resetLoanUpload_();
+    renderLoanBerkasOptions_();
+  });
   $('loanEvidence').addEventListener('change',resetLoanUpload_);
   $('loanForm').addEventListener('submit',submitLoan_);
   $('clearLoanForm').addEventListener('click',()=>resetLoanForm_(true));
@@ -1961,10 +1974,15 @@ function renderLoanBerkasOptions_(){
   select.innerHTML='<option value="">Pilih berkas induk</option>';
   (state.loanOptions.berkas||[]).forEach(row=>{
     const option=new Option(row.label,row.id);
-    option.disabled=objectType==='BERKAS'
+    const cartEntry=loanCartEntryForBerkas_(row.id);
+    // Berkas yang sudah masuk daftar pinjam: berkas lengkap tidak bisa dipilih
+    // lagi sama sekali; berkas dengan item di daftar hanya bisa ditambah itemnya.
+    const cartBlocked=cartEntry&&(cartEntry.objectType==='BERKAS'||objectType==='BERKAS');
+    option.disabled=cartBlocked||(objectType==='BERKAS'
       ? Boolean(row.fullLoanBlocked)
-      : row.loanStatus==='DIPINJAM';
-    if(option.disabled)option.text=row.label+' · '+row.loanStatus;
+      : row.loanStatus==='DIPINJAM');
+    if(cartBlocked)option.text=row.label+' · sudah di daftar pinjam';
+    else if(option.disabled)option.text=row.label+' · '+row.loanStatus;
     select.add(option);
   });
   if(previous&&[...select.options].some(option=>option.value===previous&&!option.disabled))select.value=previous;
@@ -1995,13 +2013,18 @@ function renderLoanItems_(){
     return normalizeFolderLabelFilter_([row.number,row.documentDate,row.description].join(' '))
       .includes(query);
   });
+  const cartEntry=loanCartEntryForBerkas_(berkasId);
+  const inCart=new Set(cartEntry&&cartEntry.objectType==='ITEM'?cartEntry.itemIds:[]);
+  inCart.forEach(id=>state.selectedLoanItemIds.delete(id));
   picker.innerHTML=visible.length?visible.map(row=>{
-    const available=String(row.loanStatus||'TERSEDIA').toUpperCase()==='TERSEDIA';
-    const checked=state.selectedLoanItemIds.has(row.id)?' checked':'';
+    const listed=inCart.has(row.id);
+    const available=!listed&&String(row.loanStatus||'TERSEDIA').toUpperCase()==='TERSEDIA';
+    const checked=listed||state.selectedLoanItemIds.has(row.id)?' checked':'';
+    const status=listed?'sudah di daftar pinjam':row.loanStatus;
     return '<label class="loan-item-choice'+(available?'':' disabled')+'">'+
       '<input type="checkbox" data-loan-item-id="'+escapeHtml(row.id)+'"'+checked+(available?'':' disabled')+'>'+
       '<span><strong>Item '+escapeHtml(row.number||'–')+'</strong> · '+escapeHtml(row.description)+
-      '<small>'+escapeHtml((row.documentDate||'Tanggal tidak tersedia')+' · '+row.pageCount+' lembar · '+row.loanStatus)+'</small></span></label>';
+      '<small>'+escapeHtml((row.documentDate||'Tanggal tidak tersedia')+' · '+row.pageCount+' lembar · '+status)+'</small></span></label>';
   }).join(''):'<span class="helper">Tidak ada item yang sesuai pencarian.</span>';
   updateLoanItemSelectionSummary_();
 }
@@ -2009,8 +2032,10 @@ function renderLoanItems_(){
 function visibleAvailableLoanItems_(){
   const berkasId=$('loanBerkasId').value;
   const query=normalizeFolderLabelFilter_($('loanItemSearch').value);
+  const cartEntry=loanCartEntryForBerkas_(berkasId);
+  const inCart=new Set(cartEntry&&cartEntry.objectType==='ITEM'?cartEntry.itemIds:[]);
   return ((state.loanOptions&&state.loanOptions.itemsByBerkas||{})[berkasId]||[])
-    .filter(row=>String(row.loanStatus||'TERSEDIA').toUpperCase()==='TERSEDIA')
+    .filter(row=>String(row.loanStatus||'TERSEDIA').toUpperCase()==='TERSEDIA'&&!inCart.has(row.id))
     .filter(row=>!query||normalizeFolderLabelFilter_([row.number,row.documentDate,row.description].join(' ')).includes(query));
 }
 
@@ -2049,34 +2074,163 @@ function recoverLoanOptions_(){
 function renderLoanObjectInfo_(){
   if(!state.loanOptions){
     $('loanObjectInfo').textContent='Pilih berkas atau item yang akan dipinjam.';
+    renderLoanCart_();
     return;
   }
   const objectType=$('loanObjectType').value;
   const berkas=(state.loanOptions.berkas||[]).find(row=>row.id===$('loanBerkasId').value);
   if(!berkas){
-    $('loanObjectInfo').textContent='Pilih berkas atau item yang akan dipinjam.';
-    $('loanPageCount').value='';
+    $('loanObjectInfo').textContent=state.loanCart.length
+      ?'Pilih berkas berikutnya lalu tekan Tambahkan ke Daftar Pinjam, atau langsung simpan peminjaman.'
+      :'Pilih berkas atau item yang akan dipinjam.';
+    renderLoanCart_();
     return;
   }
   if(objectType==='BERKAS'){
-    $('loanPageCount').value=berkas.pageCount||'';
     $('loanObjectInfo').innerHTML='<strong>'+escapeHtml((berkas.number||'DRAFT')+' – '+berkas.title)+'</strong><br>'+
       escapeHtml(berkas.itemCount+' item · '+berkas.pageCount+' lembar · '+berkas.location)+
       (berkas.loanStatus!=='TERSEDIA'?'<br><span class="loan-warning">Status: '+escapeHtml(berkas.loanStatus)+'</span>':'');
+    renderLoanCart_();
     return;
   }
   const items=selectedLoanItems_();
   if(!items.length){
-    $('loanPageCount').value='';
     $('loanObjectInfo').innerHTML='<strong>'+escapeHtml((berkas.number||'DRAFT')+' – '+berkas.title)+'</strong><br>Pilih satu atau beberapa item arsip.';
+    renderLoanCart_();
     return;
   }
   const totalPages=items.reduce((sum,row)=>sum+Number(row.pageCount||0),0);
-  $('loanPageCount').value=totalPages||'';
   const numbers=items.map(item=>item.number||'–').join(', ');
   $('loanObjectInfo').innerHTML='<strong>'+escapeHtml(items.length+' item dipilih: '+numbers)+'</strong><br>'+
     escapeHtml(totalPages+' lembar · lokasi asal '+berkas.location)+
     '<br><span class="search-cell-sub">Out Indicator A5 akan dibuat setelah transaksi inti tersimpan.</span>';
+  renderLoanCart_();
+}
+
+/* ===== Daftar Pinjam: beberapa berkas/item dalam satu transaksi ===== */
+function loanCartEntryForBerkas_(berkasId){
+  return berkasId?state.loanCart.find(entry=>entry.berkasId===berkasId)||null:null;
+}
+
+// Pilihan yang sedang aktif di pemilih (belum ditambahkan ke daftar).
+function currentLoanSelection_(){
+  const berkasId=$('loanBerkasId').value;
+  if(!berkasId)return null;
+  const objectType=$('loanObjectType').value==='ITEM'?'ITEM':'BERKAS';
+  if(objectType==='BERKAS')return {objectType:'BERKAS',berkasId:berkasId,itemIds:[]};
+  const itemIds=selectedLoanItems_().map(row=>row.id);
+  return itemIds.length?{objectType:'ITEM',berkasId:berkasId,itemIds:itemIds}:null;
+}
+
+function loanCartBerkasInfo_(berkasId){
+  return ((state.loanOptions&&state.loanOptions.berkas)||[]).find(row=>row.id===berkasId)||null;
+}
+
+function loanSelectionConflict_(selection,cart){
+  const entry=(cart||state.loanCart).find(row=>row.berkasId===selection.berkasId);
+  if(!entry)return '';
+  const berkas=loanCartBerkasInfo_(selection.berkasId);
+  const label='Berkas '+((berkas&&berkas.number)||'DRAFT');
+  if(entry.objectType==='BERKAS')return label+' sudah ada di daftar pinjam sebagai berkas lengkap.';
+  if(selection.objectType==='BERKAS')return label+' sudah ada di daftar pinjam per item. Hapus itemnya dari daftar bila ingin meminjam berkas lengkap.';
+  return '';
+}
+
+// Gabungan isi daftar + pilihan aktif (bila ada) — inilah yang dikirim saat simpan.
+function effectiveLoanSelections_(){
+  const selections=state.loanCart.map(entry=>({objectType:entry.objectType,berkasId:entry.berkasId,itemIds:entry.itemIds.slice()}));
+  const pending=currentLoanSelection_();
+  if(!pending)return {selections:selections,pending:null,error:''};
+  const conflict=loanSelectionConflict_(pending,selections);
+  if(conflict)return {selections:selections,pending:pending,error:conflict};
+  const existing=selections.find(row=>row.berkasId===pending.berkasId);
+  if(existing)existing.itemIds=Array.from(new Set(existing.itemIds.concat(pending.itemIds)));
+  else selections.push(pending);
+  return {selections:selections,pending:pending,error:''};
+}
+
+function loanSelectionDetail_(selection){
+  const berkas=loanCartBerkasInfo_(selection.berkasId)||{};
+  const items=((state.loanOptions&&state.loanOptions.itemsByBerkas)||{})[selection.berkasId]||[];
+  if(selection.objectType==='BERKAS'){
+    return {
+      label:'Berkas '+(berkas.number||'DRAFT')+' (lengkap)',
+      description:berkas.title||'Berkas arsip',
+      pageCount:Number(berkas.pageCount||0),
+      location:berkas.location||'–'
+    };
+  }
+  const byId={};
+  items.forEach(row=>byId[row.id]=row);
+  const chosen=selection.itemIds.map(id=>byId[id]).filter(Boolean)
+    .sort((a,b)=>String(a.number||'').localeCompare(String(b.number||''),'id',{numeric:true}));
+  return {
+    label:'Berkas '+(berkas.number||'–')+' / Item '+chosen.map(row=>row.number||'–').join(', '),
+    description:chosen.map(row=>row.description).join(' · ')||(berkas.title||'Item arsip'),
+    pageCount:chosen.reduce((sum,row)=>sum+Number(row.pageCount||0),0),
+    location:berkas.location||'–'
+  };
+}
+
+function addLoanSelectionToCart_(){
+  if(!state.loanOptions){toast('Data arsip belum termuat. Tunggu sebentar.',true);return}
+  const selection=currentLoanSelection_();
+  if(!selection){
+    toast($('loanBerkasId').value?'Pilih minimal satu item arsip terlebih dahulu.':'Pilih berkas induk terlebih dahulu.',true);
+    return;
+  }
+  const conflict=loanSelectionConflict_(selection);
+  if(conflict){toast(conflict,true);return}
+  const existing=loanCartEntryForBerkas_(selection.berkasId);
+  if(existing)existing.itemIds=Array.from(new Set(existing.itemIds.concat(selection.itemIds)));
+  else state.loanCart.push(Object.assign({key:'CART-'+(++state.loanCartSequence)},selection));
+  const detail=loanSelectionDetail_(selection);
+  state.selectedLoanItemIds.clear();
+  $('loanItemSearch').value='';
+  $('loanBerkasId').value='';
+  resetLoanUpload_();
+  renderLoanBerkasOptions_();
+  toast(detail.label+' ditambahkan ke daftar pinjam.');
+  $('loanBerkasId').focus();
+}
+
+function renderLoanCart_(){
+  const effective=state.loanOptions?effectiveLoanSelections_():{selections:[],pending:null,error:''};
+  const pending=effective.error?null:effective.pending;
+  let totalPages=0;
+  let totalObjects=0;
+  $('loanCart').hidden=!state.loanCart.length;
+  $('loanCartBody').innerHTML=effective.selections.map((selection,index)=>{
+    const entry=loanCartEntryForBerkas_(selection.berkasId);
+    const detail=loanSelectionDetail_(selection);
+    totalPages+=detail.pageCount;
+    totalObjects+=selection.objectType==='BERKAS'?1:selection.itemIds.length;
+    const includesPending=Boolean(pending&&pending.berkasId===selection.berkasId);
+    const action=entry
+      ? '<button type="button" class="loan-cart-remove" data-remove-loan-cart="'+escapeHtml(entry.key)+'">Hapus</button>'+
+        (includesPending?'<br><span class="helper">+ pilihan saat ini</span>':'')
+      : '<span class="helper">Pilihan saat ini — ikut tersimpan</span>';
+    return '<tr'+(entry?'':' class="loan-cart-pending"')+'>'+
+      '<td>'+(index+1)+'</td>'+
+      '<td><strong>'+escapeHtml(detail.label)+'</strong></td>'+
+      '<td>'+escapeHtml(detail.description)+'</td>'+
+      '<td>'+escapeHtml(detail.pageCount)+'</td>'+
+      '<td>'+escapeHtml(detail.location)+'</td>'+
+      '<td>'+action+'</td>'+
+    '</tr>';
+  }).join('');
+  $('loanCartSummary').textContent=state.loanCart.length
+    ? effective.selections.length+' berkas · '+totalObjects+' objek · '+totalPages+' lembar'+
+      (pending?' (termasuk pilihan saat ini)':'')
+    : '';
+  updateLoanPageTotal_();
+}
+
+function updateLoanPageTotal_(){
+  if(!state.loanOptions)return;
+  const effective=effectiveLoanSelections_();
+  const total=effective.selections.reduce((sum,selection)=>sum+loanSelectionDetail_(selection).pageCount,0);
+  $('loanPageCount').value=total||'';
 }
 
 function setDefaultLoanDates_(){
@@ -2102,6 +2256,7 @@ async function resetLoanForm_(focus=false){
   await resetLoanUpload_();
   $('loanForm').reset();
   state.selectedLoanItemIds.clear();
+  state.loanCart=[];
   $('loanObjectType').value='BERKAS';
   $('loanPreviewId').value=newClientId('LOAN');
   $('loanCondition').value='BAIK';
@@ -2122,30 +2277,56 @@ function applyLoanOfficerDefaults_(){
 
 function applyLoanCreateOptimistically_(payload,result){
   if(!state.loanOptions)return;
-  const parent=(state.loanOptions.berkas||[]).find(row=>row.id===payload.loanBerkasId);
-  const items=((state.loanOptions.itemsByBerkas||{})[payload.loanBerkasId]||[]);
-  let selectedIds=[];
-  try{selectedIds=JSON.parse(payload.loanItemIdsJson||'[]')}catch(ignore){}
-  if(!selectedIds.length&&payload.loanItemId)selectedIds=[payload.loanItemId];
-  const selectedItems=selectedIds.map(id=>items.find(row=>row.id===id)).filter(Boolean);
-  const item=selectedItems[0];
   let loan=result.loan;
   if(!loan){
-    const objectType=String(payload.loanObjectType||'BERKAS').toUpperCase();
+    // Hasil pemulihan (transaksi sudah tersimpan sebelumnya) tidak membawa
+    // ringkasan; susun dari daftar pilihan yang dikirim.
+    let selections=[];
+    try{selections=JSON.parse(payload.loanSelectionsJson||'[]')}catch(ignore){}
+    if(!selections.length){
+      let itemIds=[];
+      try{itemIds=JSON.parse(payload.loanItemIdsJson||'[]')}catch(ignore){}
+      if(!itemIds.length&&payload.loanItemId)itemIds=[payload.loanItemId];
+      selections=[{objectType:String(payload.loanObjectType||'BERKAS').toUpperCase(),berkasId:payload.loanBerkasId,itemIds:itemIds}];
+    }
+    const objects=[];
+    selections.forEach(selection=>{
+      const parent=loanCartBerkasInfo_(selection.berkasId)||{};
+      const items=((state.loanOptions.itemsByBerkas||{})[selection.berkasId]||[]);
+      if(selection.objectType==='BERKAS'){
+        objects.push({objectType:'BERKAS',berkasId:selection.berkasId,berkasNumber:parent.number||'',itemId:'',itemNumber:'',title:parent.title||'Berkas arsip'});
+      }else{
+        selection.itemIds.forEach(id=>{
+          const item=items.find(row=>row.id===id)||{};
+          objects.push({objectType:'ITEM',berkasId:selection.berkasId,berkasNumber:parent.number||'',itemId:id,itemNumber:item.number||'',title:item.description||'Item arsip'});
+        });
+      }
+    });
+    const first=objects[0]||{};
+    const itemObjects=objects.filter(row=>row.objectType==='ITEM');
+    const berkasIds=Array.from(new Set(objects.map(row=>row.berkasId)));
+    const types=Array.from(new Set(objects.map(row=>row.objectType)));
     const dueDate=payload.loanDueDate||'';
     const overdue=dueDate&&dueDate<(state.loanOptions.today||'');
     loan={
-      id:result.loanId||payload.loanPreviewId,
-      objectType:objectType,
-      berkasId:payload.loanBerkasId,
-      itemId:objectType==='ITEM'?payload.loanItemId:'',
-      itemIds:objectType==='ITEM'?selectedIds:[],
-      itemCount:objectType==='ITEM'?selectedIds.length:0,
-      berkasNumber:parent&&parent.number||'',
-      itemNumber:item&&item.number||'',
-      title:objectType==='ITEM'&&selectedIds.length>1
-        ?selectedIds.length+' item arsip dalam berkas '+(parent&&parent.number||'–')
-        :objectType==='ITEM'?(item&&item.description||'Item arsip'):(parent&&parent.title||'Berkas arsip'),
+      id:result.loanGroupId||result.loanId||payload.loanPreviewId,
+      groupId:result.loanGroupId||result.loanId||payload.loanPreviewId,
+      objectType:types.length===1?types[0]:'CAMPURAN',
+      berkasId:first.berkasId||'',
+      berkasIds:berkasIds,
+      berkasNumbers:berkasIds.map(id=>(loanCartBerkasInfo_(id)||{}).number||'–'),
+      berkasCount:berkasIds.length,
+      objects:objects,
+      itemId:itemObjects.length===1?itemObjects[0].itemId:'',
+      itemIds:itemObjects.map(row=>row.itemId),
+      itemNumbers:itemObjects.map(row=>row.itemNumber).filter(Boolean),
+      itemTitles:itemObjects.map(row=>row.title),
+      itemCount:itemObjects.length,
+      berkasNumber:first.berkasNumber||'',
+      itemNumber:itemObjects.length===1?itemObjects[0].itemNumber:'',
+      title:berkasIds.length>1?objects.length+' objek arsip dari '+berkasIds.length+' berkas'
+        :itemObjects.length>1?itemObjects.length+' item arsip dalam berkas '+(first.berkasNumber||'–')
+        :(first.title||'Arsip'),
       borrowerName:payload.borrowerName||'',
       borrowerIdentity:payload.borrowerIdentity||'',
       borrowerUnit:payload.borrowerUnit||'',
@@ -2186,21 +2367,31 @@ function recalculateLoanClientState_(){
   const summary=state.loanOptions.summary||{};
   summary.active=active.length;
   summary.overdue=active.filter(row=>row.statusCode==='OVERDUE').length;
-  summary.borrowedBerkas=active.filter(row=>row.objectType==='BERKAS').length;
-  summary.borrowedItems=active.filter(row=>row.objectType==='ITEM')
-    .reduce((sum,row)=>sum+Number(row.itemCount||1),0);
+  // Satu transaksi bisa memuat beberapa berkas/item; hitung per objek.
+  const activeObjects=[];
+  active.forEach(row=>{
+    if(Array.isArray(row.objects)&&row.objects.length){
+      row.objects.forEach(object=>activeObjects.push(object));
+    }else if(row.objectType==='BERKAS'){
+      activeObjects.push({objectType:'BERKAS',berkasId:row.berkasId});
+    }else{
+      const ids=(row.itemIds&&row.itemIds.length)?row.itemIds:[row.itemId];
+      ids.forEach(id=>activeObjects.push({objectType:'ITEM',berkasId:row.berkasId,itemId:id}));
+    }
+  });
+  summary.borrowedBerkas=activeObjects.filter(object=>object.objectType==='BERKAS').length;
+  summary.borrowedItems=activeObjects.filter(object=>object.objectType==='ITEM').length;
   summary.returned=loans.filter(row=>row.statusCode==='RETURNED').length;
   (state.loanOptions.berkas||[]).forEach(parent=>{
-    const whole=active.some(row=>row.objectType==='BERKAS'&&row.berkasId===parent.id);
-    const partial=active.some(row=>row.objectType==='ITEM'&&row.berkasId===parent.id);
+    const whole=activeObjects.some(object=>object.objectType==='BERKAS'&&object.berkasId===parent.id);
+    const partial=activeObjects.some(object=>object.objectType==='ITEM'&&object.berkasId===parent.id);
     parent.loanStatus=whole?'DIPINJAM':partial?'SEBAGIAN DIPINJAM':'TERSEDIA';
     parent.fullLoanBlocked=whole||partial;
     parent.fullLoanBlockingReason=whole?'Berkas sudah mempunyai peminjaman aktif.':
       partial?'Satu atau lebih item dalam berkas sedang dipinjam.':'';
     const items=((state.loanOptions.itemsByBerkas||{})[parent.id]||[]);
     items.forEach(item=>{
-      const borrowed=active.some(row=>row.objectType==='ITEM'&&
-        (row.itemId===item.id||(row.itemIds||[]).includes(item.id)));
+      const borrowed=activeObjects.some(object=>object.objectType==='ITEM'&&object.itemId===item.id);
       item.loanStatus=whole?'DIPINJAM DALAM BERKAS':borrowed?'DIPINJAM':'TERSEDIA';
     });
   });
@@ -2227,9 +2418,15 @@ function refreshLoanViewsInBackground_(successMessage){
 
 async function submitLoan_(event){
   event.preventDefault();
-  const objectType=$('loanObjectType').value;
-  const selectedItems=selectedLoanItems_();
-  if(objectType==='ITEM'&&!selectedItems.length){toast('Pilih minimal satu item arsip yang dipinjam.',true);return}
+  const effective=effectiveLoanSelections_();
+  if(effective.error){toast(effective.error,true);return}
+  const selections=effective.selections;
+  if(!selections.length){
+    toast($('loanObjectType').value==='ITEM'&&$('loanBerkasId').value
+      ?'Pilih minimal satu item arsip yang dipinjam.'
+      :'Pilih minimal satu berkas atau item arsip yang dipinjam.',true);
+    return;
+  }
   if($('loanDueDate').value<$('loanDate').value){toast('Tanggal wajib kembali tidak boleh lebih awal daripada tanggal pinjam.',true);return}
   const file=$('loanEvidence').files[0];
   if(file){
@@ -2239,9 +2436,14 @@ async function submitLoan_(event){
   }
   if(!$('loanPreviewId').value)$('loanPreviewId').value=newClientId('LOAN');
   const payload=formPayloadWithoutFiles($('loanForm'));
-  payload.loanItemIdsJson=objectType==='ITEM'
-    ?JSON.stringify(selectedItems.map(row=>row.id)):'[]';
-  payload.loanItemId=objectType==='ITEM'&&selectedItems.length?selectedItems[0].id:'';
+  // Daftar lengkap objek yang dipinjam (bisa lintas berkas); field lama diisi
+  // dari pilihan pertama demi kompatibilitas.
+  const first=selections[0];
+  payload.loanSelectionsJson=JSON.stringify(selections);
+  payload.loanObjectType=first.objectType;
+  payload.loanBerkasId=first.berkasId;
+  payload.loanItemIdsJson=JSON.stringify(first.itemIds);
+  payload.loanItemId=first.itemIds[0]||'';
   const button=$('saveLoan');
   button.disabled=true;
   button.textContent=file?'Menyiapkan bukti…':'Menyimpan…';
@@ -2405,7 +2607,9 @@ function renderLoanTable_(){
     if(!query)return true;
     const haystack=normalizeFolderLabelFilter_([
       row.berkasNumber,row.itemNumber,row.title,row.borrowerName,row.borrowerIdentity,
-      (row.itemTitles||[]).join(' '),row.borrowerUnit,row.whatsapp,row.purpose,row.notes
+      (row.itemTitles||[]).join(' '),(row.berkasNumbers||[]).join(' '),
+      (row.objects||[]).map(object=>object.title).join(' '),
+      row.borrowerUnit,row.whatsapp,row.purpose,row.notes
     ].join(' '));
     return query.split(' ').every(token=>haystack.includes(token));
   });
@@ -2417,12 +2621,26 @@ function renderLoanTable_(){
     : 'Belum ada transaksi peminjaman.';
 }
 
-function renderLoanRow_(row){
-  const objectNumber=row.objectType==='BERKAS'
+function loanObjectShortLabel_(object){
+  return object.objectType==='BERKAS'
+    ? 'Berkas '+(object.berkasNumber||'DRAFT')+' (lengkap)'
+    : 'Berkas '+(object.berkasNumber||'–')+' / Item '+(object.itemNumber||'–');
+}
+
+function loanGroupObjectNumber_(row){
+  if(Number(row.berkasCount||0)>1){
+    return row.berkasCount+' berkas ('+(row.berkasNumbers||[]).join(', ')+')';
+  }
+  return row.objectType==='BERKAS'
     ? 'Berkas '+(row.berkasNumber||'DRAFT')
     : row.itemCount>1
       ? 'Berkas '+(row.berkasNumber||'–')+' / '+row.itemCount+' item ('+(row.itemNumbers||[]).join(', ')+')'
       : 'Berkas '+(row.berkasNumber||'–')+' / Item '+(row.itemNumber||'–');
+}
+
+function renderLoanRow_(row){
+  const multiBerkas=Number(row.berkasCount||0)>1;
+  const objectNumber=loanGroupObjectNumber_(row);
   const borrowerContact=[
     row.borrowerIdentity?'NIP/NIK '+row.borrowerIdentity:'',
     row.whatsapp?'WA '+row.whatsapp:''
@@ -2443,10 +2661,13 @@ function renderLoanRow_(row){
     escapeHtml(row.groupId||row.id)+'">'+(row.statusCode==='RETURNED'?'Cetak Riwayat':'Cetak Out Indicator')+'</button>';
   const baAction='<button type="button" class="loan-action-button secondary" data-print-ba="'+
     escapeHtml(row.groupId||row.id)+'">Cetak BA Peminjaman</button>';
-  const itemDetail=row.itemCount>1
-    ?'<span class="search-cell-sub">'+escapeHtml((row.itemTitles||[]).join(' · '))+'</span>':'';
+  const itemDetail=multiBerkas
+    ?'<span class="search-cell-sub">'+escapeHtml((row.objects||[]).map(loanObjectShortLabel_).join(' · '))+'</span>'
+    :row.itemCount>1
+      ?'<span class="search-cell-sub">'+escapeHtml((row.itemTitles||[]).join(' · '))+'</span>':'';
+  const typeLabel=multiBerkas?'MULTI BERKAS · '+(row.objects||[]).length+' objek':row.objectType;
   return '<tr>'+
-    '<td><span class="search-number">'+escapeHtml(objectNumber)+'</span><span class="search-cell-main">'+escapeHtml(row.title)+'</span>'+itemDetail+'<span class="search-cell-sub">'+escapeHtml(row.objectType)+'</span></td>'+
+    '<td><span class="search-number">'+escapeHtml(objectNumber)+'</span><span class="search-cell-main">'+escapeHtml(row.title)+'</span>'+itemDetail+'<span class="search-cell-sub">'+escapeHtml(typeLabel)+'</span></td>'+
     '<td><span class="search-cell-main">'+escapeHtml(row.borrowerName)+'</span><span class="search-cell-sub">'+escapeHtml(row.borrowerUnit)+'</span><span class="search-cell-sub">'+escapeHtml(borrowerContact)+'</span><span class="search-cell-sub">'+escapeHtml(row.purpose)+'</span></td>'+
     '<td><span class="search-cell-main">Pinjam '+formatIndonesianDate_(row.borrowDate)+'</span><span class="search-cell-sub">'+escapeHtml(schedule)+'</span>'+overdue+'</td>'+
     '<td><span class="search-cell-main">'+escapeHtml(row.pageCount)+' lembar/item</span></td>'+
@@ -2493,13 +2714,17 @@ async function startLoanReturn_(loanId){
   $('returnOfficerName').value=(officer&&officer.name)||'';
   $('returnOfficerNip').value=(officer&&officer.nip)||'';
   $('returnOfficerJabatan').value=(officer&&officer.jabatan)||'';
-  $('loanReturnTitle').textContent=(row.objectType==='BERKAS'?'Berkas ':'Item ')+
+  const multiBerkas=Number(row.berkasCount||0)>1;
+  $('loanReturnTitle').textContent=(multiBerkas?loanGroupObjectNumber_(row):
+    (row.objectType==='BERKAS'?'Berkas ':'Item ')+
     (row.objectType==='BERKAS'?(row.berkasNumber||'DRAFT'):
       row.itemCount>1?(row.itemCount+' item dalam berkas '+(row.berkasNumber||'–')):
-      (row.berkasNumber||'–')+'/'+(row.itemNumber||'–'))+
+      (row.berkasNumber||'–')+'/'+(row.itemNumber||'–')))+
     ' · '+row.borrowerName;
   $('loanReturnImpact').innerHTML='<strong>'+escapeHtml(row.title)+'</strong><br>'+
-    escapeHtml('Dipinjam '+formatIndonesianDate_(row.borrowDate)+' · wajib kembali '+formatIndonesianDate_(row.dueDate)+' · '+row.pageCount+' lembar/item');
+    (multiBerkas?escapeHtml((row.objects||[]).map(loanObjectShortLabel_).join(' · '))+'<br>':'')+
+    escapeHtml('Dipinjam '+formatIndonesianDate_(row.borrowDate)+' · wajib kembali '+formatIndonesianDate_(row.dueDate)+' · '+row.pageCount+' lembar/item')+
+    (multiBerkas?'<br><span class="search-cell-sub">Seluruh berkas/item pada transaksi ini dicatat kembali sekaligus.</span>':'');
   $('loanReturnStatus').textContent='';
   $('loanReturnForm').hidden=false;
   $('loanReturnForm').scrollIntoView({behavior:'smooth',block:'start'});

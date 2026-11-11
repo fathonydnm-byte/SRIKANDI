@@ -210,17 +210,55 @@ function presentLoanGroups_(rows, berkasById, itemById, today) {
       ? (activeRows.some(row => row.statusCode === 'OVERDUE') ? 'OVERDUE' : 'ACTIVE')
       : 'RETURNED';
     const itemRows = presented.filter(row => row.objectType === 'ITEM');
+    const wholeRows = presented.filter(row => row.objectType === 'BERKAS');
     const itemNumbers = itemRows.map(row => row.itemNumber).filter(Boolean);
     const itemTitles = itemRows.map(row => row.title).filter(Boolean);
-    const title = itemRows.length > 1
-      ? itemRows.length + ' item arsip dalam berkas ' + (first.berkasNumber || '–')
-      : first.title;
+    const berkasIds = [];
+    const berkasNumbers = [];
+    const originalLocations = [];
+    presented.forEach(row => {
+      if (berkasIds.indexOf(row.berkasId) !== -1) return;
+      berkasIds.push(row.berkasId);
+      berkasNumbers.push(row.berkasNumber || '–');
+      if (originalLocations.indexOf(row.originalLocation) === -1) originalLocations.push(row.originalLocation);
+    });
+    const multiBerkas = berkasIds.length > 1;
+    let title;
+    if (!multiBerkas) {
+      title = itemRows.length > 1
+        ? itemRows.length + ' item arsip dalam berkas ' + (first.berkasNumber || '–')
+        : first.title;
+    } else if (!itemRows.length) {
+      title = wholeRows.length + ' berkas lengkap';
+    } else if (!wholeRows.length) {
+      title = itemRows.length + ' item arsip dari ' + berkasIds.length + ' berkas';
+    } else {
+      title = wholeRows.length + ' berkas lengkap + ' + itemRows.length +
+        ' item arsip (' + berkasIds.length + ' berkas)';
+    }
+    const objectTypes = Array.from(new Set(presented.map(row => row.objectType)));
     return {
       id: groupId,
       groupId: groupId,
       loanIds: presented.map(row => row.id),
-      objectType: first.objectType,
+      objectType: objectTypes.length === 1 ? objectTypes[0] : 'CAMPURAN',
       berkasId: first.berkasId,
+      berkasIds: berkasIds,
+      berkasNumbers: berkasNumbers,
+      berkasCount: berkasIds.length,
+      wholeBerkasCount: wholeRows.length,
+      objects: presented.map(row => ({
+        id: row.id,
+        objectType: row.objectType,
+        berkasId: row.berkasId,
+        berkasNumber: row.berkasNumber,
+        itemId: row.itemId,
+        itemNumber: row.itemNumber,
+        title: row.title,
+        pageCount: row.pageCount,
+        originalLocation: row.originalLocation
+      })),
+      originalLocations: originalLocations,
       itemId: itemRows.length === 1 ? itemRows[0].itemId : '',
       itemIds: itemRows.map(row => row.itemId),
       berkasNumber: first.berkasNumber,
@@ -326,7 +364,7 @@ function createLoanWithSheetsApi_(form, preUploadedEvidenceId, evidenceOriginalN
   const user = getCurrentUser_();
   const records = buildLoanRecords_(context, evidence, timestamp, user);
   const statusPlan = planLoanObjectStatusUpdates_(
-    [context.parent],
+    context.parents,
     context.allItems,
     snapshot.loans.concat(records)
   );
@@ -372,7 +410,7 @@ function createLoanWithSpreadsheetService_(form, preUploadedEvidenceId,
   const writeStartedAt = Date.now();
   appendObjects_(APP_CONFIG.SHEETS.PEMINJAMAN, records);
   synchronizeLoanObjectStatuses_(
-    [context.parent],
+    context.parents,
     context.allItems,
     loanRows.concat(records)
   );
@@ -384,18 +422,31 @@ function createLoanWithSpreadsheetService_(form, preUploadedEvidenceId,
 }
 
 function buildLoanRecords_(context, evidence, timestamp, user) {
-  const targets = context.objectType === 'BERKAS' ? [null] : context.items;
-  return targets.map((item, index) => ({
-    PEMINJAMAN_ID: targets.length === 1
+  // Satu baris per objek: satu baris untuk berkas lengkap, satu baris per
+  // item untuk peminjaman item. Seluruh baris memakai LOAN_GROUP_ID yang sama.
+  const targets = [];
+  context.selections.forEach(selection => {
+    if (selection.objectType === 'BERKAS') targets.push({selection: selection, item: null});
+    else selection.items.forEach(item => targets.push({selection: selection, item: item}));
+  });
+  return targets.map((target, index) => buildLoanRecord_(context, target.selection, target.item,
+    targets.length === 1
       ? context.loanGroupId
       : context.loanGroupId + '-' + String(index + 1).padStart(2, '0'),
+    evidence, timestamp, user));
+}
+
+function buildLoanRecord_(context, selection, item, loanId, evidence, timestamp, user) {
+  const parent = selection.parent;
+  return {
+    PEMINJAMAN_ID: loanId,
     LOAN_GROUP_ID: context.loanGroupId,
-    JENIS_OBJEK: context.objectType,
-    BERKAS_ID: context.parent.BERKAS_ID,
+    JENIS_OBJEK: selection.objectType,
+    BERKAS_ID: parent.BERKAS_ID,
     ITEM_ID: item ? item.ITEM_ID : '',
-    NO_BERKAS_SNAPSHOT: context.parent.NO_BERKAS_DEFINITIF || '',
+    NO_BERKAS_SNAPSHOT: parent.NO_BERKAS_DEFINITIF || '',
     NO_ITEM_SNAPSHOT: item ? item.NO_ITEM_DEFINITIF || '' : '',
-    URAIAN_OBJEK_SNAPSHOT: item ? item.URAIAN_LENGKAP : context.parent.JUDUL_BERKAS,
+    URAIAN_OBJEK_SNAPSHOT: item ? item.URAIAN_LENGKAP : parent.JUDUL_BERKAS,
     NAMA_PEMINJAM: context.borrowerName,
     NIP_NIK: context.identityNumber,
     JABATAN_PEMINJAM: context.borrowerJabatan,
@@ -416,12 +467,12 @@ function buildLoanRecords_(context, evidence, timestamp, user) {
     BA_PDF_ID: '',
     BA_PDF_URL: '',
     JUMLAH_HALAMAN_ITEM: item
-      ? Number(item.JUMLAH_HALAMAN || 0) : context.automaticPages,
+      ? Number(item.JUMLAH_HALAMAN || 0) : selection.automaticPages,
     JUMLAH_HALAMAN_GRUP_SNAPSHOT: context.pageCount,
-    LOKASI_ASAL_SNAPSHOT: context.originalLocation,
-    NO_FILLING_KABINET_SNAPSHOT: context.parent.NO_FILLING_KABINET || '',
-    NO_LACI_SNAPSHOT: context.parent.NO_LACI || '',
-    NO_FOLDER_SNAPSHOT: context.parent.NO_FOLDER || context.parent.NO_BERKAS_DEFINITIF || '',
+    LOKASI_ASAL_SNAPSHOT: selection.originalLocation,
+    NO_FILLING_KABINET_SNAPSHOT: parent.NO_FILLING_KABINET || '',
+    NO_LACI_SNAPSHOT: parent.NO_LACI || '',
+    NO_FOLDER_SNAPSHOT: parent.NO_FOLDER || parent.NO_BERKAS_DEFINITIF || '',
     BUKTI_PERSETUJUAN_FILE_ID: evidence ? evidence.id : '',
     BUKTI_PERSETUJUAN_URL: evidence ? evidence.url : '',
     STATUS: LOAN_ACTIVE_STATUS_,
@@ -430,25 +481,42 @@ function buildLoanRecords_(context, evidence, timestamp, user) {
     CREATED_BY: user,
     UPDATED_AT: timestamp,
     UPDATED_BY: user
-  }));
+  };
+}
+
+function loanSelectionLabel_(selection) {
+  const number = selection.parent.NO_BERKAS_DEFINITIF || 'DRAFT';
+  return selection.objectType === 'BERKAS'
+    ? 'berkas ' + number
+    : 'berkas ' + number + ' / item ' +
+      selection.items.map(item => item.NO_ITEM_DEFINITIF || '–').join(', ');
 }
 
 function buildLoanAuditRecord_(context, evidence, timestamp, user) {
-  const objectNumber = context.objectType === 'BERKAS'
-    ? (context.parent.NO_BERKAS_DEFINITIF || 'DRAFT')
-    : (context.parent.NO_BERKAS_DEFINITIF || '–') + ' / item ' +
-      context.items.map(item => item.NO_ITEM_DEFINITIF || '–').join(', ');
+  const selections = context.selections;
+  let objectType;
+  let summary;
+  if (selections.length > 1) {
+    objectType = 'MULTI_BERKAS';
+    summary = selections.length + ' berkas (' + selections.map(loanSelectionLabel_).join('; ') + ')';
+  } else {
+    const selection = selections[0];
+    const number = selection.parent.NO_BERKAS_DEFINITIF || (selection.objectType === 'BERKAS' ? 'DRAFT' : '–');
+    objectType = selection.objectType === 'ITEM' && selection.items.length > 1
+      ? 'MULTI_ITEM' : selection.objectType;
+    summary = selection.objectType.toLowerCase() + ' ' + (selection.objectType === 'BERKAS'
+      ? number
+      : number + ' / item ' + selection.items.map(item => item.NO_ITEM_DEFINITIF || '–').join(', '));
+  }
   return {
     LOG_ID: 'LOG-' + Utilities.getUuid(),
     TIMESTAMP: timestamp,
     USER_EMAIL: user,
     AKSI: 'BORROW',
     MODUL: 'PEMINJAMAN',
-    JENIS_OBJEK: context.objectType === 'ITEM' && context.items.length > 1
-      ? 'MULTI_ITEM' : context.objectType,
+    JENIS_OBJEK: objectType,
     OBJEK_ID: context.loanGroupId,
-    RINGKASAN: 'Mencatat peminjaman ' + context.objectType.toLowerCase() +
-      ' ' + objectNumber + ' oleh ' + context.borrowerName,
+    RINGKASAN: cleanText_('Mencatat peminjaman ' + summary + ' oleh ' + context.borrowerName, 1000),
     ALASAN: context.purpose + (evidence ? ' | Bukti persetujuan: ' + evidence.url : ''),
     REQUEST_ID: 'REQ-' + Utilities.getUuid(),
     STATUS: 'SUCCESS'
@@ -459,7 +527,7 @@ function buildLoanSuccessResult_(context, evidence, records, startedAt, performa
   const itemMap = {};
   context.items.forEach(item => itemMap[item.ITEM_ID] = item);
   const parentMap = {};
-  parentMap[context.parent.BERKAS_ID] = context.parent;
+  context.parents.forEach(parent => parentMap[parent.BERKAS_ID] = parent);
   const presented = presentLoanGroups_(records, parentMap, itemMap, loanTodayKey_())[0];
   return enrichLoanPerformance_({
     ok: true,
@@ -467,6 +535,7 @@ function buildLoanSuccessResult_(context, evidence, records, startedAt, performa
     loanGroupId: context.loanGroupId,
     loanIds: records.map(record => record.PEMINJAMAN_ID),
     berkasId: context.parent.BERKAS_ID,
+    berkasIds: context.parents.map(parent => parent.BERKAS_ID),
     itemId: context.items.length === 1 ? context.items[0].ITEM_ID : '',
     itemIds: context.items.map(item => item.ITEM_ID),
     evidenceUrl: evidence ? evidence.url : '',
@@ -706,54 +775,120 @@ function loanFastTransportError_(message) {
   return error;
 }
 
+// Satu transaksi peminjaman dapat memuat beberapa "pilihan": berkas lengkap
+// dan/atau item dari berkas yang berbeda-beda. Klien baru mengirim
+// loanSelectionsJson = [{objectType, berkasId, itemIds}]; format lama (satu
+// berkas lengkap atau beberapa item dalam satu berkas lewat loanObjectType/
+// loanBerkasId/loanItemIdsJson) tetap diterima sebagai satu pilihan.
+function parseLoanSelections_(form) {
+  form = form || {};
+  let raw = [];
+  if (form.loanSelectionsJson) {
+    try {
+      const parsed = JSON.parse(String(form.loanSelectionsJson));
+      if (!Array.isArray(parsed)) throw new Error('bukan daftar');
+      raw = parsed;
+    } catch (error) {
+      throw new Error('Daftar arsip yang dipinjam tidak valid. Susun ulang daftar peminjaman.');
+    }
+  }
+  if (!raw.length) {
+    let itemIds = [];
+    if (form.loanItemIdsJson) {
+      try {
+        const parsed = JSON.parse(String(form.loanItemIdsJson));
+        if (Array.isArray(parsed)) itemIds = parsed;
+      } catch (error) {
+        throw new Error('Daftar item peminjaman tidak valid. Pilih ulang item arsip.');
+      }
+    }
+    if (!itemIds.length && form.loanItemId) itemIds = [form.loanItemId];
+    raw = [{objectType: form.loanObjectType, berkasId: form.loanBerkasId, itemIds: itemIds}];
+  }
+  const selections = [];
+  const itemSelectionByBerkas = {};
+  raw.forEach(entry => {
+    entry = entry || {};
+    const objectType = String(requireValue_(entry.objectType, 'Objek peminjaman')).toUpperCase();
+    if (['BERKAS', 'ITEM'].indexOf(objectType) === -1) throw new Error('Objek peminjaman tidak valid.');
+    const berkasId = cleanText_(requireValue_(entry.berkasId, 'Berkas induk'), 80);
+    if (objectType === 'BERKAS') {
+      selections.push({objectType: objectType, berkasId: berkasId, itemIds: []});
+      return;
+    }
+    const itemIds = (Array.isArray(entry.itemIds) ? entry.itemIds : [])
+      .map(value => cleanText_(value, 80)).filter(Boolean);
+    if (!itemIds.length) throw new Error('Pilih minimal satu item arsip.');
+    // Item dari berkas yang sama digabung menjadi satu pilihan.
+    const existing = itemSelectionByBerkas[berkasId];
+    if (existing) {
+      existing.itemIds = Array.from(new Set(existing.itemIds.concat(itemIds)));
+      return;
+    }
+    const selection = {objectType: objectType, berkasId: berkasId, itemIds: Array.from(new Set(itemIds))};
+    itemSelectionByBerkas[berkasId] = selection;
+    selections.push(selection);
+  });
+  if (!selections.length) throw new Error('Pilih minimal satu berkas atau item arsip yang dipinjam.');
+  const objectCount = selections.reduce((sum, selection) =>
+    sum + (selection.objectType === 'BERKAS' ? 1 : selection.itemIds.length), 0);
+  if (objectCount > LOAN_MAX_ITEMS_PER_GROUP_) {
+    throw new Error('Maksimal ' + LOAN_MAX_ITEMS_PER_GROUP_ +
+      ' berkas/item dalam satu transaksi peminjaman.');
+  }
+  return selections;
+}
+
 function resolveLoanContext_(form, data) {
   form = form || {};
   data = data || {};
-  const objectType = String(requireValue_(form.loanObjectType, 'Objek peminjaman')).toUpperCase();
-  if (['BERKAS', 'ITEM'].indexOf(objectType) === -1) throw new Error('Objek peminjaman tidak valid.');
+  const requested = parseLoanSelections_(form);
   const loanGroupId = cleanText_(form.loanPreviewId, 70) || 'LOAN-' + Utilities.getUuid();
   const loanRows = data.loans || readObjects_(APP_CONFIG.SHEETS.PEMINJAMAN);
   const existing = loanRows.find(row => loanGroupId_(row) === loanGroupId ||
     String(row.PEMINJAMAN_ID) === loanGroupId);
   if (existing) throw new Error('Transaksi ini sudah tersimpan. Segarkan halaman untuk melihat status terbaru.');
-  const berkasId = cleanText_(requireValue_(form.loanBerkasId, 'Berkas induk'), 80);
   const berkasRows = data.berkas || readObjects_(APP_CONFIG.SHEETS.BERKAS);
-  const parent = berkasRows.find(row => row.BERKAS_ID === berkasId && !isDeleted_(row));
-  if (!parent) throw new Error('Berkas tidak ditemukan atau sudah dihapus.');
-  if (String(parent.STATUS_PEMINDAHAN || '').toUpperCase() === 'SUDAH DIPINDAHKAN') {
-    throw new Error('Berkas sudah dipindahkan dari arsip aktif dan tidak dapat dipinjam melalui modul ini.');
-  }
   const itemRows = data.items || readObjects_(APP_CONFIG.SHEETS.ITEM);
-  const allItems = itemRows.filter(row => row.BERKAS_ID === berkasId && !isDeleted_(row));
-  if (!allItems.length) throw new Error('Berkas belum mempunyai item aktif.');
-  let item = null;
-  let items = [];
-  if (objectType === 'ITEM') {
-    let requestedIds = [];
-    if (form.loanItemIdsJson) {
-      try {
-        const parsed = JSON.parse(String(form.loanItemIdsJson));
-        if (Array.isArray(parsed)) requestedIds = parsed;
-      } catch (error) {
-        throw new Error('Daftar item peminjaman tidak valid. Pilih ulang item arsip.');
-      }
+  const multiple = requested.length > 1;
+  const seenBerkas = {};
+  const selections = requested.map(request => {
+    const berkasId = request.berkasId;
+    const parent = berkasRows.find(row => row.BERKAS_ID === berkasId && !isDeleted_(row));
+    if (!parent) throw new Error('Berkas tidak ditemukan atau sudah dihapus.');
+    const label = multiple ? 'Berkas ' + (parent.NO_BERKAS_DEFINITIF || 'DRAFT') : 'Berkas';
+    if (String(parent.STATUS_PEMINDAHAN || '').toUpperCase() === 'SUDAH DIPINDAHKAN') {
+      throw new Error(label + ' sudah dipindahkan dari arsip aktif dan tidak dapat dipinjam melalui modul ini.');
     }
-    if (!requestedIds.length && form.loanItemId) requestedIds = [form.loanItemId];
-    requestedIds = Array.from(new Set(requestedIds
-      .map(value => cleanText_(value, 80)).filter(Boolean)));
-    if (!requestedIds.length) throw new Error('Pilih minimal satu item arsip.');
-    if (requestedIds.length > LOAN_MAX_ITEMS_PER_GROUP_) {
-      throw new Error('Maksimal ' + LOAN_MAX_ITEMS_PER_GROUP_ +
-        ' item dalam satu transaksi peminjaman.');
+    if (seenBerkas[berkasId]) {
+      throw new Error(label + ' tercantum lebih dari sekali dalam daftar peminjaman. ' +
+        'Pilih berkas lengkap atau item-itemnya saja.');
     }
-    const byId = {};
-    allItems.forEach(row => byId[String(row.ITEM_ID)] = row);
-    const missingIds = requestedIds.filter(itemId => !byId[itemId]);
-    if (missingIds.length) throw new Error('Sebagian item tidak ditemukan atau sudah dihapus.');
-    items = requestedIds.map(itemId => byId[itemId]);
-    item = items[0];
-  }
-  assertLoanAvailability_(objectType, parent, items, allItems, loanRows);
+    seenBerkas[berkasId] = true;
+    const allItems = itemRows.filter(row => row.BERKAS_ID === berkasId && !isDeleted_(row));
+    if (!allItems.length) throw new Error(label + ' belum mempunyai item aktif.');
+    let items = [];
+    if (request.objectType === 'ITEM') {
+      const byId = {};
+      allItems.forEach(row => byId[String(row.ITEM_ID)] = row);
+      const missingIds = request.itemIds.filter(itemId => !byId[itemId]);
+      if (missingIds.length) throw new Error('Sebagian item tidak ditemukan atau sudah dihapus.');
+      items = request.itemIds.map(itemId => byId[itemId]);
+    }
+    assertLoanAvailability_(request.objectType, parent, items, allItems, loanRows, multiple);
+    return {
+      objectType: request.objectType,
+      parent: parent,
+      items: items,
+      allItems: allItems,
+      automaticPages: (request.objectType === 'BERKAS' ? allItems : items)
+        .reduce((sum, row) => sum + Number(row.JUMLAH_HALAMAN || 0), 0),
+      originalLocation: loanLocationLabel_(parent)
+    };
+  });
+  const first = selections[0];
+  const objectTypes = Array.from(new Set(selections.map(selection => selection.objectType)));
+  const selectedItems = [].concat.apply([], selections.map(selection => selection.items));
   const borrowerName = cleanText_(requireValue_(form.borrowerName, 'Nama peminjam'), 250);
   const borrowerJabatan = cleanText_(requireValue_(form.borrowerJabatan, 'Jabatan peminjam'), 250);
   const workUnit = cleanText_(requireValue_(form.borrowerUnit, 'Unit kerja'), 250);
@@ -767,20 +902,22 @@ function resolveLoanContext_(form, data) {
   const dueDate = loanDateKey_(requireValue_(form.loanDueDate, 'Tanggal wajib kembali'), 'Tanggal wajib kembali');
   if (borrowDate > loanTodayKey_()) throw new Error('Tanggal pinjam tidak boleh berada di masa depan.');
   if (dueDate < borrowDate) throw new Error('Tanggal wajib kembali tidak boleh lebih awal daripada tanggal pinjam.');
-  const automaticPages = objectType === 'BERKAS'
-    ? allItems.reduce((sum, row) => sum + Number(row.JUMLAH_HALAMAN || 0), 0)
-    : items.reduce((sum, row) => sum + Number(row.JUMLAH_HALAMAN || 0), 0);
+  const automaticPages = selections.reduce((sum, selection) => sum + selection.automaticPages, 0);
   const pageCount = positiveInteger_(requireValue_(form.loanPageCount, 'Jumlah halaman/item'), 'Jumlah halaman/item');
   if (pageCount < 1) throw new Error('Jumlah halaman/item yang dipinjam minimal 1.');
   return {
     form: form,
     loanId: loanGroupId,
     loanGroupId: loanGroupId,
-    objectType: objectType,
-    parent: parent,
-    item: item,
-    items: items,
-    allItems: allItems,
+    selections: selections,
+    // Ringkasan untuk kompatibilitas: jenis objek bersama (CAMPURAN bila
+    // berkas lengkap dan item dicampur), berkas pertama, dan seluruh item.
+    objectType: objectTypes.length === 1 ? objectTypes[0] : 'CAMPURAN',
+    parent: first.parent,
+    parents: selections.map(selection => selection.parent),
+    item: selectedItems[0] || null,
+    items: selectedItems,
+    allItems: [].concat.apply([], selections.map(selection => selection.allItems)),
     borrowerName: borrowerName,
     identityNumber: cleanText_(form.borrowerIdentity, 100),
     borrowerJabatan: borrowerJabatan,
@@ -795,21 +932,22 @@ function resolveLoanContext_(form, data) {
     dueDate: dueDate,
     pageCount: pageCount,
     automaticPages: automaticPages,
-    originalLocation: loanLocationLabel_(parent),
+    originalLocation: first.originalLocation,
     notes: cleanText_(form.loanNotes, 2000)
   };
 }
 
-function assertLoanAvailability_(objectType, parent, selectedItems, allItems, loanRows) {
+function assertLoanAvailability_(objectType, parent, selectedItems, allItems, loanRows, withNumber) {
   const activeLoans = (loanRows || readObjects_(APP_CONFIG.SHEETS.PEMINJAMAN)).filter(isActiveLoan_);
   const berkasId = String(parent.BERKAS_ID);
+  const label = withNumber ? 'Berkas ' + (parent.NO_BERKAS_DEFINITIF || 'DRAFT') : 'Berkas';
   const wholeLoan = activeLoans.find(row =>
     loanObjectType_(row) === 'BERKAS' && loanBerkasId_(row) === berkasId);
   const activeItemLoans = activeLoans.filter(row =>
     loanObjectType_(row) === 'ITEM' && loanBerkasId_(row) === berkasId);
-  if (wholeLoan) throw new Error('Berkas sedang dipinjam seluruhnya oleh ' + (wholeLoan.NAMA_PEMINJAM || 'peminjam lain') + '.');
+  if (wholeLoan) throw new Error(label + ' sedang dipinjam seluruhnya oleh ' + (wholeLoan.NAMA_PEMINJAM || 'peminjam lain') + '.');
   if (objectType === 'BERKAS' && activeItemLoans.length) {
-    throw new Error('Berkas tidak dapat dipinjam seluruhnya karena ' + activeItemLoans.length + ' item masih dipinjam.');
+    throw new Error(label + ' tidak dapat dipinjam seluruhnya karena ' + activeItemLoans.length + ' item masih dipinjam.');
   }
   if (objectType === 'ITEM') {
     const selectedIds = {};
@@ -817,11 +955,12 @@ function assertLoanAvailability_(objectType, parent, selectedItems, allItems, lo
     const duplicates = activeItemLoans.filter(row => selectedIds[loanItemId_(row)]);
     if (duplicates.length) {
       const numbers = duplicates.map(row => row.NO_ITEM_SNAPSHOT || loanItemId_(row)).join(', ');
-      throw new Error('Item ' + numbers + ' sedang dipinjam dan tidak dapat dicatat ulang.');
+      throw new Error('Item ' + numbers + (withNumber ? ' pada ' + label.toLowerCase() : '') +
+        ' sedang dipinjam dan tidak dapat dicatat ulang.');
     }
   }
   if (String(parent.STATUS_PEMINJAMAN || 'TERSEDIA').toUpperCase() === 'DIPINJAM') {
-    throw new Error('Status berkas menunjukkan sedang dipinjam. Segarkan menu Peminjaman untuk menyinkronkan data.');
+    throw new Error('Status ' + label.toLowerCase() + ' menunjukkan sedang dipinjam. Segarkan menu Peminjaman untuk menyinkronkan data.');
   }
   if (objectType === 'ITEM') {
     const blocked = (selectedItems || []).filter(item =>
@@ -887,17 +1026,23 @@ function returnLoan_(form) {
         }
       })));
     const berkasId = loanBerkasId_(groupLoans[0]);
+    // Satu transaksi dapat mencakup beberapa berkas: sinkronkan status
+    // ketersediaan seluruh berkas dan item yang terlibat, bukan hanya berkas pertama.
+    const berkasIdSet = {};
+    groupLoans.forEach(loan => berkasIdSet[loanBerkasId_(loan)] = true);
+    const berkasCount = Object.keys(berkasIdSet).length;
     activeGroupLoans.forEach(loan => {
       loan.STATUS = LOAN_RETURNED_STATUS_;
       loan.TANGGAL_KEMBALI = returnDate;
     });
     const berkasRows = readObjects_(APP_CONFIG.SHEETS.BERKAS)
-      .filter(row => !isDeleted_(row) && String(row.BERKAS_ID) === String(berkasId));
+      .filter(row => !isDeleted_(row) && berkasIdSet[String(row.BERKAS_ID)]);
     const itemRows = readObjects_(APP_CONFIG.SHEETS.ITEM)
-      .filter(row => !isDeleted_(row) && String(row.BERKAS_ID) === String(berkasId));
+      .filter(row => !isDeleted_(row) && berkasIdSet[String(row.BERKAS_ID)]);
     synchronizeLoanObjectStatuses_(berkasRows, itemRows, loans);
     const firstLoan = groupLoans[0];
-    audit_('RETURN', 'PEMINJAMAN', groupLoans.length > 1 ? 'MULTI_ITEM' : loanObjectType_(firstLoan), loanGroupId,
+    audit_('RETURN', 'PEMINJAMAN', berkasCount > 1 ? 'MULTI_BERKAS' :
+      groupLoans.length > 1 ? 'MULTI_ITEM' : loanObjectType_(firstLoan), loanGroupId,
       'Mencatat pengembalian ' + groupLoans.length + ' objek arsip dari ' +
         (firstLoan.NAMA_PEMINJAM || 'peminjam'),
       cleanText_(form.returnNotes, 1000) || 'Dikembalikan lengkap', 'SUCCESS');
@@ -906,6 +1051,7 @@ function returnLoan_(form) {
       loanId: loanGroupId,
       loanGroupId: loanGroupId,
       berkasId: berkasId,
+      berkasIds: Object.keys(berkasIdSet),
       returnedDate: returnDate,
       durationMs: Date.now() - startedAt,
       message: 'Pengembalian berhasil dicatat dan status arsip diperbarui.'
@@ -1051,6 +1197,61 @@ function ensureLoanOutIndicatorLogSchema_() {
   return sheet;
 }
 
+// Baris daftar arsip untuk dokumen transaksi (Out Indicator / Berita Acara).
+// withBerkasPrefix: nomor objek menyertakan nomor berkas — dipakai bila satu
+// dokumen memuat arsip dari lebih dari satu berkas.
+function loanGroupDocumentLines_(records, parentById, itemById, withBerkasPrefix) {
+  const singleRecord = records.length === 1;
+  return records.map(row => {
+    const berkasId = loanBerkasId_(row);
+    const parent = parentById[berkasId] || {};
+    const berkasNumber = String(row.NO_BERKAS_SNAPSHOT || parent.NO_BERKAS_DEFINITIF || '–');
+    if (loanObjectType_(row) === 'BERKAS') {
+      return {
+        berkasId: berkasId,
+        berkasNumber: berkasNumber,
+        itemNumber: '',
+        number: withBerkasPrefix ? 'Berkas ' + berkasNumber + ' (lengkap)' : 'SELURUH BERKAS',
+        description: row.URAIAN_OBJEK_SNAPSHOT || parent.JUDUL_BERKAS || 'Berkas arsip',
+        // Jumlah grup bisa dikoreksi petugas; hanya bermakna per berkas bila
+        // transaksi berisi satu objek saja.
+        pageCount: Number((singleRecord ? row.JUMLAH_HALAMAN_GRUP_SNAPSHOT : 0) ||
+          row.JUMLAH_HALAMAN_ITEM || 0)
+      };
+    }
+    const currentItem = itemById[loanItemId_(row)] || {};
+    const itemNumber = String(row.NO_ITEM_SNAPSHOT || currentItem.NO_ITEM_DEFINITIF || '–');
+    return {
+      berkasId: berkasId,
+      berkasNumber: berkasNumber,
+      itemNumber: itemNumber,
+      number: withBerkasPrefix ? 'Berkas ' + berkasNumber + ' / Item ' + itemNumber : itemNumber,
+      description: row.URAIAN_OBJEK_SNAPSHOT || currentItem.URAIAN_LENGKAP || 'Item arsip',
+      pageCount: Number(row.JUMLAH_HALAMAN_ITEM || currentItem.JUMLAH_HALAMAN || 0)
+    };
+  }).sort((a, b) => naturalCompare_(a.berkasNumber, b.berkasNumber) ||
+    naturalCompare_(a.itemNumber, b.itemNumber));
+}
+
+function loanGroupLookups_(records) {
+  const berkasIds = [];
+  records.forEach(row => {
+    const berkasId = loanBerkasId_(row);
+    if (berkasIds.indexOf(berkasId) === -1) berkasIds.push(berkasId);
+  });
+  const idSet = {};
+  berkasIds.forEach(berkasId => idSet[berkasId] = true);
+  const parentById = {};
+  readObjects_(APP_CONFIG.SHEETS.BERKAS)
+    .filter(row => idSet[String(row.BERKAS_ID)])
+    .forEach(row => parentById[String(row.BERKAS_ID)] = row);
+  const itemById = {};
+  readObjects_(APP_CONFIG.SHEETS.ITEM)
+    .filter(row => idSet[String(row.BERKAS_ID)])
+    .forEach(row => itemById[String(row.ITEM_ID)] = row);
+  return {berkasIds: berkasIds, parentById: parentById, itemById: itemById};
+}
+
 function prepareLoanOutIndicator_(loanGroupId) {
   ensureLoanSchema_();
   ensureLoanOutIndicatorLogSchema_();
@@ -1059,33 +1260,31 @@ function prepareLoanOutIndicator_(loanGroupId) {
   const records = allLoans.filter(row => loanGroupId_(row) === loanGroupId ||
     String(row.PEMINJAMAN_ID) === loanGroupId);
   if (!records.length) throw new Error('Transaksi peminjaman tidak ditemukan.');
-  const berkasId = loanBerkasId_(records[0]);
-  const parent = readObjects_(APP_CONFIG.SHEETS.BERKAS)
-    .find(row => String(row.BERKAS_ID) === berkasId) || {};
-  const itemById = {};
-  readObjects_(APP_CONFIG.SHEETS.ITEM)
-    .filter(row => String(row.BERKAS_ID) === berkasId)
-    .forEach(row => itemById[String(row.ITEM_ID)] = row);
-  const parentById = {};
-  parentById[berkasId] = parent;
+  const lookups = loanGroupLookups_(records);
   const presentation = presentLoanGroups_(
-    records, parentById, itemById, loanTodayKey_())[0];
+    records, lookups.parentById, lookups.itemById, loanTodayKey_())[0];
   const objectType = loanObjectType_(records[0]);
-  const items = objectType === 'BERKAS'
-    ? [{
-        number: 'SELURUH BERKAS',
-        description: records[0].URAIAN_OBJEK_SNAPSHOT || parent.JUDUL_BERKAS || 'Berkas arsip',
-        pageCount: Number(records[0].JUMLAH_HALAMAN_GRUP_SNAPSHOT ||
-          records[0].JUMLAH_HALAMAN_ITEM || 0)
-      }]
-    : records.map(row => {
-        const currentItem = itemById[loanItemId_(row)] || {};
-        return {
-          number: row.NO_ITEM_SNAPSHOT || currentItem.NO_ITEM_DEFINITIF || '–',
-          description: row.URAIAN_OBJEK_SNAPSHOT || currentItem.URAIAN_LENGKAP || 'Item arsip',
-          pageCount: Number(row.JUMLAH_HALAMAN_ITEM || currentItem.JUMLAH_HALAMAN || 0)
-        };
-      }).sort((a, b) => naturalCompare_(a.number, b.number));
+  // Satu lembar Out Indicator per berkas: penanda diletakkan di lokasi asal
+  // masing-masing berkas, sehingga transaksi multi-berkas menghasilkan
+  // beberapa lembar dalam satu PDF.
+  const lines = loanGroupDocumentLines_(records, lookups.parentById, lookups.itemById, false);
+  const sheets = lookups.berkasIds.map(berkasId => {
+    const parent = lookups.parentById[berkasId] || {};
+    const sheetRecords = records.filter(row => loanBerkasId_(row) === berkasId);
+    const sheetItems = lines.filter(line => line.berkasId === berkasId).map(line => ({
+      number: line.number, description: line.description, pageCount: line.pageCount
+    }));
+    return {
+      berkasId: berkasId,
+      berkasNumber: sheetRecords[0].NO_BERKAS_SNAPSHOT || parent.NO_BERKAS_DEFINITIF || '',
+      classificationCode: parent.KODE_KLASIFIKASI_SNAPSHOT || '',
+      berkasTitle: parent.JUDUL_BERKAS || sheetRecords[0].URAIAN_OBJEK_SNAPSHOT || '',
+      originalLocation: sheetRecords[0].LOKASI_ASAL_SNAPSHOT || loanLocationLabel_(parent),
+      pageCount: sheetItems.reduce((sum, item) => sum + Number(item.pageCount || 0), 0),
+      items: sheetItems
+    };
+  }).sort((a, b) => naturalCompare_(a.berkasNumber, b.berkasNumber));
+  const firstSheet = sheets[0];
   const previousPrints = readObjects_(APP_CONFIG.SHEETS.LOAN_OUT_INDICATOR_LOG)
     .filter(row => String(row.LOAN_GROUP_ID) === loanGroupId);
   const printSequence = previousPrints.length + 1;
@@ -1093,23 +1292,24 @@ function prepareLoanOutIndicator_(loanGroupId) {
   const fileName = ('Out_Indicator_' + loanGroupId +
     (printSequence > 1 ? '_Cetak_Ulang_' + printSequence : '') + '.pdf')
     .replace(/[^A-Za-z0-9._-]+/g, '_');
-  const location = records[0].LOKASI_ASAL_SNAPSHOT || loanLocationLabel_(parent);
+  const locationSummary = sheets.map(sheet => sheet.originalLocation).join(' | ');
   appendObject_(APP_CONFIG.SHEETS.LOAN_OUT_INDICATOR_LOG, {
     PRINT_ID: 'OUT-' + Utilities.getUuid(),
     TIMESTAMP: timestamp,
     USER_EMAIL: getCurrentUser_(),
     LOAN_GROUP_ID: loanGroupId,
     PEMINJAMAN_IDS: records.map(row => row.PEMINJAMAN_ID).join(', '),
-    JENIS_OBJEK: records.length > 1 ? 'MULTI_ITEM' : objectType,
-    BERKAS_ID: berkasId,
-    NO_BERKAS_SNAPSHOT: records[0].NO_BERKAS_SNAPSHOT || parent.NO_BERKAS_DEFINITIF || '',
-    LOKASI_ASAL_SNAPSHOT: location,
+    JENIS_OBJEK: sheets.length > 1 ? 'MULTI_BERKAS' : records.length > 1 ? 'MULTI_ITEM' : objectType,
+    BERKAS_ID: sheets.map(sheet => sheet.berkasId).join(', '),
+    NO_BERKAS_SNAPSHOT: sheets.map(sheet => sheet.berkasNumber).join(', '),
+    LOKASI_ASAL_SNAPSHOT: locationSummary,
     PDF_FILE_NAME: fileName,
     STATUS: 'PDF_DIBUAT'
   });
   audit_('GENERATE_PDF', 'PEMINJAMAN', 'OUT_INDICATOR', loanGroupId,
-    'Membuat Out Indicator A5 untuk transaksi peminjaman',
-    location + ' · cetakan ke-' + printSequence, 'SUCCESS');
+    'Membuat Out Indicator A5 untuk transaksi peminjaman' +
+      (sheets.length > 1 ? ' (' + sheets.length + ' berkas, satu lembar per berkas)' : ''),
+    locationSummary + ' · cetakan ke-' + printSequence, 'SUCCESS');
   const settings = readSettings_();
   return {
     ok: true,
@@ -1122,10 +1322,12 @@ function prepareLoanOutIndicator_(loanGroupId) {
     unitName: cleanText_(settings.UNIT_NAME, 250) || 'UIN SUNAN AMPEL SURABAYA',
     locationName: cleanText_(settings.INSTANCE_LOCATION, 100) || 'Surabaya',
     objectType: objectType,
-    berkasNumber: presentation.berkasNumber,
-    classificationCode: parent.KODE_KLASIFIKASI_SNAPSHOT || '',
-    berkasTitle: parent.JUDUL_BERKAS || records[0].URAIAN_OBJEK_SNAPSHOT || '',
-    originalLocation: location,
+    // Field tingkat atas = lembar pertama (kompatibel dengan klien lama);
+    // klien baru mencetak seluruh `sheets`.
+    berkasNumber: firstSheet.berkasNumber,
+    classificationCode: firstSheet.classificationCode,
+    berkasTitle: firstSheet.berkasTitle,
+    originalLocation: firstSheet.originalLocation,
     borrowerName: presentation.borrowerName,
     borrowerIdentity: presentation.borrowerIdentity,
     borrowerUnit: presentation.borrowerUnit,
@@ -1135,8 +1337,10 @@ function prepareLoanOutIndicator_(loanGroupId) {
     dueDate: presentation.dueDate,
     statusCode: presentation.statusCode,
     statusLabel: presentation.statusLabel,
-    pageCount: presentation.pageCount,
-    items: items,
+    pageCount: sheets.length > 1 ? firstSheet.pageCount : presentation.pageCount,
+    totalPageCount: presentation.pageCount,
+    items: firstSheet.items,
+    sheets: sheets,
     layout: {paper: 'A5', orientation: 'PORTRAIT', widthMm: 148, heightMm: 210}
   };
 }
@@ -1194,9 +1398,13 @@ function saveLoanEvidence_(context, preUploadedEvidenceId, originalName) {
   validateLoanEvidenceFile_(sourceName, size, mimeType);
   const extension = (sourceName.match(/\.([^.]+)$/) || ['', 'bin'])[1].toLowerCase();
   const stamp = Utilities.formatDate(new Date(), APP_CONFIG.TIME_ZONE, 'yyyyMMdd-HHmmss');
-  const objectNumber = context.objectType === 'BERKAS'
-    ? (context.parent.NO_BERKAS_DEFINITIF || 'DRAFT')
-    : (context.parent.NO_BERKAS_DEFINITIF || 'DRAFT') + '-' + (context.item.NO_ITEM_DEFINITIF || 'ITEM');
+  const firstSelection = context.selections[0];
+  const firstNumber = firstSelection.parent.NO_BERKAS_DEFINITIF || 'DRAFT';
+  const objectNumber = context.selections.length > 1
+    ? firstNumber + '-DST-' + context.selections.length + 'BERKAS'
+    : firstSelection.objectType === 'BERKAS'
+      ? firstNumber
+      : firstNumber + '-' + (firstSelection.items[0].NO_ITEM_DEFINITIF || 'ITEM');
   const finalName = stamp + '_PEMINJAMAN_' + objectNumber + '_' +
     cleanFileName_(context.borrowerName) + '.' + extension;
   file.setName(finalName);
@@ -1338,8 +1546,10 @@ function cancelLoanEvidenceUpload_(sessionId) {
 function sanitizeLoanForm_(request) {
   const allowed = [
     'loanPreviewId', 'loanObjectType', 'loanBerkasId', 'loanItemId', 'loanItemIdsJson',
-    'borrowerName', 'borrowerIdentity', 'borrowerUnit', 'borrowerWhatsapp',
-    'loanPurpose', 'loanDate', 'loanDueDate', 'loanPageCount', 'loanNotes'
+    'loanSelectionsJson',
+    'borrowerName', 'borrowerIdentity', 'borrowerJabatan', 'borrowerUnit', 'borrowerWhatsapp',
+    'loanPurpose', 'loanDate', 'loanDueDate', 'loanPageCount', 'loanCondition', 'loanNotes',
+    'loanOfficerName', 'loanOfficerNip', 'loanOfficerJabatan'
   ];
   const form = {};
   allowed.forEach(key => form[key] =

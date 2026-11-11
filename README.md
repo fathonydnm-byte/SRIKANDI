@@ -36,6 +36,7 @@ record-center/                                    # aplikasi Arsip Inaktif (dipa
 
 ## Tracking versi dan sinkronisasi
 
+- Fitur source **3.31.0/schema 10**: satu transaksi peminjaman dapat memuat beberapa berkas lengkap dan/atau item dari berkas berbeda (tombol *Tambahkan ke Daftar Pinjam*), Out Indicator satu lembar per berkas, Berita Acara gabungan, pengembalian sekaligus; juga memperbaiki peminjaman dengan file bukti persetujuan. **39 pengujian lokal lulus; belum dipasang ke Apps Script (menunggu pemasangan pengguna).** Lihat [catatan fitur dan pemasangan](docs/FEAT_3.31.0_PEMINJAMAN_MULTI_BERKAS.md).
 - Perbaikan source **3.30.6/schema 10** mengizinkan klasifikasi sekunder meskipun tersedia tersier; petunjuk form diperbarui. **20 pengujian lokal lulus; pengguna berhasil memasang via clasp pada 14 Oktober 2026, deployment @59 → @60 (bukti screenshot CLI). UAT Web App masih menunggu.** Lihat [catatan perbaikan dan pemasangan](docs/FIX_3.30.6_SECONDARY_CLASSIFICATION.md). Pengembangan Record Center kini dilanjutkan di repository [UINSA-Record-Center](https://github.com/fathonydnm-byte/UINSA-Record-Center).
 - Perbaikan source **3.30.5/schema 10** untuk penggantian PDF adalah baseline sebelum rilis 3.30.6. Screenshot clone/list-deployments pengguna pada 14 Oktober 2026 menunjukkan source live 3.30.5/schema 10 dan deployment @59 sebelum pembaruan. Lihat [catatan perbaikan dan pemasangan](docs/FIX_3.30.5_EDIT_REPLACEMENT.md).
 - Nilai versi resmi tiap aplikasi berada di `central-file/Config.js` (`APP_RELEASE`) dan `record-center/Config.js` (`RC_RELEASE`).

@@ -307,28 +307,11 @@ function prepareLoanBeritaAcara_(loanGroupId) {
   const first = records[0];
   const isReturned = records.some(row => String(row.STATUS || '').toUpperCase() === LOAN_RETURNED_STATUS_);
 
-  const berkasId = loanBerkasId_(first);
-  const parent = readObjects_(APP_CONFIG.SHEETS.BERKAS)
-    .find(row => String(row.BERKAS_ID) === berkasId) || {};
-  const itemById = {};
-  readObjects_(APP_CONFIG.SHEETS.ITEM)
-    .filter(row => String(row.BERKAS_ID) === berkasId)
-    .forEach(row => itemById[String(row.ITEM_ID)] = row);
-  const objectType = loanObjectType_(first);
-  const items = objectType === 'BERKAS'
-    ? [{
-        number: 'SELURUH BERKAS',
-        description: first.URAIAN_OBJEK_SNAPSHOT || parent.JUDUL_BERKAS || 'Berkas arsip',
-        pageCount: Number(first.JUMLAH_HALAMAN_GRUP_SNAPSHOT || first.JUMLAH_HALAMAN_ITEM || 0)
-      }]
-    : records.map(row => {
-        const currentItem = itemById[loanItemId_(row)] || {};
-        return {
-          number: row.NO_ITEM_SNAPSHOT || currentItem.NO_ITEM_DEFINITIF || '–',
-          description: row.URAIAN_OBJEK_SNAPSHOT || currentItem.URAIAN_LENGKAP || 'Item arsip',
-          pageCount: Number(row.JUMLAH_HALAMAN_ITEM || currentItem.JUMLAH_HALAMAN || 0)
-        };
-      }).sort((a, b) => naturalCompare_(a.number, b.number));
+  // Satu transaksi dapat memuat beberapa berkas; bila demikian, nomor
+  // objek di tabel BA menyertakan nomor berkasnya agar tidak ambigu.
+  const lookups = loanGroupLookups_(records);
+  const items = loanGroupDocumentLines_(records, lookups.parentById, lookups.itemById,
+    lookups.berkasIds.length > 1);
 
   const settings = readSettings_();
   const unitName = cleanText_(settings.UNIT_NAME, 250) || 'UIN SUNAN AMPEL SURABAYA';
