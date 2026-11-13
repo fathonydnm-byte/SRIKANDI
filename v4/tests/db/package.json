@@ -1,0 +1,16 @@
+{
+  "name": "central-file-v4-db-tests",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Database (schema, RLS, counters, PII) tests for Central File v4. Run via ./run.sh.",
+  "type": "module",
+  "scripts": {
+    "test": "bash ./run.sh"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "pg": "8.13.1"
+  }
+}
