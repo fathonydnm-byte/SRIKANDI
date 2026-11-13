@@ -36,10 +36,18 @@ describe('penjaga rute', () => {
     expect(await screen.findByText('Anda tidak memiliki akses ke Pengaturan.')).toBeInTheDocument();
   });
 
-  it('PETUGAS dapat membuka placeholder Penerimaan dengan info sprint', async () => {
-    renderApp('/penerimaan', signedIn('PETUGAS').client);
-    expect(await screen.findByRole('heading', { name: 'Penerimaan Naskah' })).toBeInTheDocument();
-    expect(screen.getByText(/Sprint 2 — Registrasi/)).toBeInTheDocument();
+  it('PETUGAS dapat membuka placeholder Peminjaman dengan info sprint', async () => {
+    renderApp('/peminjaman', signedIn('PETUGAS').client);
+    expect(await screen.findByRole('heading', { name: 'Peminjaman Arsip' })).toBeInTheDocument();
+    expect(screen.getByText(/Sprint 4 — Peminjaman/)).toBeInTheDocument();
+  });
+
+  it('PIMPINAN tidak dapat membuka layar registrasi (Penerimaan, Registrasi, Alih Media, Cetak)', async () => {
+    for (const path of ['/penerimaan', '/pemberkasan', '/alih-media', '/penerimaan/RCV-1/cetak']) {
+      const { unmount } = renderApp(path, signedIn('PIMPINAN').client);
+      expect(await screen.findByText(/Anda tidak memiliki akses ke/)).toBeInTheDocument();
+      unmount();
+    }
   });
 
   it('ADMIN_UNIT dapat membuka Master Log', async () => {

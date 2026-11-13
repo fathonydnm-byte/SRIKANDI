@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { ReactElement } from 'react';
+import { lazy, Suspense, type ReactElement } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext';
 import { PublicOnly, RequireAuth, RequireModule } from './auth/guards';
@@ -13,6 +13,15 @@ import { ShortcutListPage } from './pages/dashboard/ShortcutListPage';
 import { BerkasDetailPage } from './pages/detail/BerkasDetailPage';
 import { ItemDetailPage } from './pages/detail/ItemDetailPage';
 import { SearchPage } from './pages/search/SearchPage';
+// Layar registrasi dimuat terpisah (PIMPINAN dan pencarian dari HP tidak perlu mengunduhnya).
+const ReceiptsPage = lazy(() => import('./pages/s2/ReceiptsPage').then((m) => ({ default: m.ReceiptsPage })));
+const RegistrationPage = lazy(() => import('./pages/s2/RegistrationPage').then((m) => ({ default: m.RegistrationPage })));
+const MediaPage = lazy(() => import('./pages/s2/MediaPage').then((m) => ({ default: m.MediaPage })));
+const ReceiptPrintPage = lazy(() => import('./pages/s2/ReceiptPrintPage').then((m) => ({ default: m.ReceiptPrintPage })));
+
+function Lazy({ children }: { children: ReactElement }) {
+  return <Suspense fallback={<p className="muted detail-loading" role="status">Memuat halaman…</p>}>{children}</Suspense>;
+}
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { LoginPage } from './pages/LoginPage';
 import { NotFoundPage } from './pages/NotFoundPage';
@@ -23,9 +32,13 @@ import { ResetPasswordPage } from './pages/ResetPasswordPage';
 const BUILT: Record<string, () => ReactElement> = {
   dashboard: () => <DashboardPage />,
   cari: () => <SearchPage />,
+  penerimaan: () => <Lazy><ReceiptsPage /></Lazy>,
+  pemberkasan: () => <Lazy><RegistrationPage /></Lazy>,
+  'alih-media': () => <Lazy><MediaPage /></Lazy>,
 };
 const CARI = MODULES.find((m) => m.id === 'cari')!;
 const DASHBOARD = MODULES.find((m) => m.id === 'dashboard')!;
+const PENERIMAAN = MODULES.find((m) => m.id === 'penerimaan')!;
 
 export function AppRoutes() {
   return (
@@ -43,6 +56,7 @@ export function AppRoutes() {
               element={<RequireModule module={m}>{BUILT[m.id]?.() ?? <PlaceholderPage module={m} />}</RequireModule>}
             />
           ))}
+          <Route path="/penerimaan/:receiptId/cetak" element={<RequireModule module={PENERIMAAN}><Lazy><ReceiptPrintPage /></Lazy></RequireModule>} />
           <Route path="/dashboard/:slug" element={<RequireModule module={DASHBOARD}><ShortcutListPage /></RequireModule>} />
           <Route path="/cari/item/:itemId" element={<RequireModule module={CARI}><ItemDetailPage /></RequireModule>} />
           <Route path="/cari/berkas/:berkasId" element={<RequireModule module={CARI}><BerkasDetailPage /></RequireModule>} />

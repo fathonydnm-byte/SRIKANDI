@@ -34,5 +34,6 @@ cd "$HERE"
 if [ ! -d node_modules/pg ]; then
   if [ -f package-lock.json ]; then npm ci --silent --no-audit --no-fund; else npm install --silent --no-audit --no-fund; fi
 fi
+cluster_set_test_secrets
 cluster_env
 node --test --test-concurrency=1 "$HERE"/*.test.mjs

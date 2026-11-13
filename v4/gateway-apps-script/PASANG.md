@@ -15,7 +15,7 @@ Gerbang ini membuat aplikasi Central File bisa membuka PDF arsip dari Google Dri
 ## 2. Buat secret dan beri izin
 
 1. Di bilah atas editor, pilih fungsi **`setupGateway`**, klik **Jalankan**.
-2. Muncul **Perlu otorisasi** → **Tinjau izin** → pilih akun instansi → (bila muncul "Google belum memverifikasi aplikasi ini": **Lanjutan** → **Buka … (tidak aman)**) → **Izinkan**. Izin yang diminta: melihat dan mengelola file Google Drive.
+2. Muncul **Perlu otorisasi** → **Tinjau izin** → pilih akun instansi → (bila muncul "Google belum memverifikasi aplikasi ini": **Lanjutan** → **Buka … (tidak aman)**) → **Izinkan**. Izin yang diminta: **melihat** semua file Google Drive, dan **mengelola hanya file yang dibuat aplikasi ini** (untuk unggahan baru).
 3. Setelah selesai, buka **Log eksekusi** di bawah. Ada baris `Secret gerbang baru …: <96 karakter>`. **Salin 96 karakter itu** (ini `DRIVE_GATEWAY_SECRET`). Log ini hanya Anda yang bisa melihat.
 
 ## 3. Pasang sebagai aplikasi web
@@ -35,6 +35,7 @@ Gerbang ini membuat aplikasi Central File bisa membuka PDF arsip dari Google Dri
    | `DRIVE_GATEWAY_URL` | URL `/exec` dari langkah 3 |
    | `DRIVE_GATEWAY_SECRET` | 96 karakter dari langkah 2 |
    | `FILE_TICKET_SECRET` | teks acak ≥ 32 karakter (boleh jalankan `setupGateway` di proyek lain atau pakai pembuat kata sandi; **berbeda** dari secret gerbang) |
+   | `UPLOAD_ATTEST_SECRET` | teks acak ≥ 32 karakter, **berbeda** dari dua secret lain (dipakai untuk mengesahkan unggahan) |
    | `SUPABASE_URL` | URL proyek Supabase (sama dengan `VITE_SUPABASE_URL`) |
    | `SUPABASE_ANON_KEY` | anon key Supabase (sama dengan `VITE_SUPABASE_ANON_KEY`) |
 
@@ -49,3 +50,13 @@ Masuk ke Central File di HP → Cari Arsip → buka satu arsip yang PDF-nya ters
 - Ganti secret: jalankan lagi `setupGateway` (secret lama langsung tidak berlaku), lalu perbarui `DRIVE_GATEWAY_SECRET` di Cloudflare dan deploy ulang.
 - Mencabut sama sekali: Apps Script → **Terapkan** → **Kelola deployment** → **Arsipkan**; dan/atau <https://myaccount.google.com/permissions> → hapus akses proyek ini.
 - Memperbarui kode: tempel `Code.gs` baru → **Terapkan** → **Kelola deployment** → ✏️ → **Versi: Versi baru** → **Terapkan** (URL tetap sama).
+
+## Pembaruan Sprint 2: izin unggah (sekali, ±5 menit)
+
+Mulai Sprint 2 aplikasi bisa **mengunggah** PDF. Gerbang perlu izin tambahan "kelola file yang dibuat aplikasi ini" (`drive.file`). Izin ini **tidak** bisa mengubah atau menghapus file lama di Drive; aplikasi hanya bisa menulis ke folder baru `CENTRAL FILE V4` yang dibuatnya sendiri.
+
+1. Masuk sebagai `bag.umum@uinsa.ac.id`, buka proyek **Central File – Gerbang Drive** di <https://script.google.com>.
+2. Ganti isi `Code.gs` dan `appsscript.json` dengan versi terbaru dari folder ini. Simpan.
+3. Pilih fungsi **`authorizeGateway`** → **Jalankan** → **Tinjau izin** → **Izinkan**. (Fungsi ini **tidak** mengganti secret; jangan jalankan `setupGateway` kecuali memang ingin mengganti secret.) Log menampilkan `Izin gerbang aktif`.
+4. **Terapkan** → **Kelola deployment** → pilih deployment yang ada → ✏️ **Edit** → **Versi: Versi baru** → **Terapkan**. URL `/exec` **tetap sama**; tidak perlu mengubah apa pun di Cloudflare kecuali menambahkan `UPLOAD_ATTEST_SECRET` (lihat tabel langkah 4 di atas) lalu deploy ulang Pages.
+5. Uji: di Central File buka **Alih Media Arsip**, unggah satu PDF kecil. Bila muncul pesan izin Drive kurang, tunggu ±30 menit (token lama masih tersimpan sementara) atau deploy ulang Pages, lalu coba lagi.

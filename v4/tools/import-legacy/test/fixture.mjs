@@ -227,7 +227,21 @@ export function fixtureDefinition() {
   };
   sheets.USUL_PINDAH = { headers: ['USUL_PINDAH_ID', 'NO_USUL_PINDAH', 'STATUS_USUL'], rows: [{ USUL_PINDAH_ID: 'USP-1', NO_USUL_PINDAH: 'UP-2025-0001', STATUS_USUL: 'TERTATA INAKTIF' }] };
   sheets.OUTBOX_RECORD_CENTER = { headers: ['OUTBOX_ID', 'STATUS'], rows: [] };
-  sheets.LOG_CETAK_PENERIMAAN = { headers: ['CETAK_ID', 'PENERIMAAN_ID'], rows: [{ CETAK_ID: 'PRN-1', PENERIMAAN_ID: 'RCV-1' }] };
+  sheets.LOG_CETAK_PENERIMAAN = {
+    headers: ['CETAK_ID', 'PENERIMAAN_ID', 'NOMOR_TANDA_TERIMA_SNAPSHOT', 'PRINT_TOKEN', 'CETAK_KE', 'JENIS_CETAK', 'STATUS_SNAPSHOT',
+      'TIMESTAMP', 'USER_EMAIL', 'PDF_FILE_NAME'],
+    rows: [
+      { CETAK_ID: 'RCPL-1', PENERIMAAN_ID: 'RCV-1', NOMOR_TANDA_TERIMA_SNAPSHOT: 'TRM-2026-0001', PRINT_TOKEN: 'RCPRINT-1', CETAK_KE: 1,
+        JENIS_CETAK: 'PERTAMA', STATUS_SNAPSHOT: 'AKTIF', TIMESTAMP: '2026-02-02T09:20:00+07:00', USER_EMAIL: 'petugas@contoh.invalid',
+        PDF_FILE_NAME: 'TRM-2026-0001_Tanda-Terima-Penyerahan-Arsip.pdf' },
+      { CETAK_ID: 'RCPL-2', PENERIMAAN_ID: 'RCV-1', NOMOR_TANDA_TERIMA_SNAPSHOT: 'TRM-2026-0001', PRINT_TOKEN: 'RCPRINT-2', CETAK_KE: 2,
+        JENIS_CETAK: 'cetak ulang', STATUS_SNAPSHOT: 'AKTIF', TIMESTAMP: D(2026, 2, 3, 10, 0), USER_EMAIL: 'petugas@contoh.invalid',
+        PDF_FILE_NAME: 'TRM-2026-0001_Tanda-Terima-Penyerahan-Arsip.pdf' },
+      // orphan: receipt does not exist
+      { CETAK_ID: 'RCPL-3', PENERIMAAN_ID: 'RCV-TIDAK-ADA', PRINT_TOKEN: 'RCPRINT-3', CETAK_KE: 1, JENIS_CETAK: 'PERTAMA',
+        TIMESTAMP: '2026-02-04T08:00:00+07:00' }
+    ]
+  };
   sheets.SYSTEM_BACKUPS = { headers: ['BACKUP_ID', 'STATUS'], rows: [{ BACKUP_ID: 'BKP-1', STATUS: 'COMPLETE' }] };
   sheets['Catatan Petugas'] = { headers: ['CATATAN'], rows: [{ CATATAN: 'lembar kerja pribadi' }] };
   sheets.MASTER_JENIS_NASKAH = {

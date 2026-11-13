@@ -5,6 +5,8 @@ export interface FileEnv {
   FILE_TICKET_SECRET?: string;
   DRIVE_GATEWAY_URL?: string;
   DRIVE_GATEWAY_SECRET?: string;
+  /** HMAC untuk atestasi unggahan (upload_commit) dan konteks sesi unggah. */
+  UPLOAD_ATTEST_SECRET?: string;
   /** HANYA untuk uji lokal: basis Drive API palsu di http://127.0.0.1/localhost. */
   DRIVE_API_BASE?: string;
 }

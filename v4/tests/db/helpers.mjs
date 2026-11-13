@@ -7,7 +7,9 @@ import { randomUUID } from 'node:crypto';
 export const ALL_PUBLIC_TABLES = [
   'units', 'profiles', 'unit_settings', 'audit_log', 'idempotency_keys', 'counters',
   'klasifikasi', 'pegawai', 'berkas', 'item', 'penerimaan', 'penerimaan_item',
-  'riwayat_nomor', 'schema_migrations_log'
+  'riwayat_nomor', 'schema_migrations_log',
+  // Sprint 2
+  'jenis_naskah', 'penerimaan_cetak_log', 'upload_sessions', 'drive_tasks'
 ];
 
 export function newPool(max = 10) {

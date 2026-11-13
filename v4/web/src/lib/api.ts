@@ -54,39 +54,71 @@ export function newRequestId(): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
-type Envelope<T> = { ok: true; data: T } | { ok: false; error: { code: string; message: string } };
+/** Aksi lanjutan per kode error API_S2 (§1.1); pesan utamanya dari server. */
+const CODE_ACTIONS: Record<string, string> = {
+  AUTH_REQUIRED: 'Silakan masuk kembali.',
+  ACCOUNT_INACTIVE: 'Hubungi admin unit.',
+  FORBIDDEN_ROLE: 'Bila menurut Anda ini keliru, hubungi admin unit.',
+  FORBIDDEN_UNIT: 'Pastikan Anda bekerja pada unit yang benar.',
+  UNIT_REQUIRED: 'Pilih unit di bagian atas layar terlebih dahulu.',
+  IDEMPOTENCY_CONFLICT: 'Muat ulang halaman lalu ulangi tindakan.',
+  NOT_FOUND: 'Muat ulang data; mungkin sudah diubah orang lain.',
+  RECEIPT_LOCKED: 'Untuk koreksi, batalkan tanda terima lalu buat yang baru.',
+  ITEM_ALREADY_FILED: 'Muat ulang daftar antrean.',
+  SOURCE_ALREADY_ACTIVE: 'Muat ulang daftar antrean.',
+  UPLOAD_SESSION_ACTIVE: 'Tunggu unggahan lain selesai, lalu coba lagi.',
+};
 
-async function invoke<T>(client: SupabaseClient, fn: string, body: Record<string, unknown>): Promise<T> {
-  const { data, error } = await client.functions.invoke<Envelope<T>>(fn, { body });
-  if (error) fail(error, 'FUNCTION_ERROR');
-  if (!data || typeof data !== 'object' || !('ok' in data)) {
-    fail({ message: 'invalid response', status: 500 }, 'INVALID_RESPONSE');
+/** Error RPC → ApiError. P0001: hint = KODE, message = "KODE: pesan". */
+function rpcFailure(error: { code?: string; message?: string; hint?: string | null; status?: number }): ApiError {
+  const raw = error.message ?? '';
+  const m = /^([A-Z][A-Z0-9_]+):\s*([\s\S]*)$/.exec(raw);
+  const apiCode = error.hint && /^[A-Z][A-Z0-9_]+$/.test(error.hint) ? error.hint : m?.[1];
+  if (error.code === 'P0001' && apiCode) {
+    if (apiCode === 'AUTH_REQUIRED') return new ApiError(apiCode, toUserMessage({ status: 401 }), error);
+    const title = m && m[1] === apiCode ? m[2]! : raw;
+    return new ApiError(apiCode, { title, action: CODE_ACTIONS[apiCode] ?? 'Periksa isian lalu coba lagi.' }, error);
   }
-  if (!data.ok) {
-    // Pesan dari server sudah berbahasa Indonesia; tetap dibungkus sebagai UserMessage.
-    throw new ApiError(data.error.code, { title: data.error.message, action: 'Periksa data lalu coba lagi.' });
-  }
-  return data.data;
+  if (error.code === '22023' && raw) return new ApiError('INVALID_INPUT', { title: raw, action: 'Periksa isian lalu coba lagi.' }, error);
+  return new ApiError(error.code === '57014' ? 'INTERNAL' : (error.code ?? 'INTERNAL'), toUserMessage(error), error);
 }
 
-/** Operasi baca lewat Edge Function. */
-export function callRead<T>(client: SupabaseClient, fn: string, payload: Record<string, unknown> = {}): Promise<T> {
-  return invoke<T>(client, fn, payload);
+function transient(error: { code?: string; message?: string; status?: number; name?: string }): boolean {
+  const msg = (error.message ?? '').toLowerCase();
+  return msg.includes('failed to fetch') || msg.includes('networkerror') || msg.includes('fetch failed') || (error.status ?? 0) >= 502 || error.code === '57014';
+}
+
+/** Operasi baca lewat RPC Postgres (SECURITY INVOKER; RLS berlaku). */
+export async function callRead<T>(client: SupabaseClient, fn: string, args: Record<string, unknown> = {}): Promise<T> {
+  const { data, error } = await client.rpc(fn, args);
+  if (error) throw rpcFailure(error);
+  return data as T;
 }
 
 /**
- * Operasi tulis lewat Edge Function. Simpan `requestId` yang dikembalikan dan
- * kirim ulang nilai yang SAMA bila pengguna mengulang setelah gagal jaringan,
- * supaya server tidak membuat data ganda.
+ * Operasi tulis lewat RPC Postgres (SECURITY DEFINER, otorisasi sendiri,
+ * idempoten per request_id). Selalu mengirim `p_request_id`. Gangguan jaringan
+ * diulang otomatis dengan id yang SAMA; simpan `requestId` yang dikembalikan
+ * bila pengguna mengulang manual, supaya server tidak membuat data ganda.
  */
 export async function callWrite<T>(
   client: SupabaseClient,
   fn: string,
-  payload: Record<string, unknown>,
+  args: Record<string, unknown>,
   requestId: string = newRequestId(),
+  opts: { retries?: number; sleep?: (ms: number) => Promise<void> } = {},
 ): Promise<{ requestId: string; data: T }> {
-  const data = await invoke<T>(client, fn, { ...payload, requestId });
-  return { requestId, data };
+  const retries = opts.retries ?? 2;
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  for (let attempt = 0; ; attempt++) {
+    const { data, error } = await client.rpc(fn, { ...args, p_request_id: requestId });
+    if (!error) return { requestId, data: data as T };
+    if (attempt < retries && transient(error)) {
+      await sleep(500 * 2 ** attempt);
+      continue;
+    }
+    throw rpcFailure(error);
+  }
 }
 
 export async function fetchProfile(client: SupabaseClient, userId: string): Promise<Profile | null> {
@@ -370,4 +402,11 @@ export async function matchBerkasByItems(client: SupabaseClient, query: string, 
   const { data, error } = await builder;
   if (error) failRpc(error);
   return (data as string[] | null) ?? [];
+}
+
+/** Error bisnis dari RPC (P0001): isian harus diubah, jadi request id berikutnya harus baru. */
+export function isBusinessError(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return false;
+  const cause = error.cause as { code?: unknown } | undefined;
+  return cause?.code === 'P0001' || cause?.code === '22023';
 }

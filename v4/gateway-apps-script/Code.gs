@@ -5,6 +5,10 @@
  * akun instansi, HANYA untuk permintaan yang ditandatangani HMAC dengan secret
  * bersama. Token tidak pernah dikirim ke browser pengguna.
  *
+ * Izin (appsscript.json): drive.readonly (membaca semua file arsip) +
+ * drive.file (menulis HANYA file/folder yang dibuat aplikasi ini). Token yang
+ * bocor tidak dapat mengubah atau menghapus file lama.
+ *
  * Cara pasang singkat (lengkap: PASANG.md):
  *   1. Login sebagai akun instansi, buat proyek baru di script.google.com.
  *   2. Tempel Code.gs dan appsscript.json (tampilkan manifest lewat Project Settings).
@@ -155,6 +159,18 @@ function setupGateway() {
   Logger.log(message);
   console.log(message);
   return secret;
+}
+
+/**
+ * Jalankan setelah izin di appsscript.json berubah: memicu layar persetujuan
+ * Google TANPA mengganti secret. Lalu buat versi baru deployment yang sama.
+ */
+function authorizeGateway() {
+  var root = driveScopeAnchor_();
+  var message = 'Izin gerbang aktif (akses Drive OK, folder akar ' + root + '). Secret tidak berubah.';
+  Logger.log(message);
+  console.log(message);
+  return message;
 }
 
 /**

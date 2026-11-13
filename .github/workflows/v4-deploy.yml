@@ -3,10 +3,8 @@ name: v4 deploy (staging)
 # Memasang v4/web ke Cloudflare Pages. Butuh secret repo CLOUDFLARE_API_TOKEN
 # (izin Cloudflare Pages: Edit). URL dan anon key Supabase bersifat publik
 # (ikut terkirim ke browser); keamanan data dijaga oleh RLS, bukan oleh kunci ini.
+# Hanya dijalankan manual setelah review, supaya commit WIP tidak ikut tayang di staging.
 on:
-  push:
-    branches: [claude/clever-bardeen-mmrijr, main]
-    paths: ['v4/web/**', '.github/workflows/v4-deploy.yml']
   workflow_dispatch:
 
 concurrency:

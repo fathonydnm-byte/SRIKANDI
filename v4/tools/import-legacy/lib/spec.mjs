@@ -5,7 +5,7 @@
 //   pii?: plaintext encrypted with app.encrypt_pii on write }
 import {
   convert as cv, SECURITY, SATUAN, NASIB, TINGKAT, KONDISI, MEDIA_SUMBER, BENTUK_DIGITAL,
-  VERIFIKASI, RECEIPT_STATUS, FILING_STATUS, JENIS_OBJEK, AUDIT_RESULT
+  VERIFIKASI, RECEIPT_STATUS, FILING_STATUS, JENIS_OBJEK, AUDIT_RESULT, enumOf
 } from './convert.mjs';
 
 const T = cv.text, I = cv.int, B = cv.bool, D = cv.date, TS = cv.timestamp;
@@ -48,6 +48,24 @@ export const TABLES = [
       { h: 'SUMBER', c: 'sumber', t: T },
       { h: 'CATATAN', c: 'catatan', t: T },
       { h: 'UPDATED_AT', c: 'updated_at', t: TS, keepWhenNull: true }
+    ]
+  },
+  {
+    // Sprint 2: master jenis/subjenis naskah (SUBJENIS_NASKAH_ID unique per unit in the pilot)
+    table: 'jenis_naskah', sheets: ['MASTER_JENIS_NASKAH'], key: ['unit_id', 'subjenis_naskah_id'], label: 'Jenis naskah',
+    columns: [
+      { h: 'SUBJENIS_NASKAH_ID', c: 'subjenis_naskah_id', t: T, required: true },
+      { h: 'JENIS_NASKAH_ID', c: 'jenis_naskah_id', t: T, required: true },
+      { h: 'KATEGORI', c: 'kategori', t: T },
+      { h: 'SUBJENIS', c: 'subjenis', t: T },
+      { h: 'POLA_DEFAULT', c: 'pola_default', t: T },
+      { h: 'PERIODE_DEFAULT', c: 'periode_default', t: T },
+      { h: 'TEMPLATE_JUDUL_BERKAS', c: 'template_judul_berkas', t: T },
+      { h: 'PERLU_KELENGKAPAN', c: 'perlu_kelengkapan', t: B, def: false },
+      { h: 'OPSI_KELENGKAPAN', c: 'opsi_kelengkapan', t: T },
+      { h: 'AKTIF', c: 'aktif', t: B, def: false },
+      { h: 'URUTAN', c: 'urutan', t: I },
+      { h: 'CATATAN', c: 'catatan', t: T }
     ]
   },
   {
@@ -161,6 +179,22 @@ export const TABLES = [
       { h: 'DIBATALKAN_BY', c: 'dibatalkan_by', t: T },
       ...audit(),
       { h: 'VERSION', c: 'version', t: I, def: 1 }
+    ]
+  },
+  {
+    // Sprint 2: receipt print log (LOG_CETAK_PENERIMAAN), append-only
+    table: 'penerimaan_cetak_log', sheets: ['LOG_CETAK_PENERIMAAN'], key: ['id'], appendOnly: true, label: 'Log cetak tanda terima',
+    columns: [
+      { h: 'CETAK_ID', c: 'id', t: T, required: true },
+      { h: 'PENERIMAAN_ID', c: 'penerimaan_id', t: T, required: true },
+      { h: 'NOMOR_TANDA_TERIMA_SNAPSHOT', c: 'nomor_tanda_terima_snapshot', t: T },
+      { h: 'PRINT_TOKEN', c: 'print_token', t: T, required: true },
+      { h: 'CETAK_KE', c: 'cetak_ke', t: I, required: true },
+      { h: 'JENIS_CETAK', c: 'jenis_cetak', t: enumOf(['PERTAMA', 'CETAK ULANG']), required: true },
+      { h: 'STATUS_SNAPSHOT', c: 'status_snapshot', t: T },
+      { h: 'TIMESTAMP', c: 'printed_at', t: TS, required: true },
+      { h: 'USER_EMAIL', c: 'user_email', t: T },
+      { h: 'PDF_FILE_NAME', c: 'pdf_file_name', t: T }
     ]
   },
   {
@@ -300,7 +334,6 @@ export const DEFERRED_SHEETS = {
   'PEMINJAMAN': { sprint: 4, module: 'Peminjaman' },
   'LOG_CETAK_OUT_INDICATOR': { sprint: 4, module: 'Peminjaman (log cetak Out Indicator)' },
   'LOG_CETAK_BERITA_ACARA': { sprint: 4, module: 'Peminjaman (log cetak Berita Acara)' },
-  'LOG_CETAK_PENERIMAAN': { sprint: 2, module: 'Penerimaan (log cetak tanda terima)' },
   'LOG_CETAK_LIDAH': { sprint: 3, module: 'Label lidah folder (log cetak)' },
   'USUL_PINDAH': { sprint: 5, module: 'Usul pemindahan' },
   'USUL_PINDAH_DETAIL': { sprint: 5, module: 'Usul pemindahan (detail berkas)' },
@@ -314,7 +347,6 @@ export const DEFERRED_SHEETS = {
   'SYSTEM_QUARANTINE': { sprint: 3, module: 'Sistem (karantina)' },
   'DB_SEARCH_DOCUMENTS': { sprint: 6, module: 'Cari Isi Berkas (indeks isi)' },
   // found in the real pilot export
-  'MASTER_JENIS_NASKAH': { sprint: 2, module: 'Master jenis/subjenis naskah (registrasi)' },
   'MASTER_JRA': { sprint: 5, module: 'Master JRA (retensi)' },
   'IMPORT_STAGING': { sprint: null, module: 'Staging impor massal lama — tidak ada padanan v4' }
 };

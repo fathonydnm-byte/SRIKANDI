@@ -265,6 +265,9 @@ function crossCheck(data, existing, report, fatal) {
   for (const [k, e] of [...data.penerimaan_item]) {
     if (!penerimaanIds.has(e.out.penerimaan_id)) reject('penerimaan_item', k, e, `penerimaan ${e.out.penerimaan_id} tidak ditemukan (item penerimaan tanpa penerimaan)`);
   }
+  for (const [k, e] of [...data.penerimaan_cetak_log]) {
+    if (!penerimaanIds.has(e.out.penerimaan_id)) reject('penerimaan_cetak_log', k, e, `penerimaan ${e.out.penerimaan_id} tidak ditemukan (log cetak tanpa penerimaan)`);
+  }
   // optional links: keep the row, clear the dangling reference, report the original value
   const klasIds = ids('klasifikasi');
   const pegawaiIds = ids('pegawai');
@@ -303,7 +306,8 @@ function crossCheck(data, existing, report, fatal) {
   report.duplicates = {
     berkasNumber: dup(data.berkas.values(), (o) => (!o.is_deleted && o.no_berkas_definitif !== null ? String(o.no_berkas_definitif) : null)),
     itemNumber: dup(data.item.values(), (o) => (!o.is_deleted && o.no_item_definitif !== null ? `${o.berkas_id} #${o.no_item_definitif}` : null)),
-    receiptNumber: dup(data.penerimaan.values(), (o) => o.nomor_tanda_terima)
+    receiptNumber: dup(data.penerimaan.values(), (o) => o.nomor_tanda_terima),
+    printToken: dup(data.penerimaan_cetak_log.values(), (o) => o.print_token)
   };
   for (const [kind, list] of Object.entries(report.duplicates)) {
     for (const d of list) fatal.push(`Nomor ganda (${kind}) ${d.number}: ${d.ids.join(', ')}`);
@@ -440,7 +444,7 @@ async function loadExisting(client, unitId) {
   existing.item = new Set(await q('select id v from public.item where unit_id = $1'));
   existing.penerimaan_item = new Set(await q('select id v from public.penerimaan_item where unit_id = $1'));
   existing.penerimaanItemArsip = new Set(await q('select arsip_id v from public.penerimaan_item where unit_id = $1 and arsip_id is not null'));
-  for (const t of ['unit_settings', 'riwayat_nomor', 'audit_log']) existing[t] = new Set();
+  for (const t of ['unit_settings', 'riwayat_nomor', 'audit_log', 'jenis_naskah', 'penerimaan_cetak_log']) existing[t] = new Set();
   return existing;
 }
 

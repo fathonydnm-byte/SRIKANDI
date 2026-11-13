@@ -6,6 +6,7 @@
 #   cluster_bootstrap        # Supabase stub
 #   cluster_migrate <label>  # apply every migration in filename order
 #   cluster_psql_file <file> # run a SQL file as the migration owner (postgres)
+#   cluster_set_test_secrets # test-only app.secret.* settings (Vault stand-in)
 #   cluster_env              # export PG* so node `pg` connects as postgres
 #
 # Cleanup (stop + delete) is installed as an EXIT trap by cluster_start.
@@ -71,6 +72,14 @@ cluster_migrate() {
     # pipefail + set -e in the caller: a psql failure aborts the run.
     cluster_psql_file "$f" 2>&1 | { grep -v -E 'NOTICE: .*(already exists|does not exist)' || true; }
   done
+}
+
+# Test-only server secrets (on Supabase they live in Vault). Superuser is
+# needed to persist a custom setting on the database.
+cluster_set_test_secrets() {
+  export CF_TEST_UPLOAD_SECRET="${CF_TEST_UPLOAD_SECRET:-test-only-upload-attest-secret-0123456789abcdef}"
+  "${CLUSTER_PSQL[@]}" -U "$CLUSTER_SUPERUSER" -d "$CLUSTER_DB" \
+    -c "alter database $CLUSTER_DB set app.secret.UPLOAD_ATTEST_SECRET = '$CF_TEST_UPLOAD_SECRET'"
 }
 
 cluster_env() {

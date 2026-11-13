@@ -1,7 +1,9 @@
 # Header keamanan Cloudflare Pages. connect-src mengizinkan proyek Supabase
-# (REST, Auth, Edge Functions, Realtime). Tidak ada skrip inline.
+# (REST, Auth, Realtime) dan sesi unggah resumable Google Drive (PUT langsung
+# ke www.googleapis.com/upload; token Google tidak pernah ada di browser).
+# Tidak ada skrip inline.
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co; manifest-src 'self'; worker-src 'self'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://www.googleapis.com; manifest-src 'self'; worker-src 'self'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin

@@ -7,6 +7,7 @@ import { BrandMark } from './BrandMark';
 import { Sheet } from './Sheet';
 import { OfflineBanner } from './OfflineBanner';
 import { UnitSwitcher, useActiveUnitLabel } from './UnitSwitcher';
+import { UploadTray } from './UploadTray';
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -18,6 +19,7 @@ function pageLabel(pathname: string): string {
   if (pathname === '/akun/kata-sandi') return 'Ubah kata sandi';
   if (pathname.startsWith('/cari/item/')) return 'Detail arsip';
   if (pathname.startsWith('/cari/berkas/')) return 'Daftar Isi Berkas';
+  if (/^\/penerimaan\/[^/]+\/cetak$/.test(pathname)) return 'Cetak Tanda Terima';
   const shortcut = SHORTCUTS.find((x) => pathname === `/dashboard/${x.slug}`);
   if (shortcut) return shortcut.title;
   return findModuleByPath(pathname)?.label ?? 'Halaman';
@@ -280,6 +282,7 @@ export function AppShell() {
         <main id="main" className="content" tabIndex={-1}>
           <Outlet />
         </main>
+        <UploadTray />
       </div>
 
       <nav className="bottom-nav" aria-label="Navigasi utama">

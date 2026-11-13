@@ -32,7 +32,8 @@ async function unitId(code = FIXTURE_UNIT.code) {
   return (await pool.query('select id from public.units where code = $1', [code])).rows[0]?.id;
 }
 
-const TABLES = ['unit_settings', 'klasifikasi', 'pegawai', 'berkas', 'penerimaan', 'item', 'penerimaan_item', 'riwayat_nomor', 'audit_log'];
+const TABLES = ['unit_settings', 'klasifikasi', 'jenis_naskah', 'pegawai', 'berkas', 'penerimaan', 'penerimaan_cetak_log', 'item',
+  'penerimaan_item', 'riwayat_nomor', 'audit_log'];
 async function snapshot(id) {
   const out = {};
   out.units = (await pool.query('select md5(t::text) h from public.units t where id = $1', [id])).rows[0].h;
@@ -86,8 +87,9 @@ test('first import: rows, statuses, dates, links and PII stored as expected', as
   assert.equal(r.status, 'BERHASIL', r.fatal.join('\n'));
   const counts = Object.fromEntries(Object.entries(r.tables).map(([t, s]) => [t, [s.read, s.inserted, s.rejected]]));
   assert.deepEqual(counts, {
-    unit_settings: [10, 8, 0], klasifikasi: [6, 6, 0], pegawai: [2, 2, 0], berkas: [5, 5, 0],
-    penerimaan: [3, 3, 0], item: [6, 5, 1], penerimaan_item: [4, 3, 1], riwayat_nomor: [5, 5, 0], audit_log: [5, 5, 0]
+    unit_settings: [10, 8, 0], klasifikasi: [6, 6, 0], jenis_naskah: [2, 2, 0], pegawai: [2, 2, 0], berkas: [5, 5, 0],
+    penerimaan: [3, 3, 0], penerimaan_cetak_log: [3, 2, 1], item: [6, 5, 1], penerimaan_item: [4, 3, 1], riwayat_nomor: [5, 5, 0],
+    audit_log: [5, 5, 0]
   });
   const id = await unitId();
   const q = async (sql, ...p) => (await pool.query(sql, [id, ...p])).rows;
@@ -182,11 +184,11 @@ test('first import: rows, statuses, dates, links and PII stored as expected', as
 
 test('first import: reconciliation report (orphans, totals, legacy reports, unknown/deferred sheets, open questions)', () => {
   const r = firstReport;
-  assert.deepEqual(r.orphans.rejected.map((o) => `${o.table}:${o.id}`).sort(), ['item:ITM-5', 'penerimaan_item:RCVI-4']);
+  assert.deepEqual(r.orphans.rejected.map((o) => `${o.table}:${o.id}`).sort(), ['item:ITM-5', 'penerimaan_cetak_log:RCPL-3', 'penerimaan_item:RCVI-4']);
   assert.deepEqual(r.orphans.linksCleared.map((o) => `${o.table}.${o.column}=${o.value}`).sort(),
     ['berkas.klasifikasi_id=K-HILANG', 'penerimaan.penyerah_pegawai_id=PGW-HILANG']);
   assert.deepEqual(r.orphans.arsipWithoutSource, [{ itemId: 'ITM-6', arsipId: 'ARS-HILANG', sumber: 'PENERIMAAN_ARSIP' }]);
-  assert.deepEqual(r.duplicates, { berkasNumber: [], itemNumber: [], receiptNumber: [] });
+  assert.deepEqual(r.duplicates, { berkasNumber: [], itemNumber: [], receiptNumber: [], printToken: [] });
 
   assert.equal(r.totals.berkasAktif, 2);
   assert.equal(r.totals.itemAktif, 3);
@@ -206,7 +208,7 @@ test('first import: reconciliation report (orphans, totals, legacy reports, unkn
   assert.deepEqual(r.columnOrder.DB_BERKAS.slice(0, 3), ['JUDUL_BERKAS', 'BERKAS_ID', 'NO_BERKAS_DEFINITIF']);
 
   assert.deepEqual(r.sheets.deferred.map((s) => [s.name, s.rows, s.sprint]), [
-    ['IMPORT_STAGING', 0, null], ['LOG_CETAK_PENERIMAAN', 1, 2], ['MASTER_JENIS_NASKAH', 2, 2], ['MASTER_JRA', 0, 5],
+    ['IMPORT_STAGING', 0, null], ['MASTER_JRA', 0, 5],
     ['OUTBOX_RECORD_CENTER', 0, 5], ['PEMINJAMAN', 2, 4], ['SYSTEM_BACKUPS', 1, 3], ['USUL_PINDAH', 1, 5]
   ]);
   assert.deepEqual(r.sheets.unknown.map((s) => [s.name, s.rows]), [['Catatan Petugas', 1], ['DAFTAR CONTOH LAIN', 2]]);
@@ -250,6 +252,16 @@ test('real-export shapes: extra legacy columns, TYPE=SECRET, Z timestamps, audit
   assert.deepEqual([a5.before_data, a5.after_data, a5.ip_info, a5.result, a5.actor_email_snapshot], [{ judul: 'lama' }, { judul: 'baru' }, '0.0.0.0 (fiktif)', 'WARNING', null]);
   assert.equal((await q("select count(*)::int n from public.unit_settings where unit_id = $1 and key = 'RC_KUNCI_BERSAMA'"))[0].n, 0);
   assert.ok(!renderText(firstReport).includes('nilai-rahasia-tipe'));
+});
+
+test('Sprint 2 sheets: MASTER_JENIS_NASKAH and LOG_CETAK_PENERIMAAN imported faithfully', async () => {
+  const id = await unitId();
+  const jn = (await pool.query('select subjenis_naskah_id, jenis_naskah_id, pola_default, aktif from public.jenis_naskah where unit_id = $1 order by 1', [id])).rows;
+  assert.deepEqual(jn.map((j) => [j.subjenis_naskah_id, j.jenis_naskah_id, j.pola_default, j.aktif]),
+    [['SJ-1', 'JN-1', 'BULANAN', true], ['SJ-2', 'JN-1', 'TAHUNAN', true]]);
+  const logs = (await pool.query('select id, cetak_ke, jenis_cetak, printed_at, print_token from public.penerimaan_cetak_log where unit_id = $1 order by cetak_ke', [id])).rows;
+  assert.deepEqual(logs.map((l) => [l.id, l.cetak_ke, l.jenis_cetak, l.print_token]), [['RCPL-1', 1, 'PERTAMA', 'RCPRINT-1'], ['RCPL-2', 2, 'CETAK ULANG', 'RCPRINT-2']]);
+  assert.equal(logs[1].printed_at.toISOString(), '2026-02-03T03:00:00.000Z');
 });
 
 test('second run: zero changes and identical database state', async () => {

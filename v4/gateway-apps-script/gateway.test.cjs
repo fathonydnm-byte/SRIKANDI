@@ -125,8 +125,16 @@ test('setupGateway stores a 96-hex secret, logs it once, and touches Drive', () 
   assert.match(SOURCE, /DriveApp\.getRootFolder\(\)/);
 });
 
-test('manifest: web app runs as deployer, anonymous access, drive scope only', () => {
+test('authorizeGateway touches Drive and keeps the secret', () => {
+  const g = load();
+  const before = g.props.get('GATEWAY_SECRET');
+  assert.match(g.ctx.authorizeGateway(), /Izin gerbang aktif/);
+  assert.equal(g.props.get('GATEWAY_SECRET'), before);
+});
+
+test('manifest: web app runs as deployer, anonymous access, drive scopes read-all + app-files-only', () => {
   const m = JSON.parse(fs.readFileSync(path.join(__dirname, 'appsscript.json'), 'utf8'));
   assert.deepEqual(m.webapp, { executeAs: 'USER_DEPLOYING', access: 'ANYONE_ANONYMOUS' });
-  assert.deepEqual(m.oauthScopes, ['https://www.googleapis.com/auth/drive.readonly']);
+  assert.deepEqual(m.oauthScopes, ['https://www.googleapis.com/auth/drive.readonly', 'https://www.googleapis.com/auth/drive.file']);
+  assert.ok(!m.oauthScopes.includes('https://www.googleapis.com/auth/drive'), 'full drive scope must not be requested');
 });

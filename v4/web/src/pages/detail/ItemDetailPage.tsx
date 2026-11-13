@@ -1,5 +1,6 @@
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { useAuth, useProfile } from '../../auth/AuthContext';
+import { can } from '../../auth/permissions';
 import { CancelledBadge, FileBadge, LoanBadge, SecurityBadge } from '../../components/Badges';
 import { FileActions } from '../../components/FileActions';
 import { LocationActions } from '../../components/LocationActions';
@@ -15,7 +16,7 @@ export function ItemDetailPage() {
   const { itemId = '' } = useParams();
   const location = useLocation();
   const { client } = useAuth();
-  const { unit } = useProfile();
+  const { unit, profile } = useProfile();
   const [load, retry] = useLoad(`item:${itemId}`, () => getItemDetail(client, itemId));
 
   if (load.kind === 'loading') {
@@ -77,6 +78,9 @@ export function ItemDetailPage() {
           folderUrl={d.drive_folder_url}
           shareTitle={`${d.no_surat || 'Arsip'} — ${d.uraian ?? ''}`.trim()}
         />
+        {!d.has_file && !d.dibatalkan && can(profile.role, 'arsip.kelola') ? (
+          <Link className="btn btn-secondary" to={`/alih-media?item=${encodeURIComponent(d.item_id)}`}>Unggah PDF (Alih Media)</Link>
+        ) : null}
       </section>
 
       <section className="card" aria-labelledby="meta-title">

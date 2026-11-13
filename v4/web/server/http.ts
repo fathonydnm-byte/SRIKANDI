@@ -8,7 +8,12 @@ export type ErrorCode =
   | 'TICKET_EXPIRED'
   | 'TICKET_INVALID'
   | 'UPSTREAM'
-  | 'METHOD';
+  | 'METHOD'
+  | 'FORBIDDEN'
+  | 'TOO_LARGE'
+  | 'INVALID_FILE'
+  | 'UPLOAD_MISMATCH'
+  | 'CONFLICT';
 
 const MESSAGES: Record<ErrorCode, string> = {
   NOT_CONFIGURED: 'Layanan file belum dikonfigurasi. Hubungi Admin Pusat.',
@@ -20,6 +25,11 @@ const MESSAGES: Record<ErrorCode, string> = {
   TICKET_INVALID: 'Tautan file tidak valid. Kembali ke aplikasi dan buka file lagi.',
   UPSTREAM: 'Google Drive sedang tidak dapat dihubungi. Coba lagi beberapa saat lagi.',
   METHOD: 'Metode tidak didukung.',
+  FORBIDDEN: 'Anda tidak berhak melakukan tindakan ini.',
+  TOO_LARGE: 'Ukuran file melebihi batas yang diizinkan.',
+  INVALID_FILE: 'File bukan PDF yang sah. Pilih file PDF lain.',
+  UPLOAD_MISMATCH: 'File yang terunggah tidak sesuai dengan sesi unggah. Ulangi unggahan.',
+  CONFLICT: 'Data sudah berubah. Muat ulang lalu coba lagi.',
 };
 
 const STATUS: Record<ErrorCode, number> = {
@@ -32,6 +42,11 @@ const STATUS: Record<ErrorCode, number> = {
   TICKET_INVALID: 400,
   UPSTREAM: 502,
   METHOD: 405,
+  FORBIDDEN: 403,
+  TOO_LARGE: 413,
+  INVALID_FILE: 422,
+  UPLOAD_MISMATCH: 409,
+  CONFLICT: 409,
 };
 
 const BASE_HEADERS = {
@@ -40,8 +55,8 @@ const BASE_HEADERS = {
   'Referrer-Policy': 'no-referrer',
 };
 
-export function jsonError(code: ErrorCode): Response {
-  return new Response(JSON.stringify({ ok: false, code, message: MESSAGES[code] }), {
+export function jsonError(code: ErrorCode, message?: string): Response {
+  return new Response(JSON.stringify({ ok: false, code, message: message ?? MESSAGES[code] }), {
     status: STATUS[code],
     headers: { ...BASE_HEADERS, 'Content-Type': 'application/json; charset=utf-8' },
   });
