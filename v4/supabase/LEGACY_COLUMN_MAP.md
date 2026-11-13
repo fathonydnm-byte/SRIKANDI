@@ -270,3 +270,16 @@ Sheets outside Config.js found in the pilot:
 - MASTER_JRA (empty): deferred to S5.
 - IMPORT_STAGING (empty): not migrated.
 - DOKUMEN ISO and DAFTAR ARSIP ELEKTRONIK: hand-made layout sheets, reported as unknown.
+
+## Sprint 2 sheets (migration 0010)
+
+| Legacy | Column | Type |
+| --- | --- | --- |
+| MASTER_JENIS_NASKAH.SUBJENIS_NASKAH_ID | jenis_naskah.subjenis_naskah_id | t (PK with unit) |
+| JENIS_NASKAH_ID / KATEGORI / SUBJENIS | jenis_naskah_id / kategori / subjenis | t |
+| POLA_DEFAULT / PERIODE_DEFAULT / TEMPLATE_JUDUL_BERKAS | pola_default / periode_default / template_judul_berkas | t |
+| PERLU_KELENGKAPAN / OPSI_KELENGKAPAN / AKTIF / URUTAN / CATATAN | perlu_kelengkapan / opsi_kelengkapan / aktif / urutan / catatan | b / t / b / i / t |
+| LOG_CETAK_PENERIMAAN.CETAK_ID | penerimaan_cetak_log.id | t (append-only) |
+| PENERIMAAN_ID / NOMOR_TANDA_TERIMA_SNAPSHOT / PRINT_TOKEN | penerimaan_id / nomor_tanda_terima_snapshot / print_token | t (token unique per unit) |
+| CETAK_KE / JENIS_CETAK / STATUS_SNAPSHOT | cetak_ke / jenis_cetak / status_snapshot | i / t (PERTAMA, CETAK ULANG) / t |
+| TIMESTAMP / USER_EMAIL / PDF_FILE_NAME | printed_at / user_email / pdf_file_name | ts / t / t |

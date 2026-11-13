@@ -91,8 +91,8 @@ test('attestation: forged, tampered, expired, future, missing and wrong-owner co
   // tamper: file id swapped
   await expectCode(rpc(pool, fx.user.petugasA, 'upload_commit', { p_session_id: s.session_id, p_drive_file_id: driveId(), p_drive_url: null,
     p_size: 1234, p_md5: 'aa', p_mime: 'application/pdf', p_attested_at: at, p_attestation: att }), 'UPLOAD_ATTESTATION_INVALID');
-  await expectCode(gatewayCommit(pool, fx.user.petugasA, s, { at: nowSec() - 301 }), 'UPLOAD_ATTESTATION_EXPIRED');
-  await expectCode(gatewayCommit(pool, fx.user.petugasA, s, { at: nowSec() + 301 }), 'UPLOAD_ATTESTATION_EXPIRED');
+  await expectCode(gatewayCommit(pool, fx.user.petugasA, s, { at: nowSec() - 305 }), 'UPLOAD_ATTESTATION_EXPIRED');
+  await expectCode(gatewayCommit(pool, fx.user.petugasA, s, { at: nowSec() + 305 }), 'UPLOAD_ATTESTATION_EXPIRED');
   await expectCode(rpc(pool, fx.user.petugasA, 'upload_commit', { p_session_id: s.session_id, p_drive_file_id: fileId, p_drive_url: null,
     p_size: 1234, p_md5: 'aa', p_mime: 'application/pdf', p_attested_at: at, p_attestation: null }), 'UPLOAD_ATTESTATION_INVALID');
   await expectCode(gatewayCommit(pool, fx.user.petugasA2, s), 'NOT_FOUND'); // same unit, not the owner
@@ -106,8 +106,20 @@ test('attestation: forged, tampered, expired, future, missing and wrong-owner co
   const att2 = attestation({ sessionId: s2.session_id, fileId, size: 1234, md5: 'aa', mime: 'application/pdf', at });
   await expectCode(rpc(pool, fx.user.petugasA, 'upload_commit', { p_session_id: s.session_id, p_drive_file_id: fileId, p_drive_url: null,
     p_size: 1234, p_md5: 'aa', p_mime: 'application/pdf', p_attested_at: at, p_attestation: att2 }), 'UPLOAD_ATTESTATION_INVALID');
+  // an attestation 290 s old is still inside the window
+  const m3 = await manualItem(fx.user.petugasA);
+  const s3 = await begin(fx.user.petugasA, 'ITEM_PDF', m3.item_id);
+  assert.equal((await gatewayCommit(pool, fx.user.petugasA, s3, { at: nowSec() - 290 })).ok, true);
   // the secret helper is not callable by clients
-  await expectCode(pool.query("begin; set local role authenticated; select app.server_secret('UPLOAD_ATTEST_SECRET')").finally(() => pool.query('rollback')), '42501');
+  const c = await pool.connect();
+  try {
+    await c.query('begin');
+    await c.query('set local role authenticated');
+    await expectCode(c.query("select app.server_secret('UPLOAD_ATTEST_SECRET')"), '42501');
+  } finally {
+    await c.query('rollback');
+    c.release();
+  }
 });
 
 test('ATTACK: a user of unit B cannot attach unit A\'s Drive file to read it through the download bridge', async () => {

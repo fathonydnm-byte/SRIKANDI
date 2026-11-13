@@ -1,6 +1,6 @@
 # API Sprint 2 — Registrasi (Penerimaan, Pemberkasan, Unggah)
 
-Status: **DRAFT** while being implemented (`v4/supabase/migrations/0010`–`0014`). This file is kept accurate to the SQL; the web agent reads it from disk.
+Status: **implemented** in `v4/supabase/migrations/0010`–`0014`, with tests in `v4/tests/db/s2_*.test.mjs`. This file matches the SQL.
 
 All functions are called with supabase-js `rpc(name, params)`; parameter names are the SQL names below (with the `p_` prefix). All return `jsonb`.
 
@@ -270,7 +270,7 @@ The browser never registers a Drive file id by itself. Flow:
 
 1. `upload_begin(...)`: the DB validates and returns where and how to name the file.
 2. The Pages Function performs the resumable upload to Drive, using the instansi token.
-3. The Pages Function verifies the file in Drive (id, size, md5, mime, parent folder). It then computes `attestation = hex(HMAC-SHA256(UPLOAD_ATTEST_SECRET, canonical))`, where `canonical = "CFUP1\n<session_id>\n<drive_file_id>\n<size>\n<md5>\n<mime>\n<attested_at>"`, `attested_at` is unix seconds, and `size` is the decimal byte count.
+3. The Pages Function verifies the file in Drive (id, size, md5, mime, parent folder). It then computes `attestation = hex(HMAC-SHA256(UPLOAD_ATTEST_SECRET, canonical))`, where `canonical = "CFUP1\n<session_id>\n<drive_file_id>\n<size>\n<md5>\n<mime>\n<attested_at>"`. `attested_at` is unix seconds and `size` is the decimal byte count. Every value goes in **exactly as it is passed to `upload_commit`** (trimmed only; the DB stores md5 lowercased). Lowercase hex is used for the attestation itself.
 4. The Pages Function (with the user's JWT), or the browser passing those values through, calls `upload_commit(...)`.
 
 `app.server_secret('UPLOAD_ATTEST_SECRET')` reads Supabase Vault (`vault.decrypted_secrets`). Locally, when the vault schema is absent, it reads `current_setting('app.secret.UPLOAD_ATTEST_SECRET')`. The secret is never returned to clients.
@@ -310,7 +310,7 @@ Errors: `NOT_FOUND`, `ITEM_HAS_FILE`, `OBJECT_BORROWED`, `EVIDENCE_EXISTS`, `REC
 Guards:
 
 - Only the session owner may commit; anyone else gets `NOT_FOUND`.
-- The attestation must be valid (`UPLOAD_ATTESTATION_INVALID`) and fresh, `|now − attested_at| ≤ 300 s` (`UPLOAD_ATTESTATION_EXPIRED`).
+- The attestation must be valid (`UPLOAD_ATTESTATION_INVALID`) and fresh, `|floor(now) − attested_at| ≤ 300 s` in whole unix seconds (`UPLOAD_ATTESTATION_EXPIRED`).
 - The session must be `OPEN` and not expired: `UPLOAD_SESSION_EXPIRED` / `UPLOAD_SESSION_STATE`.
 - The file must satisfy the session's limits: `FILE_TOO_LARGE` / `FILE_TYPE`.
 - A Drive file id already referenced by any record gives `UPLOAD_FILE_IN_USE`.
@@ -340,6 +340,11 @@ Returns `{ ok, session_id, purpose, object_id, drive_file_id, drive_tasks: [...]
 - Attestation: `canonical = "CFFD1\n<session_id>\n<folder_id>\n<attested_at>"` under the same secret.
 - Returns `{ ok, folder_id, registered: bool }`.
 
+### `media_options(p_unit_id uuid default null)` — read · `apiGetMediaUploadOptions`
+
+- Returns `{ berkas: [{ id, number, title, label, items: [{ id, number, description, document_date, page_count, file_status, planned_file_name, label }] }], total_missing }`.
+- Lists non-deleted items of non-deleted berkas that have no PDF.
+
 ### Drive tasks (renames after renumbering)
 
 - `drive_task_list(p_unit_id uuid default null)` — writers. Returns `{ tasks: [{ id, kind: "RENAME_FOLDER"|"RENAME_FILE", drive_id, new_name, object_type, object_id, attempts, created_at }] }`, pending tasks oldest first. A newer rename of the same Drive object supersedes the older one.
@@ -356,4 +361,27 @@ All of them have RLS enabled and forced. `jenis_naskah` and `penerimaan_cetak_lo
 
 ## 6. Deviations from 3.32.5 (justified)
 
-Filled in as the implementation settles.
+1. **PDF goes in after the item exists.** `upload_begin(ITEM_PDF)` requires an existing item. Input Manual and filing first commit the metadata, then the PDF is attached through the same path as Alih Media.
+   - In 3.x the PDF could ride along in the same submit.
+   - Since 3.12, an item without a PDF (`BELUM DIUNGGAH`) is a valid state, so the intermediate state is legal.
+   - The file only ever links after the attested commit, so a database row is never committed for a file that is incomplete.
+2. **Drive folders and renames are asynchronous.** The DB cannot call Drive.
+   - The gateway creates the folder from `folder_path` (or uses `known_folder_id`) and caches it with `upload_register_folder`.
+   - Renames after renumbering are queued in `drive_tasks` and returned in the RPC response.
+   - As in 3.x, a rename failure never undoes the data; 3.x likewise recorded it as a warning.
+3. **Alih media sets `STATUS_BENTUK_DIGITAL = ALIH MEDIA`** when it was `TIDAK ADA`/empty. 3.x MediaService left the value untouched, while the CF-01 backfill rule ("item with file → ALIH MEDIA") produces this value. Doing it at commit keeps the data consistent without a backfill.
+4. **Signed evidence uploaded when evidence already exists is refused** with `EVIDENCE_EXISTS`. 3.x answered "sudah tersimpan" and left the second file orphaned; the error lets the gateway trash it. Attaching signed evidence to a cancelled receipt is still allowed, as in 3.x.
+5. **Creating a receipt ignores a client-sent `archive_id`.** `ARS-…` ids are always generated by the server, so a client cannot collide with another source's ARSIP_ID. On edit, new lines may carry one.
+6. **Receipt id** is `RCV-` + upper(request id), the same form as 3.x, where the client's `RCV-…` request id became the receipt id.
+7. **Numbering tie-breaks.**
+   - When date, letter number and `SORT_CREATED_AT` are all equal, the final tie-break is the item/berkas id. 3.x used sheet row order (stable sort), which a database does not have.
+   - The `SORT_CREATED_AT` suffix of filed receipt lines follows (receipt line created_at, receipt, line no) instead of sheet row order.
+   - On the pilot data, the ported algorithm reproduces every legacy number, date, total and security level exactly: 0 differences across all 28 berkas.
+8. **Classification.** A primary *without* children is accepted, exactly as 3.x `validateClassification_` and its test `secondary-classification.test.cjs` do. A primary *with* children is refused. See the open question.
+9. **`kategori_naskah_id` / `pola_pemberkasan` are optional on a new berkas**, validated against `jenis_naskah`. 3.x always wrote `''`; the default keeps that behaviour.
+10. **TRM counter.** Before each number, the counter is raised to at least the highest existing `TRM-<year>-NNNN` of the unit, so imported numbers are never reused. 3.x used max+1 on every save; the result is identical.
+11. **Upload sessions.**
+    - One open session per object and purpose: the same user supersedes; another user gets `UPLOAD_SESSION_ACTIVE`.
+    - Sessions expire after 24 h; 3.x purged uncommitted sessions after 7 days.
+    - Commit requires size = declared size, as 3.x refused "Ukuran PDF berubah selama upload".
+12. **Idempotency is stricter.** A reused request id with a different payload raises `IDEMPOTENCY_CONFLICT`, where 3.x silently returned the first result.

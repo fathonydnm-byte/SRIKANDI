@@ -23,7 +23,8 @@ begin
   if pg_catalog.lower(p_attestation) <> v_expected then
     perform app.fail('UPLOAD_ATTESTATION_INVALID', 'Bukti verifikasi file dari server tidak valid. Ulangi unggah.');
   end if;
-  if pg_catalog.abs(pg_catalog.date_part('epoch', now())::bigint - p_attested_at) > 300 then
+  -- second granularity: floor(now) vs the gateway's unix seconds; 300 s inclusive window
+  if pg_catalog.abs(pg_catalog.floor(pg_catalog.date_part('epoch', now()))::bigint - p_attested_at) > 300 then
     perform app.fail('UPLOAD_ATTESTATION_EXPIRED', 'Bukti verifikasi file sudah kedaluwarsa. Ulangi penyelesaian unggah.');
   end if;
 end
