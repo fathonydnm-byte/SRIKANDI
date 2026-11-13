@@ -21,7 +21,7 @@ Isi `web/src/`:
 | `lib/supabase.ts` | Pembuatan klien Supabase (satu tempat) |
 | `lib/api.ts` | Akses data; `callWrite()` selalu mengirim `requestId` (UUID) sebagai kunci idempotensi |
 | `lib/files.ts` | Satu-satunya jalur membuka file: minta tiket ke `/api/files/ticket`, lalu buka `/api/files/download` (Lihat / Unduh / Bagikan berkas ≤ 20 MB) |
-| `../functions/`, `../server/` | Cloudflare Pages Functions jembatan unduh (tiket HMAC 60 detik, audit, streaming Drive dengan Range) |
+| `../functions/`, `../server/` | Cloudflare Pages Functions jembatan unduh (tiket HMAC 10 menit, audit, streaming Drive dengan Range) |
 | `pages/search/`, `pages/detail/` | Cari Arsip (kriteria di URL), detail item, Daftar Isi Berkas |
 | `lib/errors.ts` | Penerjemah error teknis → pesan yang bisa ditindaklanjuti |
 | `pages/`, `components/` | Layar dan komponen; modul yang belum dibangun memakai `PlaceholderPage` |
@@ -74,7 +74,7 @@ Layar baca memakai RPC di `supabase/migrations/0006_search.sql`, semuanya SECURI
 
 ## Jembatan unduh file
 
-Pengguna tidak punya akses Google Drive. Alurnya: browser → `POST /api/files/ticket` (JWT Supabase; hak akses dicek `get_file_access` di bawah RLS, akses dicatat `log_file_access`) → tiket 60 detik → `GET /api/files/download?t=…` → token Drive dari gerbang Apps Script (permintaan bertanda tangan HMAC) → file dialirkan dari Drive API.
+Pengguna tidak punya akses Google Drive. Alurnya: browser → `POST /api/files/ticket` (JWT Supabase; hak akses dicek `get_file_access` di bawah RLS, akses dicatat `log_file_access`) → tiket 10 menit → `GET /api/files/download?t=…` → token Drive dari gerbang Apps Script (permintaan bertanda tangan HMAC) → file dialirkan dari Drive API.
 
 Variabel server di Cloudflare Pages (Settings → Variables and Secrets, tipe Secret): `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `FILE_TICKET_SECRET`, `DRIVE_GATEWAY_URL`, `DRIVE_GATEWAY_SECRET`. Tanpa service-role key. Selama gerbang belum dipasang, tombol file menampilkan "Jembatan Drive belum dipasang". Mode darurat lama (buka URL Drive langsung) hanya bila build diberi `VITE_FILE_ACCESS_MODE=drive-url`.
 
