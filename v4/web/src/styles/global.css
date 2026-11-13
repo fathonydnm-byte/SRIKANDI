@@ -399,6 +399,9 @@ h1[tabindex='-1']:focus {
   left: 8px;
   top: -60px;
   z-index: 100;
+  min-height: var(--touch);
+  display: inline-flex;
+  align-items: center;
   background: var(--navy);
   color: #fff;
   padding: 10px 14px;
@@ -717,11 +720,17 @@ h1[tabindex='-1']:focus {
 }
 
 /* ---------- Dashboard ---------- */
+.content > .alert + .page-header {
+  margin-top: 16px;
+}
 .info-grid {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
   margin-top: 16px;
+}
+.info-grid > .info-card:first-child {
+  grid-column: 1 / -1;
 }
 .info-card {
   display: flex;
@@ -731,17 +740,17 @@ h1[tabindex='-1']:focus {
   background: var(--white);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  padding: 14px 16px;
+  padding: 12px 14px;
   box-shadow: var(--shadow-subtle);
 }
 .info-card > div {
   min-width: 0;
 }
 .info-icon {
+  display: none;
   width: 44px;
   height: 44px;
   border-radius: var(--radius-md);
-  display: grid;
   place-items: center;
   font-size: 19px;
   flex-shrink: 0;
@@ -828,6 +837,16 @@ h1[tabindex='-1']:focus {
 @media (min-width: 600px) {
   .info-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .info-grid > .info-card:first-child {
+    grid-column: auto;
+  }
+  .info-card {
+    padding: 14px 16px;
+  }
+  .info-icon {
+    display: grid;
   }
   .card {
     padding: 24px;

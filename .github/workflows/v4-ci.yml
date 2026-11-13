@@ -1,0 +1,74 @@
+name: v4 CI
+
+on:
+  push:
+    paths:
+      - 'v4/**'
+      - '.github/workflows/v4-ci.yml'
+  pull_request:
+    paths:
+      - 'v4/**'
+      - '.github/workflows/v4-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v4-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: web (typecheck, lint, test, build)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: v4/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: v4/web/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      # Build tanpa env Supabase: memastikan build lolos; aplikasi hasilnya
+      # menampilkan layar "Konfigurasi aplikasi belum lengkap". Env asli hanya
+      # di Cloudflare Pages.
+      - run: npm run build
+      - name: Ringkasan ukuran build
+        run: du -ah dist/assets | sort -h | tail -n 10 >> "$GITHUB_STEP_SUMMARY"
+
+  db:
+    name: db (schema, RLS)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # v4/tests/db/run.sh (lihat komentar kepalanya) membuat cluster Postgres 16
+      # sementara sendiri dengan initdb/pg_ctl dari PG_BIN, jadi tidak memakai
+      # service container. Runner ubuntu-24.04 biasanya sudah memuat binari
+      # PostgreSQL 16; bila tidak ada, pasang dari apt.
+      - name: Pastikan binari server PostgreSQL 16
+        run: |
+          if [ ! -x /usr/lib/postgresql/16/bin/initdb ]; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends postgresql-16
+          fi
+          /usr/lib/postgresql/16/bin/postgres --version
+      - name: Tes database
+        env:
+          PG_BIN: /usr/lib/postgresql/16/bin
+        run: |
+          if [ -f v4/tests/db/run.sh ]; then
+            bash v4/tests/db/run.sh
+          else
+            echo "::warning::v4/tests/db/run.sh belum ada; tes database dilewati."
+          fi
