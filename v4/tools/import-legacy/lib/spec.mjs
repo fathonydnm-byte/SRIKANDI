@@ -24,7 +24,9 @@ export const TABLES = [
       { h: 'KEY', c: 'key', t: T, required: true },
       { h: 'VALUE', c: 'value', t: 'settingValue' },
       { h: 'TYPE', c: 'value_type', t: T, def: 'STRING' },
-      { h: 'DESCRIPTION', c: 'description', t: T }
+      { h: 'DESCRIPTION', c: 'description', t: T },
+      { h: 'SCOPE', c: 'scope', t: T },
+      { h: 'UPDATED_AT', c: 'updated_at', t: TS, keepWhenNull: true }
     ]
   },
   {
@@ -38,7 +40,14 @@ export const TABLES = [
       { h: 'LABEL_DROPDOWN', c: 'label_dropdown', t: T },
       // legacy getClassificationData_: only TRUE is active, blank = inactive
       { h: 'AKTIF', c: 'aktif', t: B, def: false },
-      { h: 'URUTAN', c: 'urutan', t: I }
+      { h: 'URUTAN', c: 'urutan', t: I },
+      { h: 'KODE_PRIMER', c: 'kode_primer', t: T },
+      { h: 'KODE_SEKUNDER', c: 'kode_sekunder', t: T },
+      { h: 'KODE_TERSIER', c: 'kode_tersier', t: T },
+      { h: 'STATUS_REVIEW', c: 'status_review', t: T },
+      { h: 'SUMBER', c: 'sumber', t: T },
+      { h: 'CATATAN', c: 'catatan', t: T },
+      { h: 'UPDATED_AT', c: 'updated_at', t: TS, keepWhenNull: true }
     ]
   },
   {
@@ -107,6 +116,16 @@ export const TABLES = [
       { h: 'JRA_ID', c: 'jra_id', t: T },
       { h: ['JRA_DASAR_HUKUM', 'DASAR_HUKUM_JRA'], c: 'jra_dasar_hukum', t: T },
       { h: ['JRA_VERSI', 'VERSI_JRA'], c: 'jra_versi', t: T },
+      // found in the real pilot sheet (0007)
+      { h: 'NO_BERKAS_LAMA', c: 'no_berkas_lama', t: T },
+      { h: 'JRA_NAMA_SNAPSHOT', c: 'jra_nama_snapshot', t: T },
+      { h: 'TGL_PEMINDAHAN', c: 'tgl_pemindahan', t: D },
+      { h: 'BUKTI_PEMINDAHAN_FILE_ID', c: 'bukti_pemindahan_file_id', t: T },
+      { h: 'BUKTI_PEMINDAHAN_FILE_URL', c: 'bukti_pemindahan_file_url', t: T },
+      { h: 'DISETUJUI_PEMINDAHAN_OLEH', c: 'disetujui_pemindahan_oleh', t: T },
+      { h: 'TGL_PERSETUJUAN_PEMINDAHAN', c: 'tgl_persetujuan_pemindahan', t: D },
+      { h: 'CATATAN_PEMINDAHAN', c: 'catatan_pemindahan', t: T },
+      { h: 'DELETED_AT', c: 'deleted_at', t: TS },
       ...audit(),
       { h: 'VERSION', c: 'version', t: I, def: 1 },
       { h: 'IS_DELETED', c: 'is_deleted', t: B, def: false }
@@ -186,6 +205,9 @@ export const TABLES = [
       { h: 'CATATAN_MEDIA', c: 'catatan_media', t: T },
       { h: 'STATUS_VERIFIKASI_METADATA', c: 'status_verifikasi_metadata', t: VERIFIKASI },
       { h: 'METADATA_SCHEMA_VERSION', c: 'metadata_schema_version', t: I },
+      // found in the real pilot sheet (0007)
+      { h: 'NO_ITEM_LAMA', c: 'no_item_lama', t: T },
+      { h: 'DELETED_AT', c: 'deleted_at', t: TS },
       ...audit(),
       { h: 'VERSION', c: 'version', t: I, def: 1 },
       { h: 'IS_DELETED', c: 'is_deleted', t: B, def: false }
@@ -245,7 +267,8 @@ export const TABLES = [
       { h: 'DIKONFIRMASI_OLEH', c: 'dikonfirmasi_oleh', t: T },
       { h: 'DIKONFIRMASI_AT', c: 'dikonfirmasi_at', t: TS },
       { h: 'CREATED_AT', c: 'created_at', t: TS, required: true },
-      { h: 'CREATED_BY', c: 'created_by', t: T }
+      { h: 'CREATED_BY', c: 'created_by', t: T },
+      { h: 'CATATAN', c: 'catatan', t: T }
     ]
   },
   {
@@ -263,7 +286,11 @@ export const TABLES = [
       { h: 'RINGKASAN', c: 'summary', t: T },
       { h: 'ALASAN', c: 'reason', t: T },
       { h: 'REQUEST_ID', c: 'request_id', t: T },
-      { h: 'STATUS', c: 'result', t: AUDIT_RESULT, def: 'SUCCESS' }
+      { h: 'STATUS', c: 'result', t: AUDIT_RESULT, def: 'SUCCESS' },
+      { h: 'DATA_SEBELUM_JSON', c: 'before_data', t: cv.json },
+      { h: 'DATA_SESUDAH_JSON', c: 'after_data', t: cv.json },
+      { h: 'IP_INFO', c: 'ip_info', t: T },
+      { h: 'CATATAN', c: 'catatan', t: T }
     ]
   }
 ];
@@ -285,7 +312,11 @@ export const DEFERRED_SHEETS = {
   'SYSTEM_JOB_QUEUE': { sprint: 3, module: 'Sistem (antrean pekerjaan)' },
   'SYSTEM_HEALTH_LOG': { sprint: 3, module: 'Sistem (health)' },
   'SYSTEM_QUARANTINE': { sprint: 3, module: 'Sistem (karantina)' },
-  'DB_SEARCH_DOCUMENTS': { sprint: 6, module: 'Cari Isi Berkas (indeks isi)' }
+  'DB_SEARCH_DOCUMENTS': { sprint: 6, module: 'Cari Isi Berkas (indeks isi)' },
+  // found in the real pilot export
+  'MASTER_JENIS_NASKAH': { sprint: 2, module: 'Master jenis/subjenis naskah (registrasi)' },
+  'MASTER_JRA': { sprint: 5, module: 'Master JRA (retensi)' },
+  'IMPORT_STAGING': { sprint: null, module: 'Staging impor massal lama — tidak ada padanan v4' }
 };
 
 // Derived report sheets: not imported, used to cross-check totals.
@@ -309,3 +340,5 @@ export const OPEN_QUESTIONS = [
 
 // unit_settings keys that must never be imported (same rule as the DB check constraint).
 export const SECRET_KEY_RE = /(SECRET|PASSWORD|TOKEN|PRIVATE_KEY|API_KEY)/;
+// SETTINGS.TYPE values that mark a secret regardless of the key name (real pilot export uses TYPE=SECRET).
+export const SECRET_TYPES = ['SECRET', 'PASSWORD'];

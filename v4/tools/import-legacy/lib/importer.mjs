@@ -5,7 +5,7 @@ import { basename } from 'node:path';
 import pg from 'pg';
 import { readWorkbook } from './workbook.mjs';
 import { convert, ValueError, isBlank, looseInt } from './convert.mjs';
-import { TABLES, DEFERRED_SHEETS, REPORT_SHEETS, OPEN_QUESTIONS, SECRET_KEY_RE } from './spec.mjs';
+import { TABLES, DEFERRED_SHEETS, REPORT_SHEETS, OPEN_QUESTIONS, SECRET_KEY_RE, SECRET_TYPES } from './spec.mjs';
 
 export class FatalImportError extends Error {}
 
@@ -157,7 +157,12 @@ export async function analyseWorkbook(file) {
       if (sheet.duplicateHeaders.length) report.duplicateHeaders[name] = sheet.duplicateHeaders;
       if (['DB_BERKAS', 'DB_ITEM'].includes(name)) report.columnOrder[name] = sheet.headers;
       const { resolved, unknown, missingOptional, missingRequired } = resolveColumns(spec, sheet);
-      if (unknown.length) report.unknownColumns[name] = unknown;
+      if (unknown.length) {
+        // with how many rows actually carry data in each unmapped column (data there would not be imported)
+        report.unknownColumns[name] = unknown.map((h) => ({
+          column: h, nonEmpty: sheet.rows.filter((r) => !isBlank(r.values[h])).length
+        }));
+      }
       if (missingOptional.length) report.missingOptionalColumns[name] = missingOptional;
       for (const h of missingRequired) fatal.push(`Sheet ${name}: kolom wajib ${h} tidak ada.`);
       if (missingRequired.length) continue;
@@ -167,7 +172,10 @@ export async function analyseWorkbook(file) {
         const { out, errors, fatal: rowFatal } = convertRow(spec, name, row, resolved, tr, report.notes);
         if (rowFatal.length) { fatal.push(...rowFatal); continue; }
         if (spec.table === 'unit_settings' && out.key) {
-          if (SECRET_KEY_RE.test(out.key)) { report.skippedSecretSettings.push(out.key); continue; }
+          if (SECRET_KEY_RE.test(out.key) || SECRET_TYPES.includes(String(out.value_type || '').toUpperCase())) {
+            report.skippedSecretSettings.push(out.key);
+            continue;
+          }
           if (!/^[A-Z][A-Z0-9_]*$/.test(out.key)) errors.push(`sheet ${name} baris ${row.rowNumber} kolom KEY: format kunci tidak valid "${out.key}"`);
         }
         if (errors.length) {
@@ -353,9 +361,13 @@ async function stageAndMerge(client, spec, rows, unitId, tr, piiActive) {
   const cols = ['unit_id', ...specCols.filter((c) => c !== 'unit_id')];
   const usedCols = cols.filter((c) => !piiCols.has(c) || piiActive.has(c));
   const { rows: types } = await client.query(
-    `select attname, format_type(atttypid, atttypmod) as type from pg_attribute
-     where attrelid = $1::regclass and attnum > 0 and not attisdropped`, [`public.${spec.table}`]);
+    `select a.attname, format_type(a.atttypid, a.atttypmod) as type, pg_get_expr(d.adbin, d.adrelid) as def
+     from pg_attribute a left join pg_attrdef d on d.adrelid = a.attrelid and d.adnum = a.attnum
+     where a.attrelid = $1::regclass and a.attnum > 0 and not a.attisdropped`, [`public.${spec.table}`]);
   const typeOf = Object.fromEntries(types.map((t) => [t.attname, t.type]));
+  const defaultOf = Object.fromEntries(types.map((t) => [t.attname, t.def]));
+  // keepWhenNull: a blank legacy cell keeps the database value (column default on insert), so reruns stay unchanged
+  const keepCols = new Set(spec.columns.filter((c) => c.keepWhenNull).map((c) => c.c));
   const stage = `_imp_${spec.table}`;
   const q = (c) => `"${c}"`;
   await client.query(`drop table if exists pg_temp.${stage}`);
@@ -377,8 +389,12 @@ async function stageAndMerge(client, spec, rows, unitId, tr, piiActive) {
   }
   const valueCols = usedCols.filter((c) => !keyCols.includes(c));
   const tExpr = (c) => (piiCols.has(c) ? `app.decrypt_pii(t.${q(c)})` : `t.${q(c)}`);
-  const sExpr = (c) => (piiCols.has(c) ? `app.encrypt_pii(s.${q(c)})` : `s.${q(c)}`);
-  const diffArray = `array_remove(array[${valueCols.map((c) => `case when ${tExpr(c)} is distinct from s.${q(c)} then '${c}' end`).join(', ')}]::text[], null)`;
+  const sExpr = (c) => (piiCols.has(c) ? `app.encrypt_pii(s.${q(c)})`
+    : keepCols.has(c) && defaultOf[c] ? `coalesce(s.${q(c)}, ${defaultOf[c]})` : `s.${q(c)}`);
+  const setExpr = (c) => (keepCols.has(c) ? `coalesce(s.${q(c)}, t.${q(c)})` : sExpr(c));
+  const differs = (c) => (keepCols.has(c) ? `s.${q(c)} is not null and ${tExpr(c)} is distinct from s.${q(c)}`
+    : `${tExpr(c)} is distinct from s.${q(c)}`);
+  const diffArray = `array_remove(array[${valueCols.map((c) => `case when ${differs(c)} then '${c}' end`).join(', ')}]::text[], null)`;
   const { rows: diffs } = await client.query(
     `select ${keyCols.map((k) => `s.${q(k)}`).join(', ')}, ${diffArray} as changed
      from ${stage} s join public.${spec.table} t on ${match}
@@ -400,7 +416,7 @@ async function stageAndMerge(client, spec, rows, unitId, tr, piiActive) {
       }
     } else {
       const upd = await client.query(
-        `update public.${spec.table} t set ${valueCols.map((c) => `${q(c)} = ${sExpr(c)}`).join(', ')}
+        `update public.${spec.table} t set ${valueCols.map((c) => `${q(c)} = ${setExpr(c)}`).join(', ')}
          from ${stage} s where ${match} and cardinality(${diffArray}) > 0`);
       tr.updated = upd.rowCount;
       for (const d of diffs) for (const c of d.changed) tr.changedColumns[c] = (tr.changedColumns[c] || 0) + 1;

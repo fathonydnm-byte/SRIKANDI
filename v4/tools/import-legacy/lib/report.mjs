@@ -89,7 +89,7 @@ export function renderText(r) {
     h('Sheet');
     line(`  Diimpor        : ${r.sheets.imported.map((s) => `${s.name} (${s.rows})`).join(', ') || '–'}`);
     line('  Ditunda        :');
-    r.sheets.deferred.forEach((s) => line(`    - ${s.name}: ${n(s.rows)} baris — ditunda ke sprint ${s.sprint} (${s.module})`));
+    r.sheets.deferred.forEach((s) => line(`    - ${s.name}: ${n(s.rows)} baris — ${s.sprint ? `ditunda ke sprint ${s.sprint}` : 'tidak dimigrasi'} (${s.module})`));
     if (!r.sheets.deferred.length) line('    –');
     line(`  Laporan turunan (tidak diimpor, dipakai untuk pembanding): ${r.sheets.reportsOnly.map((s) => s.name).join(', ') || '–'}`);
     line(`  Tidak dikenal  : ${r.sheets.unknown.map((s) => `${s.name} (${s.rows} baris)`).join(', ') || '–'}`);
@@ -102,7 +102,7 @@ export function renderText(r) {
   if (r.piiColumnsEncrypted?.length) line(`\nKolom data pribadi yang dienkripsi: ${r.piiColumnsEncrypted.join(', ')}`);
   h('Kolom tidak dikenal (tidak diimpor)');
   const unk = Object.entries(r.unknownColumns || {});
-  line(unk.length ? unk.map(([s, c]) => `  ${s}: ${c.join(', ')}`).join('\n') : '  tidak ada');
+  line(unk.length ? unk.map(([s, c]) => `  ${s}: ${c.map((x) => `${x.column}${x.nonEmpty ? ` (BERISI DATA di ${x.nonEmpty} baris — tidak diimpor)` : ' (kosong)'}`).join(', ')}`).join('\n') : '  tidak ada');
   h('Kolom opsional yang tidak ada');
   const miss = Object.entries(r.missingOptionalColumns || {});
   line(miss.length ? miss.map(([s, c]) => `  ${s}: ${c.join(', ')}`).join('\n') : '  tidak ada');
