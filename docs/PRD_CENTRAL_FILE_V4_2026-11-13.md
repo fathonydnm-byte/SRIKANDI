@@ -40,9 +40,9 @@ Bukan tujuan: membangun ulang Record Center (dikembangkan terpisah oleh pemilik)
 | --- | --- | --- |
 | Tampilan | React + TypeScript + Vite, PWA, mobile-first | Di-host di Cloudflare Pages (gratis, bandwidth tidak dibatasi seperti Netlify) |
 | Database + login | Supabase: Postgres, Auth email/kata sandi, Row Level Security | Dua proyek gratis: produksi dan staging |
-| Logika bisnis | Supabase Edge Functions (TypeScript) dengan transaksi SQL | Semua operasi tulis lewat server; penomoran memakai lock database |
+| Logika bisnis | Fungsi RPC di Postgres (transaksi atomik, otorisasi di dalam fungsi) | Semua operasi tulis lewat server; penomoran memakai lock database. Revisi 13 Nov: menggantikan rencana Edge Functions karena lebih cepat, lebih sederhana dipasang, dan teruji dengan Postgres lokal |
 | File | Google Drive akun instansi; database menyimpan ID Drive, checksum, ukuran | ID file lama tetap berlaku, jadi tidak ada migrasi file |
-| Jembatan Drive/Docs | Cloudflare Pages Functions + Drive/Docs REST API dengan token akun instansi; cadangan: gerbang Apps Script bertanda tangan HMAC | Dipastikan lewat spike di Sprint 0 |
+| Jembatan Drive/Docs | Cloudflare Pages Functions + gerbang Apps Script bertanda tangan HMAC yang menerbitkan token Drive sementara | Unduhan terbukti dengan Drive asli di staging (13 Nov); gerbang hanya boleh membaca, dan menulis hanya ke folder buatan aplikasi |
 | Pekerjaan terjadwal | `pg_cron` + GitHub Actions | Backup, cermin spreadsheet, polling keputusan RC, penjaga agar proyek tidak dijeda |
 
 ### 3.2 Opsi yang dipertimbangkan
