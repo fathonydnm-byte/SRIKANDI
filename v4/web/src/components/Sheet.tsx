@@ -14,6 +14,17 @@ export function Sheet({ title, onClose, children, variant }: { title: string; on
     ref.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
   }, []);
 
+  // Escape juga bekerja bila fokus sempat lepas dari dialog (mis. tombol dinonaktifkan saat menyimpan).
+  useEffect(() => {
+    function onDocKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (ref.current && ref.current.contains(document.activeElement)) return; // ditangani onKeyDown
+      onClose();
+    }
+    document.addEventListener('keydown', onDocKey);
+    return () => document.removeEventListener('keydown', onDocKey);
+  }, [onClose]);
+
   function onKeyDown(e: ReactKeyboardEvent<HTMLDivElement>) {
     if (e.key === 'Escape') {
       e.stopPropagation();

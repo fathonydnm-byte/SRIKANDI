@@ -67,11 +67,15 @@ const CODE_TO_ERROR: Record<string, ErrorCode> = {
 /** Error RPC → jawaban JSON dengan kode API_S2 dan pesan Indonesia dari server. */
 function rpcError(out: RpcOutcome<unknown>): Response {
   if (out.status === 401) return jsonError('UNAUTHENTICATED');
-  const apiCode = out.error?.code ?? '';
-  const mapped = CODE_TO_ERROR[apiCode] ?? (out.status === 403 ? 'FORBIDDEN' : out.status >= 500 ? 'UPSTREAM' : 'BAD_REQUEST');
-  if (mapped === 'UPSTREAM') return jsonError('UPSTREAM');
-  const res = jsonError(mapped, out.error?.message || undefined);
-  res.headers.set('X-Api-Code', /^[A-Z][A-Z0-9_]+$/.test(apiCode) ? apiCode : 'INTERNAL');
+  const e = out.error;
+  if (!e?.business) {
+    // Bukan error bisnis: pesan umum saja (teks Postgres/PostgREST tidak pernah diteruskan).
+    if (out.status === 403) return jsonError('FORBIDDEN');
+    return jsonError('UPSTREAM');
+  }
+  const mapped = CODE_TO_ERROR[e.code] ?? 'BAD_REQUEST';
+  const res = jsonError(mapped, e.message || undefined);
+  res.headers.set('X-Api-Code', e.code);
   return res;
 }
 

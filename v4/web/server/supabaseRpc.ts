@@ -5,20 +5,26 @@ export interface RpcOutcome<T> {
   status: number;
   data: T | null;
   /** Pesan dari Postgres (sudah berbahasa Indonesia untuk error bisnis), tanpa detail teknis lain. */
-  error: { code: string; message: string } | null;
+  /** business = error bisnis API_S2 (P0001 + kode); hanya pesannya yang boleh ditampilkan ke pengguna. */
+  error: { code: string; message: string; business: boolean } | null;
 }
 
 /**
  * Error bisnis API_S2: SQLSTATE P0001, hint = KODE, message = "KODE: pesan".
  * Mengembalikan kode stabil dan pesan Indonesia tanpa awalan kode.
  */
-export function businessError(body: { code?: unknown; message?: unknown; hint?: unknown } | null): { code: string; message: string } {
+export function businessError(body: { code?: unknown; message?: unknown; hint?: unknown } | null): { code: string; message: string; business: boolean } {
   const raw = typeof body?.message === 'string' ? body.message : '';
   const hint = typeof body?.hint === 'string' && /^[A-Z][A-Z0-9_]+$/.test(body.hint) ? body.hint : null;
   const m = /^([A-Z][A-Z0-9_]+):\s*([\s\S]*)$/.exec(raw);
-  const code = hint ?? m?.[1] ?? (typeof body?.code === 'string' ? body.code : 'INTERNAL');
+  const business = body?.code === 'P0001' && Boolean(hint ?? m);
+  if (!business) {
+    // Error sistem/PostgREST: jangan teruskan teks teknisnya.
+    return { code: typeof body?.code === 'string' ? body.code : 'INTERNAL', message: '', business: false };
+  }
+  const code = hint ?? m![1]!;
   const message = (m && (!hint || m[1] === hint) ? m[2]! : raw).slice(0, 300);
-  return { code, message };
+  return { code, message, business: true };
 }
 
 export async function callRpc<T>(env: FileEnv, jwt: string, fn: string, args: Record<string, unknown>, fetchFn: FetchFn): Promise<RpcOutcome<T>> {

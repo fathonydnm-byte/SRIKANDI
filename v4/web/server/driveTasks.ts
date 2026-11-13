@@ -36,7 +36,7 @@ export async function handleDriveTasks(request: Request, env: FileEnv, fetchFn: 
 
   const list = await callRpc<{ tasks?: DriveTask[] }>(env, jwt, 'drive_task_list', { p_unit_id: unitId }, fetchFn).catch(() => null);
   if (!list) return jsonError('UPSTREAM');
-  if (list.error) return list.status === 401 ? jsonError('UNAUTHENTICATED') : jsonError('FORBIDDEN', list.error.message || undefined);
+  if (list.error) return list.status === 401 ? jsonError('UNAUTHENTICATED') : jsonError('FORBIDDEN', list.error.business ? list.error.message || undefined : undefined);
   const tasks = (list.data?.tasks ?? []).slice(0, MAX_PER_CALL);
   const ctx: DriveCtx = { env, fetchFn, now: () => nowSec };
   let done = 0;

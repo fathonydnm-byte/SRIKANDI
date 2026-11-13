@@ -150,6 +150,16 @@ describe('POST /api/files/upload-session', () => {
     expect(w.calls.some((c) => c.url.includes('googleapis'))).toBe(false);
   });
 
+  it('error sistem Postgres/PostgREST tidak pernah diteruskan teksnya', async () => {
+    const w = world({ begin: { code: 'PGRST202', message: 'Could not find the function public.upload_begin(p_x) in the schema cache' }, beginStatus: 404 });
+    const res = await handleUploadSession(post('/x', SESSION_BODY), ENV, w.fetchFn, NOW);
+    const body = (await res.json()) as { message: string };
+    expect(res.status).toBe(502);
+    expect(body.message).not.toMatch(/function|schema|upload_begin/);
+    const w2 = world({ begin: { code: '42883', message: 'function public.upload_begin(unknown) does not exist' }, beginStatus: 400 });
+    expect(((await (await handleUploadSession(post('/x', SESSION_BODY), ENV, w2.fetchFn, NOW)).json()) as { message: string }).message).not.toMatch(/function/);
+  });
+
   it('error RPC: pesan server diteruskan; tanpa sesi/konfigurasi/input buruk ditolak', async () => {
     const w = world({ begin: { code: 'P0001', message: 'ITEM_HAS_FILE: Item ini sudah memiliki PDF.', hint: 'ITEM_HAS_FILE' }, beginStatus: 400 });
     const res = await handleUploadSession(post('/api/files/upload-session', SESSION_BODY), ENV, w.fetchFn, NOW);

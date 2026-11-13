@@ -67,6 +67,12 @@ const CODE_ACTIONS: Record<string, string> = {
   ITEM_ALREADY_FILED: 'Muat ulang daftar antrean.',
   SOURCE_ALREADY_ACTIVE: 'Muat ulang daftar antrean.',
   UPLOAD_SESSION_ACTIVE: 'Tunggu unggahan lain selesai, lalu coba lagi.',
+  RECEIPT_HAS_FILED_ITEMS: 'Setelah item dikeluarkan dari berkas, ulangi pembatalan.',
+  RECEIPT_CANCELLED: 'Muat ulang daftar tanda terima.',
+  ITEM_NOT_READY: 'Lengkapi metadata item di Penerimaan Naskah terlebih dahulu.',
+  BATCH_LIMIT: 'Pilih paling banyak 100 item per penyimpanan.',
+  CLASSIFICATION_INVALID: 'Pilih kode klasifikasi lain.',
+  BERKAS_TRANSFERRED: 'Pilih berkas lain yang belum dipindahkan.',
 };
 
 /** Error RPC → ApiError. P0001: hint = KODE, message = "KODE: pesan". */
