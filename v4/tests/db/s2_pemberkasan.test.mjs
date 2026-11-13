@@ -81,9 +81,12 @@ test('filing into a NEW berkas: inherited metadata, item order, aggregates, rete
 test('chronological renumbering across berkas: numbers move, IDs stay, history and Drive renames recorded', async () => {
   const x = await manual(fx.user.petugasA, newBerkasTarget({ title: 'Berkas X' }), { description: 'x1', document_date: '2024-05-01' });
   assert.deepEqual([x.berkas_number, x.item_number], [1, 1]);
-  // give X a Drive folder and file so renames get queued
-  await owner(pool, `update public.berkas set drive_folder_id = 'fld-x-0000000001' where id = $1`, [x.berkas_id]);
+  // X has a legacy folder (read-only for v4), an app-owned v4 folder, and an app-owned file (committed upload)
+  await owner(pool, `update public.berkas set drive_folder_id = 'fld-legacy-x-00001', v4_drive_folder_id = 'fld-x-0000000001' where id = $1`, [x.berkas_id]);
   await owner(pool, `update public.item set drive_file_id = 'fil-x-0000000001' where id = $1`, [x.item_id]);
+  await owner(pool, `insert into public.upload_sessions (unit_id, request_id, owner_user_id, purpose, object_type, object_id, drive_name,
+                       max_bytes, status, drive_file_id) values ($1, gen_random_uuid(), $2, 'ITEM_PDF', 'ITEM', $3, 'x.pdf', 1, 'COMMITTED', 'fil-x-0000000001')`,
+    [fx.unit.A, fx.user.petugasA, x.item_id]);
   const y = await manual(fx.user.petugasA2, newBerkasTarget({ title: 'Berkas Y' }), { description: 'y1', document_date: '2023-01-01' });
   assert.equal(y.berkas_number, 1);
   assert.equal(y.renumbered_berkas_count, 1);
@@ -97,6 +100,8 @@ test('chronological renumbering across berkas: numbers move, IDs stay, history a
   assert.deepEqual(hist.map((h) => [h.jenis_objek, h.nomor_lama, h.nomor_baru]), [['BERKAS', 1, 2]]);
   const tasks = y.drive_tasks.map((t) => [t.kind, t.drive_id, t.new_name]).sort();
   assert.deepEqual(tasks, [['RENAME_FILE', 'fil-x-0000000001', '2_1_x1.pdf'], ['RENAME_FOLDER', 'fld-x-0000000001', '2_Berkas X']]);
+  // nothing is queued for the legacy folder (the gateway cannot write it)
+  assert.ok(!y.drive_tasks.some((t) => t.drive_id === 'fld-legacy-x-00001'));
   // an older item into X moves item numbers inside X
   const x0 = await manual(fx.user.petugasA, { mode: 'EXISTING', berkas_id: x.berkas_id }, { description: 'x0', document_date: '2023-06-01' });
   assert.equal(x0.item_number, 1);
@@ -144,6 +149,30 @@ test('manual item: ARSIP_ID = ITEM_ID, INPUT_MANUAL, no PDF, validation and clas
   const bj = await berkasRow(withJenis.berkas_id);
   assert.deepEqual([bj.kategori_naskah_id, bj.pola_pemberkasan], ['JN-1', 'SERI']);
   await expectCode(manual(fx.user.petugasA, { mode: 'EXISTING', berkas_id: 'BRK-TIDAK-ADA' }, {}), 'NOT_FOUND');
+});
+
+test('new berkas CF-01 metadata: vital/terjaga flags, creator snapshot, media and counts derived from items', async () => {
+  await owner(pool, `insert into public.unit_settings (unit_id, key, value) values ($1, 'ARCHIVE_CREATOR_NAME', '"Pencipta Fiktif"'),
+                     ($1, 'UNIT_ID', '"UNIT-FIKTIF"'), ($1, 'UNIT_NAME', '"Unit Fiktif"') on conflict do nothing`, [fx.unit.A]);
+  const v = await manual(fx.user.petugasA, newBerkasTarget({ title: 'Vital', arsip_vital: true }), {});
+  const bv = await berkasRow(v.berkas_id);
+  assert.deepEqual({ vital: bv.arsip_vital, terjaga: bv.arsip_terjaga, pencipta: bv.pencipta_arsip_snapshot, unitId: bv.unit_pencipta_id,
+    unitName: bv.unit_pencipta_snapshot, media: bv.media_berkas, fisik: bv.jumlah_item_fisik, bd: bv.jumlah_item_born_digital, am: bv.jumlah_item_alih_media },
+  { vital: true, terjaga: false, pencipta: 'Pencipta Fiktif', unitId: 'UNIT-FIKTIF', unitName: 'Unit Fiktif', media: 'TEKSTUAL', fisik: 1, bd: 0, am: 0 });
+  const d = await manual(fx.user.petugasA, newBerkasTarget({ title: 'Default' }), {});
+  const bd = await berkasRow(d.berkas_id);
+  assert.deepEqual([bd.arsip_vital, bd.arsip_terjaga], [false, false]);
+  await expectCode(manual(fx.user.petugasA, newBerkasTarget({ arsip_terjaga: 'mungkin' }), {}), 'INVALID_INPUT');
+  // receipt lines of mixed media make the berkas KOMBINASI
+  const rc = await makeReceipt(pool, fx, fx.user.petugasA, 'A', [receiptItem({ description: 'M1' }), receiptItem({ description: 'M2' })]);
+  await owner(pool, `update public.penerimaan_item set media_sumber = 'AUDIO VISUAL' where id = $1`, [rc.itemIds[1]]);
+  const f = await file(fx.user.petugasA, rc.itemIds, newBerkasTarget({ title: 'Kombinasi', arsip_terjaga: true }));
+  const bk = await berkasRow(f.berkas_id);
+  assert.deepEqual([bk.media_berkas, bk.jumlah_item_fisik, bk.arsip_terjaga], ['KOMBINASI', 2, true]);
+  const opts = await rpc(pool, fx.user.petugasA, 'registration_options', {});
+  assert.deepEqual(opts.archive_categories.map((c) => [c.key, c.default]), [['arsip_vital', false], ['arsip_terjaga', false]]);
+  assert.deepEqual(opts.media_berkas_values, ['TEKSTUAL', 'AUDIO VISUAL', 'DIGITAL', 'KOMBINASI', 'BELUM DITETAPKAN']);
+  assert.equal(opts.archive_creator.name, 'Pencipta Fiktif');
 });
 
 test('filing guards: limits, duplicates, already filed, incomplete, cancelled, transferred, active duplicate source', async () => {

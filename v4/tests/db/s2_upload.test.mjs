@@ -1,10 +1,10 @@
 // Sprint 2 — upload sessions with attested commit, folder registration, Drive tasks.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHmac } from 'node:crypto';
 import {
   configureSecret, newPool, rpc, expectCode, owner, createS2Fixture, receiptItem, makeReceipt, newBerkasTarget,
-  gatewayCommit, attestation, folderAttestation, taskAttestation, nowSec, driveId
+  gatewayCommit, attestation, folderAttestation, taskAttestation, nowSec, driveId, SECRET
 } from './s2_fixture.mjs';
 
 let pool;
@@ -33,8 +33,9 @@ test('upload_begin ITEM_PDF: legacy name and folder, limits, guards, idempotent 
   assert.match(s.unit_code, /^S2/);
   assert.equal(s.drive_name, `${m.berkas_number}_${m.item_number}_Surat-uji- -PDF-.pdf`);
   assert.deepEqual(s.folder_path, [`${m.berkas_number}_Berkas unggah`]);
+  // legacy folders are never handed out for writing (gateway token cannot write them)
   assert.equal(s.known_folder_id, null);
-  assert.equal(s.root_folder_id, 'root-folder-fiktif-0001');
+  assert.equal(s.root_folder_id, null);
   assert.equal(s.max_bytes, 104857599);
   const again = await begin(fx.user.petugasA, 'ITEM_PDF', m.item_id, { request_id: req });
   assert.deepEqual([again.session_id, again.replayed], [s.session_id, true]);
@@ -53,6 +54,10 @@ test('upload_begin ITEM_PDF: legacy name and folder, limits, guards, idempotent 
   // ADMIN_PUSAT works on the object's unit
   const sp = await begin(fx.user.pusat, 'ITEM_PDF', (await manualItem(fx.user.petugasA)).item_id);
   assert.equal(sp.unit_id, fx.unit.A);
+  // a berkas with only a legacy folder: still no known folder
+  const ml = await manualItem(fx.user.petugasA, { title: 'Legacy folder' });
+  await owner(pool, `update public.berkas set drive_folder_id = 'fld-legacy-only-001' where id = $1`, [ml.berkas_id]);
+  assert.equal((await begin(fx.user.petugasA, 'ITEM_PDF', ml.item_id)).known_folder_id, null);
 });
 
 test('commit with a valid attestation links the PDF atomically; replay is idempotent; then ITEM_HAS_FILE', async () => {
@@ -206,8 +211,8 @@ test('register folder (attested) caches the berkas folder; forged refused', asyn
   const ok = await rpc(pool, fx.user.petugasA, 'upload_register_folder', { p_session_id: s.session_id, p_folder_id: folder, p_attested_at: at,
     p_attestation: folderAttestation({ sessionId: s.session_id, folderId: folder, at }) });
   assert.equal(ok.registered, true);
-  const [b] = await owner(pool, 'select drive_folder_id, drive_folder_url from public.berkas where id = $1', [m.berkas_id]);
-  assert.deepEqual([b.drive_folder_id, b.drive_folder_url], [folder, `https://drive.google.com/drive/folders/${folder}`]);
+  const [b] = await owner(pool, 'select drive_folder_id, drive_folder_url, v4_drive_folder_id from public.berkas where id = $1', [m.berkas_id]);
+  assert.deepEqual([b.v4_drive_folder_id, b.drive_folder_id, b.drive_folder_url], [folder, null, null], 'legacy columns untouched');
   const second = await rpc(pool, fx.user.petugasA, 'upload_register_folder', { p_session_id: s.session_id, p_folder_id: 'fld' + randomUUID().replace(/-/g, ''),
     p_attested_at: at, p_attestation: folderAttestation({ sessionId: s.session_id, folderId: folder, at }) }).catch((e) => e);
   assert.equal(second.hint, 'UPLOAD_ATTESTATION_INVALID');
@@ -215,11 +220,35 @@ test('register folder (attested) caches the berkas folder; forged refused', asyn
     p_target: { mode: 'EXISTING', berkas_id: m.berkas_id }, p_item: { description: 'kedua', page_count: 1, development_level: 'ASLI',
       security_classification: 'BIASA/TERBUKA', document_date: '2024-02-01' } })).item_id);
   assert.equal(s2.known_folder_id, folder);
+  // unit root (p_kind ROOT): its own canonical suffix, then returned as root_folder_id; legacy settings untouched
+  const root = 'fld' + randomUUID().replace(/-/g, '');
+  const at2 = nowSec();
+  await expectCode(rpc(pool, fx.user.petugasA, 'upload_register_folder', { p_session_id: s2.session_id, p_folder_id: root, p_kind: 'ROOT',
+    p_attested_at: at2, p_attestation: folderAttestation({ sessionId: s2.session_id, folderId: root, at: at2 }) }), 'UPLOAD_ATTESTATION_INVALID');
+  const rootAtt = createHmac('sha256', SECRET).update(['CFFD1', s2.session_id, root, String(at2), 'ROOT'].join('\n')).digest('hex');
+  const rr = await rpc(pool, fx.user.petugasA, 'upload_register_folder', { p_session_id: s2.session_id, p_folder_id: root, p_kind: 'ROOT',
+    p_attested_at: at2, p_attestation: rootAtt });
+  assert.deepEqual([rr.kind, rr.registered], ['ROOT', true]);
+  const s3 = await begin(fx.user.petugasA, 'ITEM_PDF', (await manualItem(fx.user.petugasA)).item_id);
+  assert.equal(s3.root_folder_id, root);
+  const legacy = await owner(pool, "select value #>> '{}' v from public.unit_settings where unit_id = $1 and key = 'ARCHIVE_FOLDER_ID'", [fx.unit.A]);
+  assert.equal(legacy[0].v, 'root-folder-fiktif-0001');
+  // receipt evidence folder -> V4_RECEIPT_PROOF_FOLDER_ID, then known_folder_id for the next evidence upload
+  const r = await makeReceipt(pool, fx, fx.user.petugasA, 'A', [receiptItem()]);
+  const se = await begin(fx.user.petugasA, 'RECEIPT_EVIDENCE', r.receipt_id);
+  assert.equal(se.known_folder_id, null);
+  const ef = 'fld' + randomUUID().replace(/-/g, '');
+  await rpc(pool, fx.user.petugasA, 'upload_register_folder', { p_session_id: se.session_id, p_folder_id: ef, p_attested_at: at2,
+    p_attestation: folderAttestation({ sessionId: se.session_id, folderId: ef, at: at2 }) });
+  const r2 = await makeReceipt(pool, fx, fx.user.petugasA, 'A', [receiptItem()]);
+  assert.equal((await begin(fx.user.petugasA, 'RECEIPT_EVIDENCE', r2.receipt_id)).known_folder_id, ef);
+  const proof = await owner(pool, "select key from public.unit_settings where unit_id = $1 and key in ('RECEIPT_PROOF_FOLDER_ID', 'V4_RECEIPT_PROOF_FOLDER_ID')", [fx.unit.A]);
+  assert.deepEqual(proof.map((p) => p.key), ['V4_RECEIPT_PROOF_FOLDER_ID']);
 });
 
 test('drive tasks after renumbering: listed, completed with attestation, failures audited', async () => {
   const x = await manualItem(fx.user.petugasA, { title: 'Tugas X', date: '2030-01-01' });
-  await owner(pool, `update public.berkas set drive_folder_id = 'fld-tugas-x-000001' where id = $1`, [x.berkas_id]);
+  await owner(pool, `update public.berkas set v4_drive_folder_id = 'fld-tugas-x-000001' where id = $1`, [x.berkas_id]);
   const y = await manualItem(fx.user.petugasA, { title: 'Tugas Y', date: '2000-01-01' });
   const task = y.drive_tasks.find((t) => t.drive_id === 'fld-tugas-x-000001');
   assert.ok(task, 'folder rename queued');
@@ -238,4 +267,23 @@ test('drive tasks after renumbering: listed, completed with attestation, failure
   assert.ok(!(await rpc(pool, fx.user.petugasA, 'drive_task_list', {})).tasks.some((t) => t.id === task.id));
   await expectCode(rpc(pool, fx.user.petugasB, 'drive_task_complete', { p_task_id: task.id, p_ok: true, p_error: null, p_attested_at: at,
     p_attestation: taskAttestation({ taskId: task.id, ok: true, at }) }), 'NOT_FOUND');
+  // permanent failure: FAILED at once, exactly one RENAME_WARNING row; transient: stays PENDING until the 5th attempt
+  await owner(pool, `update public.berkas set v4_drive_folder_id = 'fld-tugas-z-000001' where id = $1`, [y.berkas_id]);
+  const z = await manualItem(fx.user.petugasA, { title: 'Tugas Z', date: '1990-01-01' });
+  const pt = z.drive_tasks.find((t) => t.drive_id === 'fld-tugas-z-000001');
+  const perm = await rpc(pool, fx.user.petugasA, 'drive_task_complete', { p_task_id: pt.id, p_ok: false, p_error: 'NOT_APP_FILE', p_permanent: true,
+    p_attested_at: at, p_attestation: taskAttestation({ taskId: pt.id, ok: false, at }) });
+  assert.deepEqual([perm.status, perm.attempts, perm.permanent], ['FAILED', 1, true]);
+  const again = await rpc(pool, fx.user.petugasA, 'drive_task_complete', { p_task_id: pt.id, p_ok: false, p_error: 'NOT_APP_FILE', p_permanent: true,
+    p_attested_at: at, p_attestation: taskAttestation({ taskId: pt.id, ok: false, at }) });
+  assert.deepEqual([again.status, again.replayed], ['FAILED', true]);
+  const warn = await owner(pool, `select reason from public.audit_log where action = 'RENAME_WARNING' and after_data ->> 'task_id' = $1`, [pt.id]);
+  assert.deepEqual(warn.map((w) => w.reason), ['PERMANEN: NOT_APP_FILE']);
+  let last;
+  const tr = (await owner(pool, `select id from public.drive_tasks where unit_id = $1 and status = 'PENDING' order by created_at limit 1`, [fx.unit.A]))[0];
+  for (let i = 1; i <= 5; i++) {
+    last = await rpc(pool, fx.user.petugasA, 'drive_task_complete', { p_task_id: tr.id, p_ok: false, p_error: 'rate limit',
+      p_attested_at: at, p_attestation: taskAttestation({ taskId: tr.id, ok: false, at }) });
+    assert.equal(last.status, i < 5 ? 'PENDING' : 'FAILED');
+  }
 });

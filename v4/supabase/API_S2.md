@@ -1,6 +1,6 @@
 # API Sprint 2 — Registrasi (Penerimaan, Pemberkasan, Unggah)
 
-Status: **implemented** in `v4/supabase/migrations/0010`–`0014`, with tests in `v4/tests/db/s2_*.test.mjs`. This file matches the SQL.
+Status: **implemented** in `v4/supabase/migrations/0010`–`0015` (0015 = integration follow-ups), with tests in `v4/tests/db/s2_*.test.mjs`. This file matches the SQL.
 
 All functions are called with supabase-js `rpc(name, params)`; parameter names are the SQL names below (with the `p_` prefix). All return `jsonb`.
 
@@ -188,6 +188,11 @@ Signed evidence ("bukti tertandatangani") is attached through the upload flow (�
 ```
 
 - `berkas` lists non-deleted berkas not yet transferred, ordered by number (drafts last).
+- 0015 adds:
+  - `archive_categories: [{ key: "arsip_vital", label, default: false }, { key: "arsip_terjaga", label, default: false }]`
+  - `media_sources: ["TEKSTUAL","AUDIO VISUAL","DIGITAL"]`
+  - `media_berkas_values: ["TEKSTUAL","AUDIO VISUAL","DIGITAL","KOMBINASI","BELUM DITETAPKAN"]` (read-only, derived)
+  - `archive_creator: { name, unit_name }`
 - `classifications` contains active rows only. `selectable` follows the 3.x rule: secondary always; otherwise only when the row has no active children. So a primary *with* children is not selectable, while a leaf primary is.
 
 ### `filing_options(p_unit_id uuid default null)` — read · `apiGetReceiptFilingOptions`
@@ -201,7 +206,13 @@ Signed evidence ("bukti tertandatangani") is attached through the upload flow (�
 `p_target`:
 
 - `{ "mode": "EXISTING", "berkas_id": "BRK-…" }`, or
-- `{ "mode": "NEW", "title", "classification_id", "active_retention_value", "active_retention_unit", "inactive_retention_value", "inactive_retention_unit", "final_disposition", "filing_cabinet"?, "drawer"?, "notes"?, "kategori_naskah_id"?, "pola_pemberkasan"? }`
+- `{ "mode": "NEW", "title", "classification_id", "active_retention_value", "active_retention_unit", "inactive_retention_value", "inactive_retention_unit", "final_disposition", "filing_cabinet"?, "drawer"?, "notes"?, "kategori_naskah_id"?, "pola_pemberkasan"?, "arsip_vital"?, "arsip_terjaga"? }`
+
+CF-01 berkas metadata on a new berkas (0015):
+
+- `arsip_vital` / `arsip_terjaga`: optional booleans (JSON `true`/`false`, or the strings `"true"`/`"false"`). Default `false`, as the 3.x backfill. Anything else gives `INVALID_INPUT`.
+- `pencipta_arsip_snapshot`, `unit_pencipta_id`, `unit_pencipta_snapshot` are taken from the unit settings `ARCHIVE_CREATOR_NAME` (default `UIN Sunan Ampel Surabaya`), `UNIT_ID` and `UNIT_NAME` — the values 3.x fills by backfill. They are not parameters.
+- `media_berkas`, `jumlah_item_fisik`, `jumlah_item_born_digital` and `jumlah_item_alih_media` are **derived** from the berkas' active items each time the berkas is a filing or manual-input target. The rules are those of 3.x `centralFileMetadataSummarizeItems_`: one source → that source; several → `KOMBINASI`; none → `BELUM DITETAPKAN`. They are not parameters, because 3.x never takes them as input.
 
 Guards:
 
@@ -281,7 +292,7 @@ Purposes:
 
 | Purpose | Object | Rules | drive_name | Folder |
 | --- | --- | --- | --- | --- |
-| `ITEM_PDF` | `item.id` | Item non-deleted, berkas non-deleted, item has no PDF yet (replacement is Edit, Sprint 3), item and berkas not borrowed. `.pdf`, mime `application/pdf` or `application/octet-stream`, size 1 … 104857599 (< 100 MB). | `<no berkas>_<no item>_<uraian_nama_file>.pdf` | berkas folder `<no>_<judul>` |
+| `ITEM_PDF` | `item.id` | Item non-deleted, berkas non-deleted, item has no PDF yet (replacement is Edit, Sprint 3), item and berkas not borrowed. `.pdf`, mime `application/pdf` or `application/octet-stream`, size 1 … 104857599 (< 100 MB). | `<no berkas>_<no item>_<uraian_nama_file>.pdf` | berkas folder `<no>_<judul>` in the v4 tree |
 | `RECEIPT_EVIDENCE` | `penerimaan.id` | No signed evidence yet. `.pdf`, size 1 … 10485760 (≤ 10 MB). | `<TRM>_Tanda-Terima-Tertandatangani.pdf` | `BUKTI PENERIMAAN ARSIP` |
 | `RECEIPT_CANCEL_EVIDENCE` | `penerimaan.id` | Receipt active. Same file rules as above. | `<TRM>_Bukti-Pembatalan.pdf` | `BUKTI PENERIMAAN ARSIP` |
 
@@ -293,7 +304,12 @@ Returns:
   "max_bytes", "expires_at", "replayed": bool }
 ```
 
-- `folder_path` is relative to the unit archive root `root_folder_id`. When `known_folder_id` is set, upload straight into it.
+- **App-owned Drive tree (0015).** The gateway token can only write folders it created, so every folder id returned here is a v4 one:
+  - `known_folder_id` = `berkas.v4_drive_folder_id` for `ITEM_PDF`, or the unit setting `V4_RECEIPT_PROOF_FOLDER_ID` for evidence. It is never the legacy `berkas.drive_folder_id` or `RECEIPT_PROOF_FOLDER_ID`.
+  - `root_folder_id` = the unit setting `V4_ROOT_FOLDER_ID`, or `null` when no v4 root has been registered yet. It is never the legacy `ARCHIVE_FOLDER_ID`.
+  - `folder_path` is relative to `root_folder_id`. When `root_folder_id` is null, the gateway creates the unit root (where it is configured to) and registers it with `upload_register_folder(..., p_kind => 'ROOT')`.
+  - When `known_folder_id` is set, upload straight into it.
+- Legacy folder columns stay as they are, for reading only.
 - `max_bytes` is inclusive.
 
 Sessions:
@@ -332,13 +348,21 @@ Returns `{ ok, session_id, purpose, object_id, drive_file_id, drive_tasks: [...]
 - Returns `{ ok, drive_file_id | null }`; the gateway may trash that file.
 - A committed `ITEM_PDF` or `RECEIPT_EVIDENCE` session cannot be cancelled: `UPLOAD_SESSION_STATE`.
 
-### `upload_register_folder(p_session_id uuid, p_folder_id text, p_attested_at bigint, p_attestation text)` — write
+### `upload_register_folder(p_session_id uuid, p_folder_id text, p_kind text, p_attested_at bigint, p_attestation text)` — write
 
-- Caches the Drive folder the gateway created or found for an open session:
-  - `ITEM_PDF` → `berkas.drive_folder_id` / `_url`, only when empty;
-  - evidence → unit setting `RECEIPT_PROOF_FOLDER_ID`.
-- Attestation: `canonical = "CFFD1\n<session_id>\n<folder_id>\n<attested_at>"` under the same secret.
-- Returns `{ ok, folder_id, registered: bool }`.
+The 4-argument form `(p_session_id, p_folder_id, p_attested_at, p_attestation)` means `p_kind = 'TARGET'`.
+
+Caches a folder of the **v4 tree** the gateway created or found for an open or committed session of the caller. Legacy columns are never written; a value already set is never overwritten.
+
+- `p_kind 'TARGET'`:
+  - `ITEM_PDF` → `berkas.v4_drive_folder_id`;
+  - evidence → unit setting `V4_RECEIPT_PROOF_FOLDER_ID`;
+  - `canonical = "CFFD1\n<session_id>\n<folder_id>\n<attested_at>"`.
+- `p_kind 'ROOT'`:
+  - unit setting `V4_ROOT_FOLDER_ID`;
+  - `canonical = "CFFD1\n<session_id>\n<folder_id>\n<attested_at>\nROOT"`.
+
+Returns `{ ok, folder_id, kind, registered: bool }`.
 
 ### `media_options(p_unit_id uuid default null)` — read · `apiGetMediaUploadOptions`
 
@@ -348,7 +372,15 @@ Returns `{ ok, session_id, purpose, object_id, drive_file_id, drive_tasks: [...]
 ### Drive tasks (renames after renumbering)
 
 - `drive_task_list(p_unit_id uuid default null)` — writers. Returns `{ tasks: [{ id, kind: "RENAME_FOLDER"|"RENAME_FILE", drive_id, new_name, object_type, object_id, attempts, created_at }] }`, pending tasks oldest first. A newer rename of the same Drive object supersedes the older one.
-- `drive_task_complete(p_task_id uuid, p_ok boolean, p_error text, p_attested_at bigint, p_attestation text)` — writers. Attestation `canonical = "CFDT1\n<task_id>\n<ok|fail>\n<attested_at>"`. Marks the task `DONE`, or increments `attempts` and stores the error.
+- `drive_task_complete(p_task_id uuid, p_ok boolean, p_error text, p_permanent boolean, p_attested_at bigint, p_attestation text)` — writers. The 5-argument form without `p_permanent` means `false`.
+  - Attestation `canonical = "CFDT1\n<task_id>\n<ok|fail>\n<attested_at>"`; `p_permanent` is not part of it.
+  - `p_ok = true` → `DONE`.
+  - Failure with `p_permanent = true` (e.g. `NOT_APP_FILE`, `NOT_FOUND`) → `FAILED` immediately.
+  - Transient failure → `attempts + 1`, `FAILED` at the 5th attempt.
+  - Each failure report writes exactly one `RENAME_WARNING` audit row (`after_data.task_id`).
+  - A task that is no longer `PENDING` returns `{status, replayed: true}` and writes nothing.
+  - Returns `{ ok, status, attempts, permanent?, replayed }`.
+- **Which renames are queued (0015).** Only app-owned Drive objects get rename tasks: the v4 berkas folder (`v4_drive_folder_id`), and item files committed through `upload_commit`. Legacy folders and files keep their old names; the gateway cannot rename them, and the database numbers remain the reference.
 
 ## 5. Tables added in S2
 
@@ -365,7 +397,7 @@ All of them have RLS enabled and forced. `jenis_naskah` and `penerimaan_cetak_lo
    - In 3.x the PDF could ride along in the same submit.
    - Since 3.12, an item without a PDF (`BELUM DIUNGGAH`) is a valid state, so the intermediate state is legal.
    - The file only ever links after the attested commit, so a database row is never committed for a file that is incomplete.
-2. **Drive folders and renames are asynchronous.** The DB cannot call Drive.
+2. **Drive folders and renames are asynchronous, and only for the app-owned tree (0015).** New uploads go into a v4 folder tree, not into the legacy berkas folders, and legacy objects are not renamed. The DB cannot call Drive.
    - The gateway creates the folder from `folder_path` (or uses `known_folder_id`) and caches it with `upload_register_folder`.
    - Renames after renumbering are queued in `drive_tasks` and returned in the RPC response.
    - As in 3.x, a rename failure never undoes the data; 3.x likewise recorded it as a warning.
@@ -384,4 +416,5 @@ All of them have RLS enabled and forced. `jenis_naskah` and `penerimaan_cetak_lo
     - One open session per object and purpose: the same user supersedes; another user gets `UPLOAD_SESSION_ACTIVE`.
     - Sessions expire after 24 h; 3.x purged uncommitted sessions after 7 days.
     - Commit requires size = declared size, as 3.x refused "Ukuran PDF berubah selama upload".
-12. **Idempotency is stricter.** A reused request id with a different payload raises `IDEMPOTENCY_CONFLICT`, where 3.x silently returned the first result.
+12. **CF-01 metadata of a new berkas (0015).** 3.x registration did not capture vital/terjaga/media. Its backfill set vital/terjaga to `false` and the creator from settings, and derived media and counts from the items. v4 takes vital/terjaga as optional inputs (default `false`), fills the creator at creation, and derives media and counts when the berkas is a target.
+13. **Idempotency is stricter.** A reused request id with a different payload raises `IDEMPOTENCY_CONFLICT`, where 3.x silently returned the first result.
