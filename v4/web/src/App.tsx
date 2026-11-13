@@ -8,7 +8,8 @@ import { AppShell } from './components/AppShell';
 import type { AppConfig } from './config';
 import { ChangePasswordPage } from './pages/ChangePasswordPage';
 import { ConfigMissingPage } from './pages/ConfigMissingPage';
-import { DashboardPage } from './pages/DashboardPage';
+import { DashboardPage } from './pages/dashboard/DashboardPage';
+import { ShortcutListPage } from './pages/dashboard/ShortcutListPage';
 import { BerkasDetailPage } from './pages/detail/BerkasDetailPage';
 import { ItemDetailPage } from './pages/detail/ItemDetailPage';
 import { SearchPage } from './pages/search/SearchPage';
@@ -24,6 +25,7 @@ const BUILT: Record<string, () => ReactElement> = {
   cari: () => <SearchPage />,
 };
 const CARI = MODULES.find((m) => m.id === 'cari')!;
+const DASHBOARD = MODULES.find((m) => m.id === 'dashboard')!;
 
 export function AppRoutes() {
   return (
@@ -41,6 +43,7 @@ export function AppRoutes() {
               element={<RequireModule module={m}>{BUILT[m.id]?.() ?? <PlaceholderPage module={m} />}</RequireModule>}
             />
           ))}
+          <Route path="/dashboard/:slug" element={<RequireModule module={DASHBOARD}><ShortcutListPage /></RequireModule>} />
           <Route path="/cari/item/:itemId" element={<RequireModule module={CARI}><ItemDetailPage /></RequireModule>} />
           <Route path="/cari/berkas/:berkasId" element={<RequireModule module={CARI}><BerkasDetailPage /></RequireModule>} />
           <Route path="/akun/kata-sandi" element={<ChangePasswordPage />} />

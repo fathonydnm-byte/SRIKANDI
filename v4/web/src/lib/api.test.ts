@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ApiError, callWrite, checkHealth, newRequestId } from './api';
+import { ApiError, callWrite, newRequestId } from './api';
 import { createFakeClient } from '../test/fakeSupabase';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -30,12 +30,5 @@ describe('lapisan api', () => {
     await expect(callWrite(fake.client, 'f', {})).rejects.toBeInstanceOf(ApiError);
   });
 
-  it('checkHealth melaporkan sukses dan gagal', async () => {
-    let t = 0;
-    const now = () => (t += 25);
-    expect(await checkHealth(createFakeClient().client, now)).toEqual({ ok: true, latencyMs: 25 });
-    const bad = await checkHealth(createFakeClient({ healthError: { message: 'x', status: 503 } }).client);
-    expect(bad.ok).toBe(false);
-    expect(bad.message?.title).toBe('Server sedang bermasalah.');
-  });
+
 });

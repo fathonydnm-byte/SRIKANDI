@@ -120,8 +120,9 @@ test('anon is denied on every search function', async () => {
 test('trigram indexes exist when pg_trgm is installed', async () => {
   const { rows: [{ trgm }] } = await pool.query("select exists (select 1 from pg_extension where extname = 'pg_trgm') trgm");
   const { rows } = await pool.query(
-    "select indexname from pg_indexes where schemaname = 'public' and indexname in ('item_search_doc_trgm', 'berkas_search_doc_trgm') order by 1");
-  assert.deepEqual(rows.map((r) => r.indexname), trgm ? ['berkas_search_doc_trgm', 'item_search_doc_trgm'] : []);
+    "select indexname from pg_indexes where schemaname = 'public' and indexname in ('item_search_doc_col_trgm', 'berkas_search_doc_col_trgm') order by 1");
+  // 0009 moved the trigram indexes onto the stored search_doc columns.
+  assert.deepEqual(rows.map((r) => r.indexname), trgm ? ['berkas_search_doc_col_trgm', 'item_search_doc_col_trgm'] : []);
 });
 
 test('unit isolation through the RPC', async () => {

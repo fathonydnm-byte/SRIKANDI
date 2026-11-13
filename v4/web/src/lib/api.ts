@@ -111,25 +111,6 @@ export async function fetchUnits(client: SupabaseClient): Promise<Unit[]> {
   return (data as Unit[] | null) ?? [];
 }
 
-export interface HealthResult {
-  ok: boolean;
-  latencyMs: number;
-  message?: UserMessage;
-}
-
-/** Pemeriksaan ringan: satu permintaan HEAD ke tabel units (dibatasi RLS). */
-export async function checkHealth(client: SupabaseClient, now: () => number = () => performance.now()): Promise<HealthResult> {
-  const start = now();
-  try {
-    const { error } = await client.from('units').select('id', { count: 'exact', head: true });
-    const latencyMs = Math.round(now() - start);
-    if (error) return { ok: false, latencyMs, message: toUserMessage(error) };
-    return { ok: true, latencyMs };
-  } catch (error) {
-    return { ok: false, latencyMs: Math.round(now() - start), message: toUserMessage(error) };
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Sprint 1: RPC baca (migrasi 0006_search.sql). Semua SECURITY INVOKER, jadi
 // RLS menentukan unit yang terlihat.
@@ -249,12 +230,6 @@ export interface BerkasDetail {
   items: BerkasItemRow[];
 }
 
-export interface DashboardCounts {
-  berkas_aktif: number;
-  item_aktif: number;
-  item_tanpa_pdf: number;
-  penerimaan_menunggu: number;
-}
 
 /** Error validasi dari server (SQLSTATE 22023) membawa pesan berbahasa Indonesia. */
 function failRpc(error: { code?: string; message?: string }): never {
@@ -302,8 +277,97 @@ export async function getBerkasDetail(client: SupabaseClient, berkasId: string, 
   return (data as BerkasDetail | null) ?? null;
 }
 
-export async function getDashboardCounts(client: SupabaseClient, unitId: string | null): Promise<DashboardCounts> {
-  const { data, error } = await client.rpc('dashboard_counts', { p_unit_id: unitId });
+
+// ---------------------------------------------------------------------------
+// Dashboard (migrasi 0009_dashboard_overview.sql)
+// ---------------------------------------------------------------------------
+
+export type RetentionStatusCode = 'ACTIVE' | 'DUE' | 'EXPIRED' | 'PROPOSED' | 'PENDING';
+
+export interface DashboardCounts {
+  total_berkas: number;
+  total_item: number;
+  sedang_dipinjam: number;
+  retensi_h7: number;
+  habis_aktif: number;
+}
+
+export interface DashboardGroup {
+  berkas_id: string;
+  no_berkas: number | null;
+  judul_berkas: string;
+  kode_klasifikasi: string | null;
+  kurun_waktu: string | null;
+  kabinet: string | null;
+  laci: string | null;
+  folder: string | null;
+  lokasi: string;
+  item_count: number;
+  total_lembar: number;
+  status_code: RetentionStatusCode;
+  status_label: string;
+  batas_aktif: string | null;
+  days_to_active_limit: number | null;
+  dipinjam: boolean;
+}
+
+export interface DashboardOverview {
+  today: string;
+  counts: DashboardCounts;
+  groups: DashboardGroup[];
+}
+
+export interface ShortcutRow extends DashboardGroup {
+  item_dipinjam: number;
+  status_peminjaman: string;
+  batas_inaktif: string | null;
+  usul_pindah_no: string | null;
+}
+
+export interface OverviewItem {
+  item_id: string;
+  no_item: number | null;
+  no_surat: string;
+  uraian: string | null;
+  jumlah_halaman: number | null;
+  tanggal_naskah: string | null;
+  tingkat_perkembangan: string | null;
+  has_file: boolean;
+  status_peminjaman: string;
+}
+
+export async function getDashboardOverview(client: SupabaseClient, unitId: string | null): Promise<DashboardOverview> {
+  const { data, error } = await client.rpc('dashboard_overview', { p_unit_id: unitId });
   if (error) failRpc(error);
-  return data as DashboardCounts;
+  return data as DashboardOverview;
+}
+
+export async function getDashboardShortcut(client: SupabaseClient, kind: 'DIPINJAM' | 'H7' | 'HABIS', unitId: string | null): Promise<ShortcutRow[]> {
+  const { data, error } = await client.rpc('dashboard_shortcut', { p_kind: kind, p_unit_id: unitId });
+  if (error) failRpc(error);
+  return (data as ShortcutRow[] | null) ?? [];
+}
+
+export const BERKAS_ITEMS_BATCH = 100;
+
+/** Item untuk banyak berkas sekaligus (dipecah per 100 berkas). */
+export async function getBerkasItems(client: SupabaseClient, berkasIds: string[]): Promise<Record<string, OverviewItem[]>> {
+  const out: Record<string, OverviewItem[]> = {};
+  for (let i = 0; i < berkasIds.length; i += BERKAS_ITEMS_BATCH) {
+    const chunk = berkasIds.slice(i, i + BERKAS_ITEMS_BATCH);
+    const { data, error } = await client.rpc('dashboard_berkas_items', { p_berkas_ids: chunk });
+    if (error) failRpc(error);
+    const map = (data as Record<string, OverviewItem[]> | null) ?? {};
+    for (const id of chunk) out[id] = map[id] ?? [];
+  }
+  return out;
+}
+
+/** Berkas yang itemnya cocok dengan teks filter (bagian item dari filter Daftar Isi). */
+export async function matchBerkasByItems(client: SupabaseClient, query: string, unitId: string | null, signal?: AbortSignal): Promise<string[]> {
+  let builder = client.rpc('dashboard_match_berkas', { p_query: query, p_unit_id: unitId });
+  if (signal) builder = builder.abortSignal(signal);
+  const { data, error } = await builder;
+  if (error) failRpc(error);
+  return (data as string[] | null) ?? [];
 }

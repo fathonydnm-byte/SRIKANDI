@@ -279,7 +279,7 @@ export function SearchPage() {
 
   return (
     <>
-      <PageHeader title="Cari Arsip" subtitle="Temukan arsip dan lokasi fisiknya." />
+      <PageHeader title="Pencarian Arsip" subtitle="Temukan arsip dan lokasi fisiknya." />
       <form className="search-bar" role="search" onSubmit={submit}>
         <label htmlFor="search-q" className="sr-only">
           Kata kunci pencarian

@@ -67,7 +67,7 @@ describe('halaman Masuk', () => {
     await screen.findByRole('heading', { name: 'Masuk' });
     await fill(' petugas@uinsa.ac.id ', 'rahasia123');
     expect(fake.auth.signInWithPassword).toHaveBeenCalledWith({ email: 'petugas@uinsa.ac.id', password: 'rahasia123' });
-    expect(await screen.findByRole('heading', { name: /Selamat .*Siti Aminah/ })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument();
     expect(screen.getAllByText('Petugas Arsip').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Biro Administrasi Umum').length).toBeGreaterThan(0);
   });

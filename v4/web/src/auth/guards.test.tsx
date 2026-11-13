@@ -16,19 +16,19 @@ describe('penjaga rute', () => {
 
   it('akar "/" membuka Dashboard setelah masuk', async () => {
     renderApp('/', signedIn('PETUGAS').client);
-    expect(await screen.findByRole('heading', { name: /Selamat (pagi|siang|sore|malam), Siti Aminah/ })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument();
   });
 
   it('PIMPINAN yang membuka Penerimaan dialihkan ke Dashboard dengan pemberitahuan', async () => {
     renderApp('/penerimaan', signedIn('PIMPINAN').client);
-    expect(await screen.findByText('Anda tidak memiliki akses ke Penerimaan.')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /Selamat .*Siti Aminah/ })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Penerimaan' })).not.toBeInTheDocument();
+    expect(await screen.findByText('Anda tidak memiliki akses ke Penerimaan Naskah.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Penerimaan Naskah' })).not.toBeInTheDocument();
   });
 
   it('PETUGAS yang membuka Master Log dialihkan ke Dashboard', async () => {
     renderApp('/master-log', signedIn('PETUGAS').client);
-    expect(await screen.findByText('Anda tidak memiliki akses ke Master Log.')).toBeInTheDocument();
+    expect(await screen.findByText('Anda tidak memiliki akses ke Master Log Perubahan.')).toBeInTheDocument();
   });
 
   it('PETUGAS yang membuka Pengaturan dialihkan ke Dashboard', async () => {
@@ -38,26 +38,26 @@ describe('penjaga rute', () => {
 
   it('PETUGAS dapat membuka placeholder Penerimaan dengan info sprint', async () => {
     renderApp('/penerimaan', signedIn('PETUGAS').client);
-    expect(await screen.findByRole('heading', { name: 'Penerimaan' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Penerimaan Naskah' })).toBeInTheDocument();
     expect(screen.getByText(/Sprint 2 — Registrasi/)).toBeInTheDocument();
   });
 
   it('ADMIN_UNIT dapat membuka Master Log', async () => {
     renderApp('/master-log', signedIn('ADMIN_UNIT').client);
-    expect(await screen.findByRole('heading', { name: 'Master Log' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Master Log Perubahan' })).toBeInTheDocument();
   });
 
   it('pengguna yang sudah masuk dan membuka /masuk diarahkan ke Dashboard', async () => {
     renderApp('/masuk', signedIn('PETUGAS').client);
-    expect(await screen.findByRole('heading', { name: /Selamat .*Siti Aminah/ })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument();
   });
 
   it('navigasi PIMPINAN tidak menampilkan modul operasional', async () => {
     renderApp('/dashboard', signedIn('PIMPINAN').client);
-    await screen.findByRole('heading', { name: /Selamat/ });
-    expect(screen.queryByRole('link', { name: /Penerimaan/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /Peminjaman/ })).not.toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: /Cari Arsip|Cari/ }).length).toBeGreaterThan(0);
+    await screen.findByRole('heading', { name: 'Dashboard', level: 1 });
+    expect(screen.queryByRole('link', { name: /Penerimaan Naskah/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Peminjaman Arsip/ })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: /Pencarian Arsip|Cari/ }).length).toBeGreaterThan(0);
   });
 
   it('ADMIN_PUSAT melihat pemilih unit', async () => {
@@ -68,7 +68,7 @@ describe('penjaga rute', () => {
 
   it('PETUGAS tidak melihat pemilih unit', async () => {
     renderApp('/dashboard', signedIn('PETUGAS').client);
-    await screen.findByRole('heading', { name: /Selamat/ });
+    await screen.findByRole('heading', { name: 'Dashboard', level: 1 });
     expect(screen.queryByRole('combobox', { name: 'Unit aktif' })).not.toBeInTheDocument();
   });
 

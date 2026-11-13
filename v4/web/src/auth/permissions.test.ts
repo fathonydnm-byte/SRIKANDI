@@ -38,7 +38,7 @@ describe('modul per peran', () => {
   const ids = (role: Role) => visibleModules(role).map((m) => m.id);
 
   it('PIMPINAN hanya cari/lihat', () => {
-    expect(ids('PIMPINAN')).toEqual(['cari', 'dashboard', 'cari-isi']);
+    expect(ids('PIMPINAN')).toEqual(['dashboard', 'cari', 'cari-isi']);
   });
   it('PETUGAS mendapat semua modul operasional, tanpa Master Log/Pengaturan', () => {
     expect(ids('PETUGAS')).toEqual(expect.arrayContaining(['penerimaan', 'pemberkasan', 'alih-media', 'edit', 'koreksi', 'peminjaman', 'retensi', 'lidah-folder']));

@@ -125,7 +125,10 @@ export function createFakeClient(opts: FakeOptions = {}) {
         return opts.profileError ? { data: null, error: opts.profileError } : { data: deriveStatus(), error: null };
       }
       const defaults: Record<string, RpcHandler> = {
-        dashboard_counts: () => ({ data: { berkas_aktif: 0, item_aktif: 0, item_tanpa_pdf: 0, penerimaan_menunggu: 0 }, error: null }),
+        dashboard_overview: () => ({
+          data: { today: '2026-11-13', counts: { total_berkas: 0, total_item: 0, sedang_dipinjam: 0, retensi_h7: 0, habis_aktif: 0 }, groups: [] },
+          error: null,
+        }),
       };
       const handler = opts.rpc?.[name] ?? defaults[name];
       if (!handler) return { data: null, error: { message: `rpc tidak dikenal ${name}`, code: '42883' } };

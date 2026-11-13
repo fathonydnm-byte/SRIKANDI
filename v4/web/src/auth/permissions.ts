@@ -69,16 +69,24 @@ export function can(role: Role | null | undefined, capability: Capability): bool
 const SETTINGS_CAPS: readonly Capability[] = ['pengguna.kelola', 'unit.pengaturan', 'unit.kelolaSemua', 'backup.kelola', 'rc.kelola'];
 
 export type Sprint = 'S0' | 'S1' | 'S2' | 'S3' | 'S4' | 'S5' | 'S6';
-export type NavGroup = 'Utama' | 'Pencarian' | 'Penciptaan Arsip' | 'Pemeliharaan Arsip' | 'Sirkulasi & Retensi' | 'Keamanan & Audit';
+export type NavGroup = 'Utama' | 'Pencarian & Registrasi' | 'Penciptaan Arsip' | 'Pemeliharaan Arsip' | 'Sirkulasi & Retensi' | 'Keamanan & Audit';
+
+/** Sub-menu lipat di sidebar (3.x: "Kelola Informasi Arsip"). */
+export type SubmenuId = 'kelola';
+export const SUBMENUS: Record<SubmenuId, { label: string; icon: string }> = {
+  kelola: { label: 'Kelola Informasi Arsip', icon: '⚙️' },
+};
 
 export interface ModuleDef {
   id: string;
   path: string;
+  /** Label navigasi, mengikuti 3.x. */
   label: string;
   /** Label pendek untuk navigasi bawah di HP. */
   shortLabel: string;
   icon: string;
   group: NavGroup;
+  submenu?: SubmenuId;
   /** Salah satu kemampuan ini cukup untuk membuka modul. */
   anyOf: readonly Capability[];
   /** Sprint PRD §8 saat modul tersedia. 'S0' = sudah ada. */
@@ -88,36 +96,37 @@ export interface ModuleDef {
   mobilePriority?: number;
 }
 
+/** Urutan = urutan sidebar 3.x (Index.html). */
 export const MODULES: readonly ModuleDef[] = [
-  { id: 'cari', path: '/cari', label: 'Cari Arsip', shortLabel: 'Cari', icon: '🔍', group: 'Pencarian', anyOf: ['arsip.cari'], sprint: 'S1', mobilePriority: 1,
+  { id: 'dashboard', path: '/dashboard', label: 'Dashboard', shortLabel: 'Beranda', icon: '🏠', group: 'Utama', anyOf: ['dashboard.lihat'], sprint: 'S1', mobilePriority: 2,
+    summary: 'Ringkasan kondisi arsip Anda.' },
+  { id: 'cari', path: '/cari', label: 'Pencarian Arsip', shortLabel: 'Cari', icon: '🔍', group: 'Pencarian & Registrasi', anyOf: ['arsip.cari'], sprint: 'S1', mobilePriority: 1,
     summary: 'Cari berkas dan item, lihat lokasi kabinet/laci/folder, buka atau bagikan softcopy.' },
-  { id: 'dashboard', path: '/dashboard', label: 'Dashboard', shortLabel: 'Beranda', icon: '🏠', group: 'Utama', anyOf: ['dashboard.lihat'], sprint: 'S0', mobilePriority: 2,
-    summary: 'Ringkasan kondisi arsip unit.' },
-  { id: 'cari-isi', path: '/cari-isi', label: 'Cari Isi Berkas', shortLabel: 'Cari Isi', icon: '📄', group: 'Pencarian', anyOf: ['arsip.cari'], sprint: 'S6', mobilePriority: 5,
+  { id: 'cari-isi', path: '/cari-isi', label: 'Cari Isi Berkas', shortLabel: 'Cari Isi', icon: '📄', group: 'Pencarian & Registrasi', anyOf: ['arsip.cari'], sprint: 'S6', mobilePriority: 5,
     summary: 'Pencarian teks di dalam isi softcopy hasil OCR.' },
-  { id: 'penerimaan', path: '/penerimaan', label: 'Penerimaan', shortLabel: 'Terima', icon: '📥', group: 'Penciptaan Arsip', anyOf: ['arsip.kelola'], sprint: 'S2', mobilePriority: 3,
+  { id: 'penerimaan', path: '/penerimaan', label: 'Penerimaan Naskah', shortLabel: 'Terima', icon: '📥', group: 'Penciptaan Arsip', anyOf: ['arsip.kelola'], sprint: 'S2', mobilePriority: 3,
     summary: 'Penerimaan naskah dan tanda terima.' },
-  { id: 'pemberkasan', path: '/pemberkasan', label: 'Input/Pemberkasan', shortLabel: 'Berkas', icon: '🗂️', group: 'Penciptaan Arsip', anyOf: ['arsip.kelola'], sprint: 'S2',
-    summary: 'Antrean, pemberkasan, dan penomoran definitif berkas baru.' },
+  { id: 'pemberkasan', path: '/pemberkasan', label: 'Registrasi Berkas Baru', shortLabel: 'Registrasi', icon: '🗂️', group: 'Penciptaan Arsip', anyOf: ['arsip.kelola'], sprint: 'S2',
+    summary: 'Input berkas dan item dalam satu layar: antrean, pemberkasan, dan penomoran definitif.' },
   { id: 'lidah-folder', path: '/lidah-folder', label: 'Cetak Lidah Folder', shortLabel: 'Label', icon: '🏷️', group: 'Penciptaan Arsip', anyOf: ['arsip.kelola'], sprint: 'S3',
     summary: 'Cetak label lidah folder.' },
-  { id: 'alih-media', path: '/alih-media', label: 'Alih Media', shortLabel: 'Alih Media', icon: '🖨️', group: 'Pemeliharaan Arsip', anyOf: ['arsip.kelola'], sprint: 'S2',
-    summary: 'Unggah softcopy PDF hasil alih media.' },
-  { id: 'edit', path: '/edit', label: 'Edit', shortLabel: 'Edit', icon: '✏️', group: 'Pemeliharaan Arsip', anyOf: ['arsip.kelola'], sprint: 'S3',
+  { id: 'edit', path: '/edit', label: 'Perubahan Arsip', shortLabel: 'Perubahan', icon: '✏️', group: 'Pemeliharaan Arsip', submenu: 'kelola', anyOf: ['arsip.kelola'], sprint: 'S3',
     summary: 'Perubahan metadata berkas dan item.' },
-  { id: 'koreksi', path: '/koreksi', label: 'Koreksi & Pembatalan', shortLabel: 'Koreksi', icon: '♻️', group: 'Pemeliharaan Arsip', anyOf: ['arsip.kelola'], sprint: 'S3',
+  { id: 'koreksi', path: '/koreksi', label: 'Penghapusan Arsip', shortLabel: 'Hapus', icon: '♻️', group: 'Pemeliharaan Arsip', submenu: 'kelola', anyOf: ['arsip.kelola'], sprint: 'S3',
     summary: 'Koreksi dan pembatalan arsip dengan karantina.' },
-  { id: 'peminjaman', path: '/peminjaman', label: 'Peminjaman', shortLabel: 'Pinjam', icon: '📋', group: 'Sirkulasi & Retensi', anyOf: ['peminjaman.kelola'], sprint: 'S4', mobilePriority: 4,
+  { id: 'alih-media', path: '/alih-media', label: 'Alih Media Arsip', shortLabel: 'Alih Media', icon: '🖨️', group: 'Pemeliharaan Arsip', submenu: 'kelola', anyOf: ['arsip.kelola'], sprint: 'S2',
+    summary: 'Unggah softcopy PDF hasil alih media.' },
+  { id: 'peminjaman', path: '/peminjaman', label: 'Peminjaman Arsip', shortLabel: 'Pinjam', icon: '📋', group: 'Sirkulasi & Retensi', anyOf: ['peminjaman.kelola'], sprint: 'S4', mobilePriority: 4,
     summary: 'Pinjam/kembali multi-berkas, Out Indicator, dan Berita Acara.' },
-  { id: 'retensi', path: '/retensi', label: 'Retensi & Usul Pindah', shortLabel: 'Retensi', icon: '📦', group: 'Sirkulasi & Retensi', anyOf: ['retensi.kelola'], sprint: 'S5',
+  { id: 'retensi', path: '/retensi', label: 'Penyusutan Arsip', shortLabel: 'Penyusutan', icon: '📦', group: 'Sirkulasi & Retensi', anyOf: ['retensi.kelola'], sprint: 'S5',
     summary: 'Monitoring retensi dan usul pemindahan ke Record Center.' },
-  { id: 'master-log', path: '/master-log', label: 'Master Log', shortLabel: 'Log', icon: '🔒', group: 'Keamanan & Audit', anyOf: ['masterlog.lihat'], sprint: 'S3',
+  { id: 'master-log', path: '/master-log', label: 'Master Log Perubahan', shortLabel: 'Log', icon: '🔒', group: 'Keamanan & Audit', anyOf: ['masterlog.lihat'], sprint: 'S3',
     summary: 'Riwayat perubahan (audit) per orang.' },
   { id: 'pengaturan', path: '/pengaturan', label: 'Pengaturan', shortLabel: 'Pengaturan', icon: '⚙️', group: 'Keamanan & Audit', anyOf: SETTINGS_CAPS, sprint: 'S3',
     summary: 'Pengguna unit, master pegawai, pengaturan unit; untuk Admin Pusat juga unit, backup, dan koneksi Record Center.' },
 ];
 
-export const NAV_GROUP_ORDER: readonly NavGroup[] = ['Utama', 'Pencarian', 'Penciptaan Arsip', 'Pemeliharaan Arsip', 'Sirkulasi & Retensi', 'Keamanan & Audit'];
+export const NAV_GROUP_ORDER: readonly NavGroup[] = ['Utama', 'Pencarian & Registrasi', 'Penciptaan Arsip', 'Pemeliharaan Arsip', 'Sirkulasi & Retensi', 'Keamanan & Audit'];
 
 export function canOpenModule(role: Role | null | undefined, mod: ModuleDef): boolean {
   return mod.anyOf.some((c) => can(role, c));

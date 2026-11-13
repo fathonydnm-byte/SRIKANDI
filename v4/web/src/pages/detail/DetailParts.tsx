@@ -10,7 +10,7 @@ export function BackToResults() {
   const from = (location.state as FromSearchState | null)?.fromSearch;
   return (
     <Link className="back-link" to={from !== undefined ? `/cari${from}` : '/cari'}>
-      ‹ {from !== undefined ? 'Kembali ke hasil pencarian' : 'Ke Cari Arsip'}
+      ‹ {from !== undefined ? 'Kembali ke hasil pencarian' : 'Ke Pencarian Arsip'}
     </Link>
   );
 }
@@ -39,9 +39,9 @@ export function NotVisible({ what }: { what: string }) {
   return (
     <div className="empty-state card">
       <h2 className="section-title">{what} tidak ditemukan</h2>
-      <p className="muted">Data ini tidak ada atau berada di unit lain yang tidak bisa Anda lihat. Periksa tautannya, atau cari ulang dari Cari Arsip.</p>
+      <p className="muted">Data ini tidak ada atau berada di unit lain yang tidak bisa Anda lihat. Periksa tautannya, atau cari ulang dari Pencarian Arsip.</p>
       <Link className="btn btn-secondary" to="/cari">
-        Ke Cari Arsip
+        Ke Pencarian Arsip
       </Link>
     </div>
   );
