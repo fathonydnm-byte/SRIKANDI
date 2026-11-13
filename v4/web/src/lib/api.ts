@@ -202,6 +202,8 @@ export interface ItemDetail extends Omit<SearchHit, 'score'> {
   media_sumber: string | null;
   status_bentuk_digital: string | null;
   nama_file: string | null;
+  mime_type?: string | null;
+  drive_file_size_bytes?: number | null;
   nomor_tanda_terima: string | null;
   catatan: string | null;
 }

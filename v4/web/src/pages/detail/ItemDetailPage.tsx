@@ -72,7 +72,11 @@ export function ItemDetailPage() {
 
       <section className="card" aria-labelledby="file-title">
         <h2 id="file-title" className="section-title">Softcopy</h2>
-        <FileActions file={{ driveFileId: d.drive_file_id, driveFileUrl: d.drive_file_url }} folderUrl={d.drive_folder_url} />
+        <FileActions
+          file={{ driveFileId: d.drive_file_id, driveFileUrl: d.drive_file_url, fileName: d.nama_file, mime: d.mime_type ?? null, sizeBytes: d.drive_file_size_bytes ?? null }}
+          folderUrl={d.drive_folder_url}
+          shareTitle={`${d.no_surat || 'Arsip'} — ${d.uraian ?? ''}`.trim()}
+        />
       </section>
 
       <section className="card" aria-labelledby="meta-title">
