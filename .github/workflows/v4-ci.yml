@@ -36,6 +36,9 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
+      - name: Tes gerbang Apps Script
+        working-directory: v4/gateway-apps-script
+        run: node --test gateway.test.cjs
       # Build tanpa env Supabase: memastikan build lolos; aplikasi hasilnya
       # menampilkan layar "Konfigurasi aplikasi belum lengkap". Env asli hanya
       # di Cloudflare Pages.

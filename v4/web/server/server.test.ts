@@ -271,6 +271,17 @@ describe('GET /api/files/download', () => {
   });
 });
 
+describe('DRIVE_API_BASE (uji lokal saja)', () => {
+  it('override hanya untuk localhost', async () => {
+    const { driveApiBase } = await import('./env');
+    expect(driveApiBase({})).toBe('https://www.googleapis.com');
+    expect(driveApiBase({ DRIVE_API_BASE: 'http://127.0.0.1:8790/x' })).toBe('http://127.0.0.1:8790');
+    expect(driveApiBase({ DRIVE_API_BASE: 'https://evil.example' })).toBe('https://www.googleapis.com');
+    expect(driveApiBase({ DRIVE_API_BASE: 'http://localhost.evil.example' })).toBe('https://www.googleapis.com');
+    expect(driveApiBase({ DRIVE_API_BASE: 'nonsense' })).toBe('https://www.googleapis.com');
+  });
+});
+
 describe('POST /api/files/ticket', () => {
   const JWT = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyLTEifQ.c2lnbmF0dXJl';
   const req = (body: unknown, auth: string | null = `Bearer ${JWT}`) =>

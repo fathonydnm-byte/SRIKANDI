@@ -1,4 +1,4 @@
-import type { FetchFn, FileEnv } from './env';
+import { driveApiBase, type FetchFn, type FileEnv } from './env';
 import { getDriveToken, GatewayError, invalidateDriveToken } from './gateway';
 import { contentDisposition, NO_STORE, safeContentType, sanitizeRange } from './headers';
 import { textError } from './http';
@@ -25,7 +25,7 @@ export async function handleDownload(request: Request, env: FileEnv, fetchFn: Fe
   const gw = { url: env.DRIVE_GATEWAY_URL, secret: env.DRIVE_GATEWAY_SECRET, fetchFn, now: () => nowSec };
 
   const range = sanitizeRange(request.headers.get('Range'));
-  const driveUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(t.fid)}?alt=media&supportsAllDrives=true`;
+  const driveUrl = `${driveApiBase(env)}/drive/v3/files/${encodeURIComponent(t.fid)}?alt=media&supportsAllDrives=true`;
 
   let upstream: Response | null = null;
   for (let attempt = 0; attempt < 2; attempt++) {

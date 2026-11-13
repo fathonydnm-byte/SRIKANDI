@@ -120,12 +120,11 @@ export async function requestTicket(ref: FileRef, disposition: Disposition, getT
   } catch {
     throw fileError('NETWORK');
   }
-  let data: { ok?: boolean; code?: string; url?: string; expiresAt?: number; fileName?: string; mime?: string; size?: number | null } | null = null;
-  try {
-    data = (await res.json()) as typeof data;
-  } catch {
-    data = null;
-  }
+  type TicketBody = { ok?: boolean; code?: string; url?: string; expiresAt?: number; fileName?: string; mime?: string; size?: number | null };
+  const data: TicketBody | null = await res.json().then(
+    (v: unknown) => (v && typeof v === 'object' ? (v as TicketBody) : null),
+    () => null,
+  );
   if (!res.ok || !data?.ok || typeof data.url !== 'string' || !data.url.startsWith('/api/files/download?')) {
     throw fileError(codeForStatus(res.status, data?.code));
   }

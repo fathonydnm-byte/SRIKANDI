@@ -8,6 +8,7 @@ Aplikasi web (PWA) pengganti Central File 3.x (Apps Script). Acuan produk: [`doc
 v4/
 ├── web/        Tampilan: Vite + React + TypeScript, PWA, di-host di Cloudflare Pages
 ├── supabase/   Skema Postgres, RLS, seed (migrasi Supabase)
+├── gateway-apps-script/  Gerbang token Drive (Apps Script, akun instansi) — cara pasang: PASANG.md
 └── tests/db/   Tes skema/RLS (jalankan: bash v4/tests/db/run.sh)
 ```
 
@@ -19,7 +20,8 @@ Isi `web/src/`:
 | `auth/AuthContext.tsx`, `auth/guards.tsx` | Sesi Supabase Auth, profil + unit, penjaga rute |
 | `lib/supabase.ts` | Pembuatan klien Supabase (satu tempat) |
 | `lib/api.ts` | Akses data; `callWrite()` selalu mengirim `requestId` (UUID) sebagai kunci idempotensi |
-| `lib/files.ts` | Satu-satunya jalur membuka PDF/folder (sementara: URL Google Drive di tab baru; nanti diganti jembatan unduh aman) |
+| `lib/files.ts` | Satu-satunya jalur membuka file: minta tiket ke `/api/files/ticket`, lalu buka `/api/files/download` (Lihat / Unduh / Bagikan berkas ≤ 20 MB) |
+| `../functions/`, `../server/` | Cloudflare Pages Functions jembatan unduh (tiket HMAC 60 detik, audit, streaming Drive dengan Range) |
 | `pages/search/`, `pages/detail/` | Cari Arsip (kriteria di URL), detail item, Daftar Isi Berkas |
 | `lib/errors.ts` | Penerjemah error teknis → pesan yang bisa ditindaklanjuti |
 | `pages/`, `components/` | Layar dan komponen; modul yang belum dibangun memakai `PlaceholderPage` |
@@ -70,6 +72,12 @@ Di Supabase → Authentication → URL Configuration, isi **Site URL** dengan do
 
 Layar baca memakai RPC di `supabase/migrations/0006_search.sql`, semuanya SECURITY INVOKER sehingga RLS tetap berlaku: `search_archive` (port `searchArchive_` 3.x), `get_item_detail`, `get_berkas_detail`, `dashboard_counts`, plus `my_account_status` (0005) untuk layar akun tertahan.
 
+## Jembatan unduh file
+
+Pengguna tidak punya akses Google Drive. Alurnya: browser → `POST /api/files/ticket` (JWT Supabase; hak akses dicek `get_file_access` di bawah RLS, akses dicatat `log_file_access`) → tiket 60 detik → `GET /api/files/download?t=…` → token Drive dari gerbang Apps Script (permintaan bertanda tangan HMAC) → file dialirkan dari Drive API.
+
+Variabel server di Cloudflare Pages (Settings → Variables and Secrets, tipe Secret): `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `FILE_TICKET_SECRET`, `DRIVE_GATEWAY_URL`, `DRIVE_GATEWAY_SECRET`. Tanpa service-role key. Selama gerbang belum dipasang, tombol file menampilkan "Jembatan Drive belum dipasang". Mode darurat lama (buka URL Drive langsung) hanya bila build diberi `VITE_FILE_ACCESS_MODE=drive-url`.
+
 ## CI
 
-`.github/workflows/v4-ci.yml` berjalan untuk perubahan di `v4/**`: job **web** (typecheck, lint, tes, build) dan job **db** (`v4/tests/db/run.sh` dengan PostgreSQL 16 dari runner).
+`.github/workflows/v4-ci.yml` berjalan untuk perubahan di `v4/**`: job **web** (typecheck termasuk Functions, lint, tes, build, tes gerbang Apps Script) dan job **db** (`v4/tests/db/run.sh` dengan PostgreSQL 16 dari runner).

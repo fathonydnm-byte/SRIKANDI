@@ -1,10 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderApp } from '../../test/renderApp';
 import { createFakeClient, makeProfile, makeSession, type RpcHandler } from '../../test/fakeSupabase';
 import { makeBerkasDetail, makeItemDetail } from '../../test/fixtures';
-import { FILE_ACCESS_NOTE } from '../../lib/files';
 
 function client(rpc: Record<string, RpcHandler>) {
   return createFakeClient({ session: makeSession(), profile: makeProfile('PIMPINAN'), rpc });
@@ -23,23 +22,71 @@ describe('detail item', () => {
     expect(within(loc).getByText('Kabinet')).toBeInTheDocument();
     expect(within(loc).getByText('12')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /50 — Laporan Keuangan 2025/ })).toHaveAttribute('href', '/cari/berkas/BRK-1');
-    expect(screen.getByText(new RegExp(FILE_ACCESS_NOTE.slice(0, 40)))).toBeInTheDocument();
+    expect(screen.queryByText(/akses ke folder arsip|Google Drive/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Buka folder Drive' })).not.toBeInTheDocument();
     expect(screen.getByText('10 Januari 2025')).toBeInTheDocument();
   });
 
-  it('Buka PDF lewat modul files (tab baru, noopener)', async () => {
-    const open = vi.fn(() => null);
-    vi.stubGlobal('open', open);
+  it('Lihat PDF: tiket dari /api/files/ticket dengan JWT, tab baru ke URL unduhan', async () => {
+    const win = { opener: {}, location: { replace: vi.fn() }, close: vi.fn() };
+    vi.stubGlobal('open', vi.fn(() => win));
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true, url: '/api/files/download?t=T1', fileName: 'a.pdf', mime: 'application/pdf', size: 1 }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
     const fake = client({ get_item_detail: () => ({ data: makeItemDetail(), error: null }) });
     renderApp('/cari/item/ITM-1', fake.client);
-    await userEvent.setup().click(await screen.findByRole('button', { name: 'Buka PDF' }));
-    expect(open).toHaveBeenCalledWith('https://drive.google.com/file/d/FILE1/view', '_blank', 'noopener,noreferrer');
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Lihat PDF' }));
+    await waitFor(() => expect(win.location.replace).toHaveBeenCalledWith(`${window.location.origin}/api/files/download?t=T1`));
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/api/files/ticket');
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer access');
+    expect(JSON.parse(String(init.body))).toEqual({ driveFileId: 'FILE1', disposition: 'inline' });
   });
 
-  it('tanpa PDF: tombol nonaktif dengan label jelas', async () => {
-    const fake = client({ get_item_detail: () => ({ data: makeItemDetail({ has_file: false, drive_file_id: null, drive_file_url: null }), error: null }) });
+  it('jembatan belum dipasang: pesan jelas untuk pengguna', async () => {
+    vi.stubGlobal('open', vi.fn(() => ({ opener: {}, location: { replace: vi.fn() }, close: vi.fn() })));
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ok: false, code: 'GATEWAY_NOT_CONFIGURED' }), { status: 503 })));
+    const fake = client({ get_item_detail: () => ({ data: makeItemDetail(), error: null }) });
     renderApp('/cari/item/ITM-1', fake.client);
-    expect(await screen.findByRole('button', { name: 'Belum ada PDF' })).toBeDisabled();
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Unduh' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Jembatan Drive belum dipasang. File belum bisa dibuka dari aplikasi. Hubungi Admin Pusat.');
+  });
+
+  it('Bagikan berkas tampil hanya bila perangkat mendukung berbagi file', async () => {
+    const fake = client({ get_item_detail: () => ({ data: makeItemDetail({ drive_file_size_bytes: 5000 }), error: null }) });
+    const { unmount } = renderApp('/cari/item/ITM-1', fake.client);
+    await screen.findByRole('button', { name: 'Lihat PDF' });
+    expect(screen.queryByRole('button', { name: 'Bagikan berkas' })).not.toBeInTheDocument();
+    unmount();
+    Object.defineProperty(navigator, 'canShare', { value: () => true, configurable: true, writable: true });
+    Object.defineProperty(navigator, 'share', { value: vi.fn(async () => {}), configurable: true, writable: true });
+    const { unmount: u2 } = renderApp('/cari/item/ITM-1', fake.client);
+    expect(await screen.findByRole('button', { name: 'Bagikan berkas' })).toBeInTheDocument();
+    u2();
+    const huge = client({ get_item_detail: () => ({ data: makeItemDetail({ drive_file_size_bytes: 30 * 1024 * 1024 }), error: null }) });
+    renderApp('/cari/item/ITM-1', huge.client);
+    await screen.findByRole('button', { name: 'Lihat PDF' });
+    expect(screen.queryByRole('button', { name: 'Bagikan berkas' })).not.toBeInTheDocument();
+    delete (navigator as { canShare?: unknown }).canShare;
+    delete (navigator as { share?: unknown }).share;
+  });
+
+  it('Bagikan berkas: ambil PDF lalu navigator.share dengan file', async () => {
+    Object.defineProperty(navigator, 'canShare', { value: () => true, configurable: true, writable: true });
+    const share = vi.fn(async () => {});
+    Object.defineProperty(navigator, 'share', { value: share, configurable: true, writable: true });
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => url === '/api/files/ticket'
+      ? new Response(JSON.stringify({ ok: true, url: '/api/files/download?t=T2', fileName: 'Laporan.pdf', mime: 'application/pdf', size: 8 }))
+      : new Response('%PDF-1.7')));
+    const fake = client({ get_item_detail: () => ({ data: makeItemDetail(), error: null }) });
+    renderApp('/cari/item/ITM-1', fake.client);
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Bagikan berkas' }));
+    await waitFor(() => expect(share).toHaveBeenCalled());
+    const arg = (share.mock.calls[0] as unknown as [{ files: File[]; title: string }])[0];
+    expect(arg.files[0]!.name).toBe('Laporan.pdf');
+    expect(arg.title).toContain('B-014/UN.07/2025');
+    expect(await screen.findByText('Berkas dibagikan.')).toBeInTheDocument();
+    delete (navigator as { canShare?: unknown }).canShare;
+    delete (navigator as { share?: unknown }).share;
   });
 
   it('Salin lokasi menyalin teks lokasi lengkap', async () => {
@@ -98,7 +145,7 @@ describe('Daftar Isi Berkas', () => {
     expect(rows.map((r) => r.getAttribute('href'))).toEqual(['/cari/item/ITM-1', '/cari/item/ITM-2']);
     expect(screen.getByText('Total lembar').nextSibling).toHaveTextContent('6');
     expect(screen.getByText('10 Januari 2025 – 1 Juni 2025')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Buka folder Drive' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'Buka folder Drive' })).not.toBeInTheDocument();
     expect(screen.getByText('Rahasia')).toBeInTheDocument();
   });
 
