@@ -16,16 +16,16 @@ const NOW = 1_800_000_000;
 const PAYLOAD = { fid: 'FILEabc_123', name: 'Laporan.pdf', mime: 'application/pdf', disp: 'inline' as const, sub: 'user-1' };
 
 describe('tiket unduh', () => {
-  it('ditandatangani dan diverifikasi; umur 60 detik', async () => {
+  it('ditandatangani dan diverifikasi; umur 10 menit', async () => {
     const { token, exp } = await signTicket(PAYLOAD, SECRET, NOW);
     expect(exp).toBe(NOW + TICKET_TTL_SECONDS);
-    expect(TICKET_TTL_SECONDS).toBe(60);
+    expect(TICKET_TTL_SECONDS).toBe(600);
     const r = await verifyTicket(token, SECRET, NOW + 59);
     expect(r).toEqual({ ok: true, payload: { v: 1, ...PAYLOAD, exp } });
   });
   it('kedaluwarsa tepat saat exp', async () => {
     const { token } = await signTicket(PAYLOAD, SECRET, NOW);
-    expect(await verifyTicket(token, SECRET, NOW + 60)).toEqual({ ok: false, reason: 'expired' });
+    expect(await verifyTicket(token, SECRET, NOW + TICKET_TTL_SECONDS)).toEqual({ ok: false, reason: 'expired' });
   });
   it('menolak perubahan isi, tanda tangan, dan secret lain', async () => {
     const { token } = await signTicket(PAYLOAD, SECRET, NOW);
@@ -251,7 +251,7 @@ describe('GET /api/files/download', () => {
 
   it('tiket kedaluwarsa → 410; rusak → 400; gerbang belum dipasang → 503', async () => {
     const fetchFn = vi.fn<FetchFn>();
-    const expired = await handleDownload(dl(await ticketFor({}, NOW - 61)), ENV, fetchFn, NOW);
+    const expired = await handleDownload(dl(await ticketFor({}, NOW - TICKET_TTL_SECONDS - 1)), ENV, fetchFn, NOW);
     expect(expired.status).toBe(410);
     expect(expired.headers.get('X-Error-Code')).toBe('TICKET_EXPIRED');
     expect(await expired.text()).toContain('kedaluwarsa');
@@ -308,12 +308,12 @@ describe('POST /api/files/ticket', () => {
     });
   }
 
-  it('memberi tiket 60 detik setelah otorisasi dan audit', async () => {
+  it('memberi tiket 10 menit setelah otorisasi dan audit', async () => {
     const fetchFn = supa(ACCESS);
     const res = await handleTicket(req({ driveFileId: 'FILEabc_123', disposition: 'attachment' }), ENV, fetchFn, NOW);
     expect(res.status).toBe(200);
     const body = (await res.json()) as { url: string; expiresAt: number; size: number };
-    expect(body.expiresAt).toBe(NOW + 60);
+    expect(body.expiresAt).toBe(NOW + TICKET_TTL_SECONDS);
     expect(body.size).toBe(1000);
     const t = new URL(body.url, 'https://x').searchParams.get('t');
     const v = await verifyTicket(t, SECRET, NOW);

@@ -1,7 +1,7 @@
 import { b64urlDecode, b64urlEncode, hmacSha256, hmacVerify } from './crypto';
 
 /** Tiket unduh: berumur pendek, satu tujuan, ditandatangani HMAC. */
-export const TICKET_TTL_SECONDS = 60;
+export const TICKET_TTL_SECONDS = 600;
 export const MIN_SECRET_LENGTH = 32;
 
 export type Disposition = 'inline' | 'attachment';

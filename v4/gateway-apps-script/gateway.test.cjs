@@ -128,5 +128,5 @@ test('setupGateway stores a 96-hex secret, logs it once, and touches Drive', () 
 test('manifest: web app runs as deployer, anonymous access, drive scope only', () => {
   const m = JSON.parse(fs.readFileSync(path.join(__dirname, 'appsscript.json'), 'utf8'));
   assert.deepEqual(m.webapp, { executeAs: 'USER_DEPLOYING', access: 'ANYONE_ANONYMOUS' });
-  assert.deepEqual(m.oauthScopes, ['https://www.googleapis.com/auth/drive']);
+  assert.deepEqual(m.oauthScopes, ['https://www.googleapis.com/auth/drive.readonly']);
 });
