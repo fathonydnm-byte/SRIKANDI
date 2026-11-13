@@ -43,3 +43,22 @@ describe('akun belum diaktifkan', () => {
     expect(screen.getByRole('button', { name: 'Coba lagi' })).toBeInTheDocument();
   });
 });
+
+describe('status akun dari my_account_status()', () => {
+  it('server INACTIVE mengalahkan profil yang terbaca', async () => {
+    const fake = createFakeClient({ session: makeSession(), profile: makeProfile('PETUGAS'), accountStatus: 'INACTIVE' });
+    renderApp('/dashboard', fake.client);
+    expect(await screen.findByText(/sedang nonaktif/)).toBeInTheDocument();
+    expect(fake.rpc).toHaveBeenCalledWith('my_account_status');
+  });
+  it('server UNIT_INACTIVE: layar unit nonaktif', async () => {
+    const fake = createFakeClient({ session: makeSession(), profile: makeProfile('PETUGAS'), accountStatus: 'UNIT_INACTIVE' });
+    renderApp('/dashboard', fake.client);
+    expect(await screen.findByRole('heading', { name: 'Unit sedang nonaktif' })).toBeInTheDocument();
+  });
+  it('server NO_PROFILE: akun belum diaktifkan', async () => {
+    const fake = createFakeClient({ session: makeSession(), profile: makeProfile('PETUGAS'), accountStatus: 'NO_PROFILE' });
+    renderApp('/dashboard', fake.client);
+    expect(await screen.findByRole('heading', { name: 'Akun belum diaktifkan' })).toBeInTheDocument();
+  });
+});

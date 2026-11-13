@@ -1,22 +1,69 @@
-import { Link, useLocation } from 'react-router-dom';
+import { useState, type FormEvent } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, useProfile } from '../auth/AuthContext';
-import { ROLE_LABELS, visibleModules } from '../auth/permissions';
+import { can, ROLE_LABELS } from '../auth/permissions';
+import type { DeniedState } from '../auth/guards';
 import { Alert } from '../components/Alert';
 import { HealthIndicator } from '../components/HealthIndicator';
 import { PageHeader } from '../components/PageHeader';
-import { APP_VERSION } from '../config';
-import { formatJakartaDate, greetingFor } from '../lib/greeting';
-import type { DeniedState } from '../auth/guards';
 import { useActiveUnitLabel } from '../components/UnitSwitcher';
+import { APP_VERSION } from '../config';
+import { getDashboardCounts, type DashboardCounts } from '../lib/api';
+import { formatNumber } from '../lib/format';
+import { formatJakartaDate, greetingFor } from '../lib/greeting';
+import { useLoad } from '../lib/useLoad';
+
+interface StatDef {
+  key: keyof DashboardCounts;
+  label: string;
+  icon: string;
+  to?: string;
+  hint?: string;
+  tone?: 'warn';
+}
+
+function QuickSearch() {
+  const navigate = useNavigate();
+  const [q, setQ] = useState('');
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    navigate(q.trim() ? `/cari?q=${encodeURIComponent(q.trim())}` : '/cari');
+  }
+  return (
+    <form className="search-bar quick-search" role="search" onSubmit={submit}>
+      <label htmlFor="quick-q" className="sr-only">
+        Cari arsip
+      </label>
+      <input id="quick-q" type="search" enterKeyHint="search" placeholder="Cari nomor surat, uraian, lokasi…" value={q} onChange={(e) => setQ(e.target.value)} />
+      <button type="submit" className="btn btn-primary">
+        Cari
+      </button>
+    </form>
+  );
+}
 
 export function DashboardPage() {
   const { profile } = useProfile();
-  const { state } = useAuth();
+  const { state, client, activeUnitId } = useAuth();
   const location = useLocation();
   const denied = (location.state as DeniedState | null)?.denied;
   const unitLabel = useActiveUnitLabel();
-  const upcoming = visibleModules(profile.role).filter((m) => m.sprint !== 'S0');
   const email = state.status === 'signedIn' ? state.session.user.email : '';
+  const unitId = can(profile.role, 'unit.pilih') ? activeUnitId : null;
+  const [counts, retry] = useLoad(`counts:${unitId ?? 'all'}`, () => getDashboardCounts(client, unitId));
+
+  const stats: StatDef[] = [
+    { key: 'berkas_aktif', label: 'Berkas aktif', icon: '🗂️' },
+    { key: 'item_aktif', label: 'Item arsip aktif', icon: '📄' },
+    { key: 'item_tanpa_pdf', label: 'Item belum ada PDF', icon: '🖨️', to: '/cari?file=BELUM_DIUNGGAH', hint: 'Lihat daftarnya', tone: 'warn' },
+    {
+      key: 'penerimaan_menunggu',
+      label: 'Penerimaan menunggu pemberkasan',
+      icon: '📥',
+      tone: 'warn',
+      ...(can(profile.role, 'arsip.kelola') ? { to: '/penerimaan', hint: 'Buka Penerimaan' } : {}),
+    },
+  ];
 
   return (
     <>
@@ -27,6 +74,48 @@ export function DashboardPage() {
         </Alert>
       ) : null}
       <PageHeader title={`${greetingFor()}, ${profile.full_name || email}`} subtitle={formatJakartaDate()} />
+
+      <QuickSearch />
+
+      <section aria-labelledby="stats-title" className="stats-section">
+        <h2 id="stats-title" className="sr-only">
+          Ringkasan arsip {unitLabel}
+        </h2>
+        {counts.kind === 'error' ? (
+          <div className="stack">
+            <Alert tone="error" message={counts.message} />
+            <button type="button" className="btn btn-secondary" onClick={retry}>
+              Muat ulang ringkasan
+            </button>
+          </div>
+        ) : (
+          <div className="stat-grid" aria-busy={counts.kind === 'loading' ? true : undefined}>
+            {stats.map((s) => {
+              const value = counts.kind === 'ok' ? counts.data[s.key] : null;
+              const inner = (
+                <>
+                  <span className="stat-icon" aria-hidden="true">{s.icon}</span>
+                  <span className="stat-text">
+                    <span className="stat-label">{s.label}</span>
+                    <strong className={value === null ? 'stat-value loading' : 'stat-value'}>{value === null ? '…' : formatNumber(value)}</strong>
+                    {s.to && s.hint ? <span className="stat-hint">{s.hint} ›</span> : null}
+                  </span>
+                </>
+              );
+              const cls = `stat-card${s.tone === 'warn' && value ? ' warn' : ''}`;
+              return s.to ? (
+                <Link key={s.key} to={s.to} className={`${cls} stat-link`}>
+                  {inner}
+                </Link>
+              ) : (
+                <div key={s.key} className={cls}>
+                  {inner}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       <div className="info-grid">
         <div className="info-card">
@@ -56,24 +145,6 @@ export function DashboardPage() {
         <h2 id="health-title" className="section-title">Koneksi server</h2>
         <HealthIndicator />
       </section>
-
-      {upcoming.length ? (
-        <section className="card" aria-labelledby="roadmap-title">
-          <h2 id="roadmap-title" className="section-title">Modul untuk peran Anda</h2>
-          <p className="muted small">Central File v4 sedang dibangun bertahap. Modul berikut akan aktif sesuai jadwal sprint.</p>
-          <ul className="module-list">
-            {upcoming.map((m) => (
-              <li key={m.id}>
-                <Link to={m.path}>
-                  <span aria-hidden="true">{m.icon}</span>
-                  <span className="module-name">{m.label}</span>
-                  <span className="chip">Sprint {m.sprint.slice(1)}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
     </>
   );
 }

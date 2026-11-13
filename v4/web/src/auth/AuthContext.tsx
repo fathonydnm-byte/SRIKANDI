@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { Session, SupabaseClient } from '@supabase/supabase-js';
-import { ApiError, fetchProfile, fetchUnit, fetchUnits, type Profile, type Unit } from '../lib/api';
+import { ApiError, fetchAccountStatus, fetchProfile, fetchUnit, fetchUnits, type Profile, type Unit } from '../lib/api';
 import { toUserMessage, type UserMessage } from '../lib/errors';
 import { can, isRole } from './permissions';
 
@@ -44,6 +44,11 @@ function throwAuth(error: unknown): never {
 
 async function resolveProfile(client: SupabaseClient, userId: string): Promise<ProfileState> {
   try {
+    // Server menjelaskan alasan akun tertahan; RLS menyembunyikan profil nonaktif.
+    const status = await fetchAccountStatus(client);
+    if (status === 'NO_PROFILE') return { kind: 'blocked', reason: 'missing' };
+    if (status === 'INACTIVE') return { kind: 'blocked', reason: 'inactive' };
+    if (status === 'UNIT_INACTIVE') return { kind: 'blocked', reason: 'unit_inactive' };
     const profile = await fetchProfile(client, userId);
     if (!profile) return { kind: 'blocked', reason: 'missing' };
     if (!isRole(profile.role)) return { kind: 'blocked', reason: 'invalid_role' };

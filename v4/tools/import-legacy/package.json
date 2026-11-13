@@ -1,0 +1,16 @@
+{
+  "name": "central-file-v4-import-legacy",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Importer: ekspor .xlsx Central File 3.x (satu unit) -> skema Postgres v4.",
+  "type": "module",
+  "bin": { "cf-import-legacy": "./import.mjs" },
+  "scripts": {
+    "test": "bash ./test.sh"
+  },
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "exceljs": "4.4.0",
+    "pg": "8.13.1"
+  }
+}

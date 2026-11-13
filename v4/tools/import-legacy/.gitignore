@@ -1,0 +1,4 @@
+# Import reports and exports contain real archive metadata: never commit them.
+laporan-impor/
+*.xlsx
+node_modules/

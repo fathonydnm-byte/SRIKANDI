@@ -15,7 +15,13 @@ export interface FakeOptions {
   signInError?: Err | ((email: string, password: string) => Err | null);
   healthError?: Err;
   functionResponse?: unknown;
+  /** Bila tidak diisi, diturunkan dari profile/unit seperti public.my_account_status(). */
+  accountStatus?: string;
+  rpc?: Record<string, RpcHandler>;
 }
+
+export type RpcResult = { data: unknown; error: Err | null };
+export type RpcHandler = (args: Record<string, unknown>, signal: AbortSignal | undefined) => RpcResult | Promise<RpcResult>;
 
 export const UNIT: Unit = { id: 'unit-1', code: 'BAU', name: 'Biro Administrasi Umum', active: true };
 
@@ -104,6 +110,37 @@ export function createFakeClient(opts: FakeOptions = {}) {
     invoke: vi.fn(async (_name: string, _o: { body: unknown }) => ({ data: opts.functionResponse ?? { ok: true, data: null }, error: null })),
   };
 
-  const client = { auth, from: vi.fn(query), functions };
-  return { client: client as unknown as SupabaseClient, auth, functions, emit };
+  function deriveStatus(): string {
+    if (opts.accountStatus) return opts.accountStatus;
+    if (!opts.profile) return 'NO_PROFILE';
+    if (!opts.profile.active) return 'INACTIVE';
+    if (opts.unit && !opts.unit.active) return 'UNIT_INACTIVE';
+    return 'ACTIVE';
+  }
+
+  const rpc = vi.fn((name: string, args: Record<string, unknown> = {}) => {
+    let signal: AbortSignal | undefined;
+    const run = async (): Promise<RpcResult> => {
+      if (name === 'my_account_status') {
+        return opts.profileError ? { data: null, error: opts.profileError } : { data: deriveStatus(), error: null };
+      }
+      const defaults: Record<string, RpcHandler> = {
+        dashboard_counts: () => ({ data: { berkas_aktif: 0, item_aktif: 0, item_tanpa_pdf: 0, penerimaan_menunggu: 0 }, error: null }),
+      };
+      const handler = opts.rpc?.[name] ?? defaults[name];
+      if (!handler) return { data: null, error: { message: `rpc tidak dikenal ${name}`, code: '42883' } };
+      return handler(args, signal);
+    };
+    const builder = {
+      abortSignal: (s: AbortSignal) => {
+        signal = s;
+        return builder;
+      },
+      then: (resolve: (v: RpcResult) => unknown, reject?: (e: unknown) => unknown) => run().then(resolve, reject),
+    };
+    return builder;
+  });
+
+  const client = { auth, from: vi.fn(query), functions, rpc };
+  return { client: client as unknown as SupabaseClient, auth, functions, rpc, emit };
 }

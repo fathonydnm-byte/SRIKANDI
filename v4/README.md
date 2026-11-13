@@ -19,6 +19,8 @@ Isi `web/src/`:
 | `auth/AuthContext.tsx`, `auth/guards.tsx` | Sesi Supabase Auth, profil + unit, penjaga rute |
 | `lib/supabase.ts` | Pembuatan klien Supabase (satu tempat) |
 | `lib/api.ts` | Akses data; `callWrite()` selalu mengirim `requestId` (UUID) sebagai kunci idempotensi |
+| `lib/files.ts` | Satu-satunya jalur membuka PDF/folder (sementara: URL Google Drive di tab baru; nanti diganti jembatan unduh aman) |
+| `pages/search/`, `pages/detail/` | Cari Arsip (kriteria di URL), detail item, Daftar Isi Berkas |
 | `lib/errors.ts` | Penerjemah error teknis → pesan yang bisa ditindaklanjuti |
 | `pages/`, `components/` | Layar dan komponen; modul yang belum dibangun memakai `PlaceholderPage` |
 | `public/_redirects`, `public/_headers` | SPA fallback dan header keamanan (CSP dsb.) Cloudflare Pages |
@@ -63,6 +65,10 @@ Di Supabase → Authentication → URL Configuration, isi **Site URL** dengan do
 | Environment variables | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (Production = proyek produksi, Preview = staging), `NODE_VERSION=22` |
 
 `_redirects` mengarahkan semua rute ke `index.html`; `_headers` memasang CSP (hanya `self` + `https://*.supabase.co`), `frame-ancestors 'none'`, HSTS, dan Referrer-Policy. Bila kelak memakai domain Supabase kustom atau Pages Functions di origin lain, perbarui `connect-src` di `_headers`.
+
+## Data baca (Sprint 1)
+
+Layar baca memakai RPC di `supabase/migrations/0006_search.sql`, semuanya SECURITY INVOKER sehingga RLS tetap berlaku: `search_archive` (port `searchArchive_` 3.x), `get_item_detail`, `get_berkas_detail`, `dashboard_counts`, plus `my_account_status` (0005) untuk layar akun tertahan.
 
 ## CI
 

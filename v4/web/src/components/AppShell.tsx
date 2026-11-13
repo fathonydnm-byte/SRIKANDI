@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth, useProfile } from '../auth/AuthContext';
 import { findModuleByPath, mobileNav, NAV_GROUP_ORDER, ROLE_LABELS, visibleModules, type ModuleDef } from '../auth/permissions';
 import { BrandMark } from './BrandMark';
+import { Sheet } from './Sheet';
 import { OfflineBanner } from './OfflineBanner';
 import { UnitSwitcher, useActiveUnitLabel } from './UnitSwitcher';
 
@@ -14,6 +15,8 @@ function initials(name: string): string {
 
 function pageLabel(pathname: string): string {
   if (pathname === '/akun/kata-sandi') return 'Ubah kata sandi';
+  if (pathname.startsWith('/cari/item/')) return 'Detail arsip';
+  if (pathname.startsWith('/cari/berkas/')) return 'Daftar Isi Berkas';
   return findModuleByPath(pathname)?.label ?? 'Halaman';
 }
 
@@ -92,72 +95,36 @@ function Sidebar({ modules }: { modules: ModuleDef[] }) {
 function MoreSheet({ modules, onClose }: { modules: ModuleDef[]; onClose(): void }) {
   const { profile } = useProfile();
   const unitLabel = useActiveUnitLabel();
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const first = ref.current?.querySelector<HTMLElement>('a, button, select');
-    first?.focus();
-  }, []);
-
-  function onKeyDown(e: ReactKeyboardEvent<HTMLDivElement>) {
-    if (e.key === 'Escape') {
-      e.stopPropagation();
-      onClose();
-      return;
-    }
-    if (e.key !== 'Tab' || !ref.current) return;
-    const focusables = Array.from(ref.current.querySelectorAll<HTMLElement>('a, button, select')).filter((el) => !el.hasAttribute('disabled'));
-    if (!focusables.length) return;
-    const first = focusables[0]!;
-    const last = focusables[focusables.length - 1]!;
-    if (e.shiftKey && document.activeElement === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  }
-
   return (
-    <div className="sheet-root">
-      <div className="sheet-backdrop" onClick={onClose} aria-hidden="true" />
-      <div className="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" ref={ref} onKeyDown={onKeyDown}>
-        <div className="sheet-header">
-          <h2 id="sheet-title">Lainnya</h2>
-          <button type="button" className="icon-button" onClick={onClose} aria-label="Tutup menu Lainnya">
-            ✕
-          </button>
-        </div>
-        <div className="sheet-user">
-          <span className="avatar" aria-hidden="true">{initials(profile.full_name)}</span>
-          <div>
-            <strong>{profile.full_name}</strong>
-            <span>
-              {ROLE_LABELS[profile.role]} · {unitLabel}
-            </span>
-          </div>
-        </div>
-        <UnitSwitcher />
-        {modules.length ? (
-          <nav aria-label="Modul lainnya" className="sheet-nav">
-            {modules.map((m) => (
-              <NavLink key={m.id} to={m.path} className="nav-button" onClick={onClose}>
-                <span className="nav-icon" aria-hidden="true">{m.icon}</span>
-                <span className="nav-label">{m.label}</span>
-              </NavLink>
-            ))}
-          </nav>
-        ) : null}
-        <div className="sheet-nav sheet-account">
-          <NavLink to="/akun/kata-sandi" className="nav-button" onClick={onClose}>
-            <span className="nav-icon" aria-hidden="true">🔑</span>
-            <span className="nav-label">Ubah kata sandi</span>
-          </NavLink>
-          <SignOutButton className="nav-button" />
+    <Sheet title="Lainnya" onClose={onClose} variant="more">
+      <div className="sheet-user">
+        <span className="avatar" aria-hidden="true">{initials(profile.full_name)}</span>
+        <div>
+          <strong>{profile.full_name}</strong>
+          <span>
+            {ROLE_LABELS[profile.role]} · {unitLabel}
+          </span>
         </div>
       </div>
-    </div>
+      <UnitSwitcher />
+      {modules.length ? (
+        <nav aria-label="Modul lainnya" className="sheet-nav">
+          {modules.map((m) => (
+            <NavLink key={m.id} to={m.path} className="nav-button" onClick={onClose}>
+              <span className="nav-icon" aria-hidden="true">{m.icon}</span>
+              <span className="nav-label">{m.label}</span>
+            </NavLink>
+          ))}
+        </nav>
+      ) : null}
+      <div className="sheet-nav sheet-account">
+        <NavLink to="/akun/kata-sandi" className="nav-button" onClick={onClose}>
+          <span className="nav-icon" aria-hidden="true">🔑</span>
+          <span className="nav-label">Ubah kata sandi</span>
+        </NavLink>
+        <SignOutButton className="nav-button" />
+      </div>
+    </Sheet>
   );
 }
 

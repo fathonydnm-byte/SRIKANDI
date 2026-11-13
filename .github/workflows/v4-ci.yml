@@ -69,6 +69,7 @@ jobs:
         run: |
           if [ -f v4/tests/db/run.sh ]; then
             bash v4/tests/db/run.sh
+            bash v4/tools/import-legacy/test.sh
           else
             echo "::warning::v4/tests/db/run.sh belum ada; tes database dilewati."
           fi
