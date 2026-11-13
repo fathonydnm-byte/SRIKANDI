@@ -15,9 +15,9 @@ export function fixtureDefinition() {
   const sheets = {};
 
   sheets.SETTINGS = {
-    headers: ['KEY', 'VALUE', 'TYPE', 'DESCRIPTION'],
+    headers: ['KEY', 'VALUE', 'TYPE', 'DESCRIPTION', 'SCOPE', 'UPDATED_AT'],
     rows: [
-      { KEY: 'INSTANCE_ID', VALUE: 'INS-UJI-0001', TYPE: 'STRING', DESCRIPTION: 'ID instance' },
+      { KEY: 'INSTANCE_ID', VALUE: 'INS-UJI-0001', TYPE: 'STRING', DESCRIPTION: 'ID instance', SCOPE: 'GLOBAL', UPDATED_AT: '2025-01-01T01:02:03.456Z' },
       { KEY: 'UNIT_ID', VALUE: 'UNIT-UJI', TYPE: 'STRING', DESCRIPTION: 'ID unit' },
       { KEY: 'UNIT_CODE', VALUE: 'UJI', TYPE: 'STRING' },
       { KEY: 'UNIT_NAME', VALUE: 'Unit Uji Fiktif', TYPE: 'STRING' },
@@ -25,20 +25,23 @@ export function fixtureDefinition() {
       { KEY: 'AUDIT_LOG_YEAR', VALUE: 2026, TYPE: 'NUMBER', DESCRIPTION: 'Tahun audit log aktif' },
       { KEY: 'BACKUP_DAILY_ENABLED', VALUE: true, TYPE: 'BOOLEAN' },
       { KEY: 'BA_PIMPINAN_NIP', VALUE: '000000000000000000', TYPE: 'STRING', DESCRIPTION: 'NIP fiktif' },
-      { KEY: 'RECORD_CENTER_SHARED_SECRET', VALUE: 'rahasia-fiktif-jangan-diimpor', TYPE: 'STRING' }
+      { KEY: 'RECORD_CENTER_SHARED_SECRET', VALUE: 'rahasia-fiktif-jangan-diimpor', TYPE: 'STRING' },
+      // real export marks secrets with TYPE=SECRET; the key name alone would not reveal it
+      { KEY: 'RC_KUNCI_BERSAMA', VALUE: 'nilai-rahasia-tipe', TYPE: 'SECRET', SCOPE: 'RECORD_CENTER' }
     ]
   };
 
   sheets.MASTER_KLASIFIKASI = {
-    headers: ['KLASIFIKASI_ID', 'PARENT_ID', 'LEVEL', 'KODE_LENGKAP', 'URAIAN', 'LABEL_DROPDOWN', 'AKTIF', 'URUTAN'],
+    headers: ['KLASIFIKASI_ID', 'LEVEL', 'PARENT_ID', 'KODE_PRIMER', 'KODE_SEKUNDER', 'KODE_TERSIER', 'KODE_LENGKAP', 'URAIAN',
+      'LABEL_DROPDOWN', 'URUTAN', 'AKTIF', 'STATUS_REVIEW', 'SUMBER', 'CATATAN', 'UPDATED_AT'],
     rows: [
-      { KLASIFIKASI_ID: 'K-PR', PARENT_ID: '', LEVEL: 1, KODE_LENGKAP: 'PR', URAIAN: 'Perencanaan', LABEL_DROPDOWN: 'PR – Perencanaan', AKTIF: true, URUTAN: 1 },
-      { KLASIFIKASI_ID: 'K-PR01', PARENT_ID: 'K-PR', LEVEL: 2, KODE_LENGKAP: 'PR.01', URAIAN: 'Rencana strategis', AKTIF: 'TRUE', URUTAN: 2 },
-      { KLASIFIKASI_ID: 'K-PR0101', PARENT_ID: 'K-PR01', LEVEL: 3, KODE_LENGKAP: 'PR.01.01', URAIAN: 'Renstra', AKTIF: true, URUTAN: 3 },
-      { KLASIFIKASI_ID: 'K-KU', PARENT_ID: 'ROOT', LEVEL: 1, KODE_LENGKAP: 'KU', URAIAN: 'Keuangan', AKTIF: true, URUTAN: 4 },
+      { KLASIFIKASI_ID: 'K-PR', PARENT_ID: '', LEVEL: 'PRIMER', KODE_PRIMER: 'PR', KODE_LENGKAP: 'PR', STATUS_REVIEW: 'DISETUJUI', SUMBER: 'Pedoman fiktif', URAIAN: 'Perencanaan', LABEL_DROPDOWN: 'PR – Perencanaan', AKTIF: true, URUTAN: 1 },
+      { KLASIFIKASI_ID: 'K-PR01', PARENT_ID: 'K-PR', LEVEL: 'SEKUNDER', KODE_PRIMER: 'PR', KODE_SEKUNDER: '01', KODE_LENGKAP: 'PR.01', STATUS_REVIEW: 'DISETUJUI', UPDATED_AT: '2025-02-03T04:05:06.789Z', URAIAN: 'Rencana strategis', AKTIF: 'TRUE', URUTAN: 2 },
+      { KLASIFIKASI_ID: 'K-PR0101', PARENT_ID: 'K-PR01', LEVEL: 'TERSIER', KODE_PRIMER: 'PR', KODE_SEKUNDER: '01', KODE_TERSIER: '01', KODE_LENGKAP: 'PR.01.01', CATATAN: 'catatan fiktif', UPDATED_AT: '2025-02-03T04:05:06.789Z', URAIAN: 'Renstra', AKTIF: true, URUTAN: 3 },
+      { KLASIFIKASI_ID: 'K-KU', PARENT_ID: 'ROOT', LEVEL: 'PRIMER', KODE_LENGKAP: 'KU', URAIAN: 'Keuangan', AKTIF: true, URUTAN: 4 },
       // secondary without tertiary children (FIX 3.30.6)
-      { KLASIFIKASI_ID: 'K-KU02', PARENT_ID: 'K-KU', LEVEL: 2, KODE_LENGKAP: 'KU.02', URAIAN: 'Pelaksanaan anggaran', AKTIF: true, URUTAN: 5 },
-      { KLASIFIKASI_ID: 'K-LAMA', PARENT_ID: 'K-KU', LEVEL: 2, KODE_LENGKAP: 'KU.99', URAIAN: 'Kode lama (nonaktif)', AKTIF: '', URUTAN: 6 }
+      { KLASIFIKASI_ID: 'K-KU02', PARENT_ID: 'K-KU', LEVEL: 'SEKUNDER', KODE_LENGKAP: 'KU.02', URAIAN: 'Pelaksanaan anggaran', AKTIF: true, URUTAN: 5 },
+      { KLASIFIKASI_ID: 'K-LAMA', PARENT_ID: 'K-KU', LEVEL: 'SEKUNDER', KODE_LENGKAP: 'KU.99', URAIAN: 'Kode lama (nonaktif)', AKTIF: '', URUTAN: 6 }
     ]
   };
 
@@ -62,7 +65,10 @@ export function fixtureDefinition() {
     'PENCIPTA_ARSIP_SNAPSHOT', 'UNIT_PENCIPTA_ID', 'UNIT_PENCIPTA_SNAPSHOT', 'KLASIFIKASI_KEAMANAN_AKSES',
     'ARSIP_VITAL', 'ARSIP_TERJAGA', 'JUMLAH_ITEM_FISIK', 'JUMLAH_ITEM_BORN_DIGITAL', 'JUMLAH_ITEM_ALIH_MEDIA',
     'STATUS_VERIFIKASI_METADATA', 'METADATA_SCHEMA_VERSION', 'USUL_PINDAH_ID_AKTIF', 'USUL_PINDAH_NO_AKTIF',
-    'IS_DELETED', 'VERSION', 'UPDATED_BY', 'UPDATED_AT', 'CREATED_BY', 'CREATED_AT', 'KOLOM_LAMA_X'
+    'IS_DELETED', 'VERSION', 'UPDATED_BY', 'UPDATED_AT', 'CREATED_BY', 'CREATED_AT', 'KOLOM_LAMA_X',
+    // present in real sheets, absent from the 3.32.5 code
+    'NO_BERKAS_LAMA', 'JRA_NAMA_SNAPSHOT', 'TGL_PEMINDAHAN', 'BUKTI_PEMINDAHAN_FILE_ID', 'DELETED_AT',
+    'DISETUJUI_PEMINDAHAN_OLEH', 'TGL_PERSETUJUAN_PEMINDAHAN', 'CATATAN_PEMINDAHAN', 'BUKTI_PEMINDAHAN_FILE_URL'
   ];
   const ret = { RETENSI_AKTIF_NILAI: 2, RETENSI_AKTIF_SATUAN: 'TAHUN', RETENSI_INAKTIF_NILAI: 3, RETENSI_INAKTIF_SATUAN: 'tahun', NASIB_AKHIR: 'PERMANEN' };
   sheets.DB_BERKAS = {
@@ -74,7 +80,7 @@ export function fixtureDefinition() {
         DRIVE_FOLDER_ID: 'drv-folder-1', DRIVE_FOLDER_URL: link('https://drive.google.com/drive/folders/drv-folder-1'),
         STATUS_PEMINJAMAN: 'TERSEDIA', STATUS_BERKAS: 'AKTIF', KLASIFIKASI_KEAMANAN_AKSES: 'BIASA/TERBUKA', ARSIP_VITAL: 'YA', ARSIP_TERJAGA: false,
         STATUS_VERIFIKASI_METADATA: 'TERVERIFIKASI', METADATA_SCHEMA_VERSION: 4, IS_DELETED: false, VERSION: 5,
-        CREATED_AT: '2025-01-15T09:00:00+07:00', CREATED_BY: 'petugas@contoh.invalid', UPDATED_AT: D(2025, 3, 11, 10, 15), UPDATED_BY: 'petugas@contoh.invalid', KOLOM_LAMA_X: 'abaikan' },
+        CREATED_AT: '2025-01-15T09:00:00+07:00', CREATED_BY: 'petugas@contoh.invalid', UPDATED_AT: D(2025, 3, 11, 10, 15), UPDATED_BY: 'petugas@contoh.invalid', KOLOM_LAMA_X: 'abaikan', NO_BERKAS_LAMA: '12' },
       // renumbered (was 1), secondary classification without tertiary, text dates, wrong TOTAL_HALAMAN
       { BERKAS_ID: 'BRK-2', NO_BERKAS_DEFINITIF: '2', JUDUL_BERKAS: 'Pelaksanaan anggaran 2026 (fiktif)', KLASIFIKASI_ID: 'K-KU02', KODE_KLASIFIKASI_SNAPSHOT: 'KU.02', ...ret, NASIB_AKHIR: 'musnah',
         STATUS_RETENSI: 'AKTIF', TGL_ITEM_AWAL: '01/02/2026', TGL_ITEM_AKHIR: '01/02/2026', TGL_URUT_BERKAS: '01/02/2026', TGL_ACUAN_RETENSI: '1/2/2026', BATAS_AKTIF: '01/02/2028', BATAS_INAKTIF: '01-02-2031',
@@ -83,13 +89,14 @@ export function fixtureDefinition() {
         CREATED_AT: '15/01/2026 09:30', CREATED_BY: 'petugas@contoh.invalid' },
       // soft-deleted berkas re-using number 2
       { BERKAS_ID: 'BRK-3', NO_BERKAS_DEFINITIF: 2, JUDUL_BERKAS: 'Berkas salah input (dihapus)', KLASIFIKASI_ID: 'K-KU02', ...ret,
-        STATUS_BERKAS: 'DIHAPUS', IS_DELETED: true, VERSION: 2, CATATAN: 'Dihapus: salah input', CREATED_AT: '2026-01-20T10:00:00+07:00' },
+        STATUS_BERKAS: 'DIHAPUS', IS_DELETED: true, VERSION: 2, CATATAN: 'Dihapus: salah input', CREATED_AT: '2026-01-20T10:00:00+07:00', DELETED_AT: '2026-01-21T08:00:00+07:00' },
       // draft, dangling classification, lowercase security alias
       { BERKAS_ID: 'BRK-4', NO_BERKAS_DEFINITIF: '', JUDUL_BERKAS: 'Draft tanpa item (fiktif)', KLASIFIKASI_ID: 'K-HILANG', ...ret,
         STATUS_RETENSI: 'MENUNGGU ITEM', STATUS_BERKAS: 'DRAFT', KLASIFIKASI_KEAMANAN_AKSES: 'biasa', CREATED_AT: D(2026, 2, 3, 14, 0) },
       // transferred to Record Center: not active
       { BERKAS_ID: 'BRK-5', NO_BERKAS_DEFINITIF: 3, JUDUL_BERKAS: 'Berkas lama sudah dipindahkan', KLASIFIKASI_ID: 'K-PR01', ...ret,
-        STATUS_BERKAS: 'AKTIF', STATUS_PEMINDAHAN: 'SUDAH DIPINDAHKAN', JUMLAH_ITEM: 1, TOTAL_HALAMAN: 4, CREATED_AT: '2020-05-05T08:00:00+07:00' }
+        STATUS_BERKAS: 'AKTIF', STATUS_PEMINDAHAN: 'SUDAH DIPINDAHKAN', JUMLAH_ITEM: 1, TOTAL_HALAMAN: 4, CREATED_AT: '2020-05-05T08:00:00+07:00',
+        TGL_PEMINDAHAN: D(2025, 6, 30), TGL_PERSETUJUAN_PEMINDAHAN: '20/06/2025', DISETUJUI_PEMINDAHAN_OLEH: 'Pejabat Fiktif', CATATAN_PEMINDAHAN: 'Dipindah ke RC (fiktif)' }
     ]
   };
 
@@ -103,7 +110,7 @@ export function fixtureDefinition() {
       'CREATED_AT', 'CREATED_BY', 'UPDATED_AT', 'UPDATED_BY', 'VERSION', 'IS_DELETED',
       'ARSIP_ID', 'SUMBER_REGISTRASI', 'PENERIMAAN_ID', 'PENERIMAAN_ITEM_ID', 'NOMOR_TANDA_TERIMA_SNAPSHOT', 'KONDISI_FISIK',
       'MEDIA_SUMBER', 'STATUS_BENTUK_DIGITAL', 'CATATAN_MEDIA', 'STATUS_VERIFIKASI_METADATA', 'METADATA_SCHEMA_VERSION',
-      'KOLOM_TAMBAHAN'
+      'KOLOM_TAMBAHAN', 'NO_ITEM_LAMA', 'DELETED_AT'
     ],
     rows: [
       { ITEM_ID: 'ITM-1', BERKAS_ID: 'BRK-1', NO_ITEM_DEFINITIF: 1, NO_SURAT_UTAMA: 'B-001/FIKTIF/2025', NO_SURAT_DISPLAY: 'B-001/FIKTIF/2025',
@@ -125,7 +132,7 @@ export function fixtureDefinition() {
         ARSIP_ID: 'ARS-1', SUMBER_REGISTRASI: 'PENERIMAAN_ARSIP', PENERIMAAN_ID: 'RCV-1', PENERIMAAN_ITEM_ID: 'RCVI-1', NOMOR_TANDA_TERIMA_SNAPSHOT: 'TRM-2026-0001', KONDISI_FISIK: 'BAIK' },
       // soft-deleted item keeping the same number
       { ITEM_ID: 'ITM-4', BERKAS_ID: 'BRK-2', NO_ITEM_DEFINITIF: 1, URAIAN_LENGKAP: 'Duplikat (dihapus)', TANGGAL_NASKAH: '2026-02-01', JUMLAH_HALAMAN: 2,
-        STATUS_FILE: 'DIHAPUS', CATATAN: 'Dihapus: duplikat', CREATED_AT: '2026-02-02T11:05:00+07:00', IS_DELETED: 'TRUE' },
+        STATUS_FILE: 'DIHAPUS', CATATAN: 'Dihapus: duplikat', CREATED_AT: '2026-02-02T11:05:00+07:00', IS_DELETED: 'TRUE', DELETED_AT: '2026-02-03T09:00:00+07:00', NO_ITEM_LAMA: '7' },
       // orphan: berkas does not exist
       { ITEM_ID: 'ITM-5', BERKAS_ID: 'BRK-TIDAK-ADA', NO_ITEM_DEFINITIF: 1, URAIAN_LENGKAP: 'Item yatim', JUMLAH_HALAMAN: 1, CREATED_AT: '2026-02-03T08:00:00+07:00' },
       // in a transferred berkas; ARSIP_ID without source
@@ -181,7 +188,7 @@ export function fixtureDefinition() {
 
   sheets.RIWAYAT_NOMOR = {
     headers: ['RIWAYAT_ID', 'JENIS_OBJEK', 'OBJEK_ID', 'BERKAS_ID', 'NOMOR_LAMA', 'NOMOR_BARU', 'NAMA_LAMA', 'NAMA_BARU', 'ALASAN',
-      'BATCH_RENUMBER_ID', 'DIKONFIRMASI_OLEH', 'DIKONFIRMASI_AT', 'CREATED_AT', 'CREATED_BY'],
+      'BATCH_RENUMBER_ID', 'DIKONFIRMASI_OLEH', 'DIKONFIRMASI_AT', 'CREATED_AT', 'CREATED_BY', 'CATATAN'],
     rows: [
       { RIWAYAT_ID: 'HIS-1', JENIS_OBJEK: 'BERKAS', OBJEK_ID: 'BRK-2', BERKAS_ID: 'BRK-2', NOMOR_LAMA: '', NOMOR_BARU: 1, ALASAN: 'Penomoran awal', BATCH_RENUMBER_ID: 'REN-1', CREATED_AT: '2026-01-15T09:30:00+07:00' },
       { RIWAYAT_ID: 'HIS-2', JENIS_OBJEK: 'BERKAS', OBJEK_ID: 'BRK-2', BERKAS_ID: 'BRK-2', NOMOR_LAMA: 1, NOMOR_BARU: 2, ALASAN: 'Penomoran ulang kronologis', BATCH_RENUMBER_ID: 'REN-2', DIKONFIRMASI_OLEH: 'petugas@contoh.invalid', DIKONFIRMASI_AT: '2026-02-02T11:00:00+07:00', CREATED_AT: '2026-02-02T11:00:00+07:00' },
@@ -191,7 +198,8 @@ export function fixtureDefinition() {
     ]
   };
 
-  const auditHeaders = ['LOG_ID', 'TIMESTAMP', 'USER_EMAIL', 'AKSI', 'MODUL', 'JENIS_OBJEK', 'OBJEK_ID', 'RINGKASAN', 'ALASAN', 'REQUEST_ID', 'STATUS'];
+  const auditHeaders = ['LOG_ID', 'TIMESTAMP', 'USER_EMAIL', 'AKSI', 'MODUL', 'JENIS_OBJEK', 'OBJEK_ID', 'RINGKASAN',
+    'DATA_SEBELUM_JSON', 'DATA_SESUDAH_JSON', 'ALASAN', 'REQUEST_ID', 'STATUS', 'IP_INFO', 'CATATAN'];
   sheets.AUDIT_LOG_2025 = {
     headers: auditHeaders,
     rows: [
@@ -203,6 +211,8 @@ export function fixtureDefinition() {
     headers: auditHeaders,
     rows: [
       { LOG_ID: 'LOG-3', TIMESTAMP: '2026-02-02T11:00:00+07:00', USER_EMAIL: 'petugas@contoh.invalid', AKSI: 'PEMBERKASAN', MODUL: 'PENERIMAAN_ARSIP', OBJEK_ID: 'RCV-1', STATUS: '' },
+      { LOG_ID: 'LOG-5', TIMESTAMP: '2026-02-05T01:02:03.004Z', USER_EMAIL: '', AKSI: 'UPDATE', MODUL: 'BERKAS', OBJEK_ID: 'BRK-1',
+        DATA_SEBELUM_JSON: '{"judul":"lama"}', DATA_SESUDAH_JSON: '{"judul":"baru"}', IP_INFO: '0.0.0.0 (fiktif)', CATATAN: 'catatan fiktif', STATUS: 'WARNING' },
       { LOG_ID: 'LOG-4', TIMESTAMP: '04/02/2026 10:00', USER_EMAIL: 'admin@contoh.invalid', AKSI: 'CANCEL', MODUL: 'PENERIMAAN_ARSIP', OBJEK_ID: 'RCV-2', ALASAN: 'Salah unit penyerah', STATUS: 'SUCCESS' }
     ]
   };
@@ -220,6 +230,17 @@ export function fixtureDefinition() {
   sheets.LOG_CETAK_PENERIMAAN = { headers: ['CETAK_ID', 'PENERIMAAN_ID'], rows: [{ CETAK_ID: 'PRN-1', PENERIMAAN_ID: 'RCV-1' }] };
   sheets.SYSTEM_BACKUPS = { headers: ['BACKUP_ID', 'STATUS'], rows: [{ BACKUP_ID: 'BKP-1', STATUS: 'COMPLETE' }] };
   sheets['Catatan Petugas'] = { headers: ['CATATAN'], rows: [{ CATATAN: 'lembar kerja pribadi' }] };
+  sheets.MASTER_JENIS_NASKAH = {
+    headers: ['JENIS_NASKAH_ID', 'KATEGORI', 'SUBJENIS_NASKAH_ID', 'SUBJENIS', 'POLA_DEFAULT', 'AKTIF', 'URUTAN'],
+    rows: [
+      { JENIS_NASKAH_ID: 'JN-1', KATEGORI: 'Kategori fiktif', SUBJENIS_NASKAH_ID: 'SJ-1', SUBJENIS: 'Subjenis fiktif', POLA_DEFAULT: 'BULANAN', AKTIF: true, URUTAN: 1 },
+      { JENIS_NASKAH_ID: 'JN-1', KATEGORI: 'Kategori fiktif', SUBJENIS_NASKAH_ID: 'SJ-2', SUBJENIS: 'Subjenis fiktif 2', POLA_DEFAULT: 'TAHUNAN', AKTIF: true, URUTAN: 2 }
+    ]
+  };
+  sheets.MASTER_JRA = { headers: ['JRA_ID', 'KODE_JRA', 'JENIS_ARSIP', 'NASIB_AKHIR'], rows: [] };
+  sheets.IMPORT_STAGING = { headers: ['IMPORT_BATCH_ID', 'BARIS_SUMBER', 'NO_BERKAS_LAMA'], rows: [] };
+  // hand-made layout sheet with a merged title in row 1 (duplicate header names)
+  sheets['DAFTAR CONTOH LAIN'] = { matrix: [['DAFTAR CONTOH (fiktif)', 'DAFTAR CONTOH (fiktif)'], ['No', 'Uraian'], [1, 'baris fiktif']] };
 
   // Derived legacy reports (layout sheets): title rows, header row, column-number row, data rows
   sheets['DAFTAR BERKAS'] = {

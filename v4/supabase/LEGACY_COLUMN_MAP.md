@@ -227,3 +227,46 @@ Not mapped: `TAHUN` **?**. RetentionService reads `row.TAHUN` as a fallback for 
 ## Not in this sprint
 
 PEMINJAMAN (holds the PII `NIP_NIK` and `NO_WHATSAPP`, which go through `app.encrypt_pii` in S4), USUL_PINDAH*, OUTBOX_RECORD_CENTER, DB_SEARCH_DOCUMENTS, LOG_CETAK_*, SYSTEM_*, JRA reference.
+
+## Additions from the real pilot export (migration 0007)
+
+These columns exist in the real 3.32.5 sheets but are not declared anywhere in the Apps Script code.
+
+| Sheet | Legacy | Column | Type |
+| --- | --- | --- | --- |
+| DB_BERKAS | NO_BERKAS_LAMA | no_berkas_lama | t |
+| DB_BERKAS | JRA_NAMA_SNAPSHOT | jra_nama_snapshot | t |
+| DB_BERKAS | TGL_PEMINDAHAN / TGL_PERSETUJUAN_PEMINDAHAN | tgl_pemindahan / tgl_persetujuan_pemindahan | d |
+| DB_BERKAS | BUKTI_PEMINDAHAN_FILE_ID / _URL | bukti_pemindahan_file_id / bukti_pemindahan_file_url | t |
+| DB_BERKAS | DISETUJUI_PEMINDAHAN_OLEH / CATATAN_PEMINDAHAN | disetujui_pemindahan_oleh / catatan_pemindahan | t |
+| DB_BERKAS | DELETED_AT | deleted_at | ts |
+| DB_ITEM | NO_ITEM_LAMA / DELETED_AT | no_item_lama / deleted_at | t / ts |
+| MASTER_KLASIFIKASI | KODE_PRIMER / KODE_SEKUNDER / KODE_TERSIER | kode_primer / kode_sekunder / kode_tersier | t |
+| MASTER_KLASIFIKASI | STATUS_REVIEW / SUMBER / CATATAN | status_review / sumber / catatan | t |
+| MASTER_KLASIFIKASI | UPDATED_AT | updated_at | ts (a blank cell keeps the DB value) |
+| SETTINGS | SCOPE / UPDATED_AT | scope / updated_at | t / ts (a blank cell keeps the DB value) |
+| RIWAYAT_NOMOR | CATATAN | catatan | t |
+| AUDIT_LOG | DATA_SEBELUM_JSON / DATA_SESUDAH_JSON | before_data / after_data | j |
+| AUDIT_LOG | IP_INFO / CATATAN | ip_info / catatan | t |
+
+SETTINGS rows with `TYPE = SECRET` are never imported, whatever the key name. Each one is reported by key name only.
+
+Answers to the Sprint 0 open questions (pilot export):
+
+- `LEVEL` is text: PRIMER / SEKUNDER / TERSIER.
+- `JRA_ID` exists in DB_BERKAS but is empty. There is no JRA dasar-hukum or versi column; `JRA_NAMA_SNAPSHOT` exists instead.
+- DB_BERKAS has no `TAHUN` column.
+- `STATUS_PEMINDAHAN` exists and is empty.
+- `MEDIA_BERKAS` is free text and includes "BELUM DITETAPKAN".
+- `KONDISI_FISIK` on DB_ITEM only holds BAIK or blank.
+- DB_ITEM has `DELETED_AT` (empty) and no `DELETED_BY`.
+- `ARSIP_ID` is unique in the pilot.
+- `NOMOR_LAMA` / `NOMOR_BARU` are always integers or blank, so `integer` stays.
+- MASTER_PEGAWAI has no PII columns.
+
+Sheets outside Config.js found in the pilot:
+
+- MASTER_JENIS_NASKAH: deferred to S2.
+- MASTER_JRA (empty): deferred to S5.
+- IMPORT_STAGING (empty): not migrated.
+- DOKUMEN ISO and DAFTAR ARSIP ELEKTRONIK: hand-made layout sheets, reported as unknown.

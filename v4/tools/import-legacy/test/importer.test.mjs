@@ -86,8 +86,8 @@ test('first import: rows, statuses, dates, links and PII stored as expected', as
   assert.equal(r.status, 'BERHASIL', r.fatal.join('\n'));
   const counts = Object.fromEntries(Object.entries(r.tables).map(([t, s]) => [t, [s.read, s.inserted, s.rejected]]));
   assert.deepEqual(counts, {
-    unit_settings: [9, 8, 0], klasifikasi: [6, 6, 0], pegawai: [2, 2, 0], berkas: [5, 5, 0],
-    penerimaan: [3, 3, 0], item: [6, 5, 1], penerimaan_item: [4, 3, 1], riwayat_nomor: [5, 5, 0], audit_log: [4, 4, 0]
+    unit_settings: [10, 8, 0], klasifikasi: [6, 6, 0], pegawai: [2, 2, 0], berkas: [5, 5, 0],
+    penerimaan: [3, 3, 0], item: [6, 5, 1], penerimaan_item: [4, 3, 1], riwayat_nomor: [5, 5, 0], audit_log: [5, 5, 0]
   });
   const id = await unitId();
   const q = async (sql, ...p) => (await pool.query(sql, [id, ...p])).rows;
@@ -150,18 +150,20 @@ test('first import: rows, statuses, dates, links and PII stored as expected', as
   assert.deepEqual(r.notes.looseInt.map((x) => x.value), ['1a']);
 
   const audit = Object.fromEntries((await q('select id, result, occurred_at from public.audit_log where unit_id = $1')).map((x) => [x.id, x]));
-  assert.deepEqual(Object.keys(audit).sort(), ['LOG-1', 'LOG-2', 'LOG-3', 'LOG-4']);
+  assert.deepEqual(Object.keys(audit).sort(), ['LOG-1', 'LOG-2', 'LOG-3', 'LOG-4', 'LOG-5']);
   assert.equal(audit['LOG-3'].result, 'SUCCESS');
   assert.equal(audit['LOG-2'].result, 'FAILED');
   assert.equal(audit['LOG-4'].occurred_at.toISOString(), '2026-02-04T03:00:00.000Z');
 
   // secret-like setting skipped and named; settings typed
-  assert.deepEqual(r.skippedSecretSettings, ['RECORD_CENTER_SHARED_SECRET']);
+  assert.deepEqual(r.skippedSecretSettings, ['RECORD_CENTER_SHARED_SECRET', 'RC_KUNCI_BERSAMA']);
   const settings = Object.fromEntries((await q('select key, value from public.unit_settings where unit_id = $1')).map((x) => [x.key, x.value]));
   assert.equal(settings.RECORD_CENTER_SHARED_SECRET, undefined);
   assert.equal(settings.AUDIT_LOG_YEAR, 2026);
   assert.equal(settings.BACKUP_DAILY_ENABLED, true);
+  assert.equal(settings.RC_KUNCI_BERSAMA, undefined);
   assert.ok(!JSON.stringify(r).includes('rahasia-fiktif-jangan-diimpor'));
+  assert.ok(!JSON.stringify(r).includes('nilai-rahasia-tipe'));
 
   // PII encrypted at rest, decryptable with the key, never in the report
   const [p] = await q("select nip_nik_enc from public.pegawai where unit_id = $1 and id = 'PGW-1'");
@@ -195,22 +197,24 @@ test('first import: reconciliation report (orphans, totals, legacy reports, unkn
   assert.equal(r.legacyReports.daftarIsiBerkas.cocok, true);
   assert.equal(r.dbVerification.cocokDenganEkspor, true);
 
-  assert.deepEqual(r.unknownColumns.DB_BERKAS, ['KOLOM_LAMA_X']);
-  assert.deepEqual(r.unknownColumns.DB_ITEM, ['KOLOM_TAMBAHAN']);
+  assert.deepEqual(r.unknownColumns, {
+    DB_BERKAS: [{ column: 'KOLOM_LAMA_X', nonEmpty: 1 }], DB_ITEM: [{ column: 'KOLOM_TAMBAHAN', nonEmpty: 1 }]
+  });
   assert.ok(r.missingOptionalColumns.DB_BERKAS.includes('MEDIA_BERKAS'));
   assert.ok(r.missingOptionalColumns.DB_BERKAS.includes('JRA_ID'));
   assert.ok(r.missingOptionalColumns.PENERIMAAN_ITEM.includes('FILE_DIGITAL_ID'));
   assert.deepEqual(r.columnOrder.DB_BERKAS.slice(0, 3), ['JUDUL_BERKAS', 'BERKAS_ID', 'NO_BERKAS_DEFINITIF']);
 
   assert.deepEqual(r.sheets.deferred.map((s) => [s.name, s.rows, s.sprint]), [
-    ['LOG_CETAK_PENERIMAAN', 1, 2], ['OUTBOX_RECORD_CENTER', 0, 5], ['PEMINJAMAN', 2, 4], ['SYSTEM_BACKUPS', 1, 3], ['USUL_PINDAH', 1, 5]
+    ['IMPORT_STAGING', 0, null], ['LOG_CETAK_PENERIMAAN', 1, 2], ['MASTER_JENIS_NASKAH', 2, 2], ['MASTER_JRA', 0, 5],
+    ['OUTBOX_RECORD_CENTER', 0, 5], ['PEMINJAMAN', 2, 4], ['SYSTEM_BACKUPS', 1, 3], ['USUL_PINDAH', 1, 5]
   ]);
-  assert.deepEqual(r.sheets.unknown.map((s) => s.name), ['Catatan Petugas']);
+  assert.deepEqual(r.sheets.unknown.map((s) => [s.name, s.rows]), [['Catatan Petugas', 1], ['DAFTAR CONTOH LAIN', 2]]);
   assert.deepEqual(r.sheets.reportsOnly.map((s) => s.name).sort(), ['DAFTAR BERKAS', 'DAFTAR ISI BERKAS']);
   assert.deepEqual(r.tables.audit_log.sheets, ['AUDIT_LOG', 'AUDIT_LOG_2025']);
 
   const q = (h) => r.openQuestions.find((x) => x.headersFound.includes(h) || x.question.includes(h));
-  assert.deepEqual(q('LEVEL').columns.LEVEL.distinct.map((d) => d.value).sort(), ['angka 1', 'angka 2', 'angka 3']);
+  assert.deepEqual(q('LEVEL').columns.LEVEL.distinct.map((d) => d.value).sort(), ['PRIMER', 'SEKUNDER', 'TERSIER']);
   assert.deepEqual(r.openQuestions.find((x) => x.question.includes('JRA_ID')).headersFound, []);
   const pii = r.openQuestions.find((x) => x.sheet === 'MASTER_PEGAWAI');
   assert.deepEqual(pii.headersFound, ['NIP']);
@@ -221,6 +225,31 @@ test('first import: reconciliation report (orphans, totals, legacy reports, unkn
     assert.ok(text.includes(s), `text report mentions ${s}`);
   }
   assert.ok(!text.includes('199001012020121001'));
+});
+
+test('real-export shapes: extra legacy columns, TYPE=SECRET, Z timestamps, audit JSON, blank UPDATED_AT kept', async () => {
+  const id = await unitId();
+  const q = async (sql) => (await pool.query(sql, [id])).rows;
+  const klas = Object.fromEntries((await q('select id, level, kode_primer, kode_sekunder, kode_tersier, status_review, sumber, catatan, updated_at, created_at from public.klasifikasi where unit_id = $1')).map((x) => [x.id, x]));
+  assert.deepEqual([klas['K-PR0101'].level, klas['K-PR0101'].kode_primer, klas['K-PR0101'].kode_sekunder, klas['K-PR0101'].kode_tersier, klas['K-PR0101'].catatan],
+    ['TERSIER', 'PR', '01', '01', 'catatan fiktif']);
+  assert.equal(klas['K-PR'].status_review, 'DISETUJUI');
+  assert.equal(klas['K-PR01'].updated_at.toISOString(), '2025-02-03T04:05:06.789Z');
+  assert.ok(klas['K-PR'].updated_at instanceof Date); // blank UPDATED_AT -> column default, not NULL
+  const [st] = await q("select scope, updated_at from public.unit_settings where unit_id = $1 and key = 'INSTANCE_ID'");
+  assert.deepEqual([st.scope, st.updated_at.toISOString()], ['GLOBAL', '2025-01-01T01:02:03.456Z']);
+  const b = Object.fromEntries((await q(`select id, no_berkas_lama, to_char(tgl_pemindahan, 'YYYY-MM-DD') tp,
+      to_char(tgl_persetujuan_pemindahan, 'YYYY-MM-DD') tpp, disetujui_pemindahan_oleh, deleted_at from public.berkas where unit_id = $1`)).map((x) => [x.id, x]));
+  assert.equal(b['BRK-1'].no_berkas_lama, '12');
+  assert.deepEqual([b['BRK-5'].tp, b['BRK-5'].tpp, b['BRK-5'].disetujui_pemindahan_oleh], ['2025-06-30', '2025-06-20', 'Pejabat Fiktif']);
+  assert.equal(b['BRK-3'].deleted_at.toISOString(), '2026-01-21T01:00:00.000Z');
+  const [i4] = await q("select no_item_lama, deleted_at from public.item where unit_id = $1 and id = 'ITM-4'");
+  assert.deepEqual([i4.no_item_lama, i4.deleted_at.toISOString()], ['7', '2026-02-03T02:00:00.000Z']);
+  const [a5] = await q("select occurred_at, before_data, after_data, ip_info, catatan, result, actor_email_snapshot from public.audit_log where unit_id = $1 and id = 'LOG-5'");
+  assert.equal(a5.occurred_at.toISOString(), '2026-02-05T01:02:03.004Z');
+  assert.deepEqual([a5.before_data, a5.after_data, a5.ip_info, a5.result, a5.actor_email_snapshot], [{ judul: 'lama' }, { judul: 'baru' }, '0.0.0.0 (fiktif)', 'WARNING', null]);
+  assert.equal((await q("select count(*)::int n from public.unit_settings where unit_id = $1 and key = 'RC_KUNCI_BERSAMA'"))[0].n, 0);
+  assert.ok(!renderText(firstReport).includes('nilai-rahasia-tipe'));
 });
 
 test('second run: zero changes and identical database state', async () => {
