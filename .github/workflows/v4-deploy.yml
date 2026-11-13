@@ -38,4 +38,4 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: 086770a878487f48fe09ecf027db1a77
-        run: npx --yes wrangler@4 pages deploy dist --project-name central-file-uinsa --branch main --compatibility-date 2025-09-01
+        run: npx --yes wrangler@4 pages deploy dist --project-name central-file-uinsa --branch main
