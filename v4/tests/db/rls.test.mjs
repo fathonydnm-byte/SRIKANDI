@@ -2,7 +2,7 @@
 // audit_log and profiles visibility.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { newPool, createFixture, asUser } from './helpers.mjs';
+import { newPool, createFixture, asUser, asAnon, expectSqlError } from './helpers.mjs';
 
 const pool = newPool();
 let fx;
@@ -12,8 +12,47 @@ after(async () => { await pool.end(); });
 
 const UNIT_TABLES = [
   'berkas', 'item', 'penerimaan', 'penerimaan_item', 'klasifikasi', 'pegawai',
-  'riwayat_nomor', 'unit_settings', 'idempotency_keys', 'counters'
+  'riwayat_nomor', 'unit_settings'
 ];
+
+// Server-only tables: no SELECT for any authenticated user (0005).
+for (const table of ['idempotency_keys', 'counters']) {
+  test(`${table}: no authenticated user can read it (permission denied)`, async () => {
+    for (const u of ['pusat', 'adminA', 'petugasA', 'pimpinanA', 'adminB', 'inactiveA', 'noProfile']) {
+      await asUser(pool, fx.user[u], async (c) => {
+        await expectSqlError(c.query(`select * from public.${table} limit 1`));
+      });
+    }
+  });
+}
+
+test('my_account_status(): ACTIVE / INACTIVE / UNIT_INACTIVE / NO_PROFILE for the caller only', async () => {
+  const status = (userId) => asUser(pool, userId, async (c) =>
+    (await c.query('select public.my_account_status() s')).rows[0].s);
+  for (const u of ['pusat', 'adminA', 'petugasA', 'pimpinanA', 'adminB', 'petugasB']) {
+    assert.equal(await status(fx.user[u]), 'ACTIVE', u);
+  }
+  assert.equal(await status(fx.user.inactiveA), 'INACTIVE');
+  assert.equal(await status(fx.user.unitInactive), 'UNIT_INACTIVE');
+  assert.equal(await status(fx.user.noProfile), 'NO_PROFILE');
+  // takes no argument: cannot be pointed at another user
+  await asUser(pool, fx.user.petugasA, async (c) => {
+    await expectSqlError(c.query('select public.my_account_status($1::uuid)', [fx.user.inactiveA]), '42883');
+  });
+});
+
+test('my_account_status(): anon is denied; service_role has no grant', async () => {
+  await asAnon(pool, async (c) => {
+    await expectSqlError(c.query('select public.my_account_status()'));
+  });
+  const { rows: [r] } = await pool.query(`select
+      has_function_privilege('anon', 'public.my_account_status()', 'EXECUTE') anon,
+      has_function_privilege('authenticated', 'public.my_account_status()', 'EXECUTE') auth,
+      (select prosecdef from pg_proc where oid = 'public.my_account_status()'::regprocedure) secdef,
+      (select provolatile from pg_proc where oid = 'public.my_account_status()'::regprocedure) vol,
+      (select proconfig from pg_proc where oid = 'public.my_account_status()'::regprocedure) cfg`);
+  assert.deepEqual(r, { anon: false, auth: true, secdef: true, vol: 's', cfg: ['search_path=""'] });
+});
 
 /** Units (A/B/C) whose rows of `table` the user can see, restricted to fixture data. */
 async function visibleUnits(userId, table) {
@@ -42,8 +81,7 @@ for (const table of UNIT_TABLES) {
   });
 
   test(`${table}: ADMIN_PUSAT sees every unit`, async () => {
-    const expected = table === 'counters' ? ['A', 'B'] : ['A', 'B', 'C'];
-    assert.deepEqual(await visibleUnits(fx.user.pusat, table), expected);
+    assert.deepEqual(await visibleUnits(fx.user.pusat, table), ['A', 'B', 'C']);
   });
 
   test(`${table}: inactive profile, inactive unit and no profile see nothing`, async () => {
