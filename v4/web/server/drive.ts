@@ -47,6 +47,7 @@ export function cleanSegment(name: string): string {
 const folderCache = new Map<string, string>();
 export function clearFolderCache(): void {
   folderCache.clear();
+  verifiedAppFolders.clear();
 }
 
 async function listFolders(ctx: DriveCtx, parent: string, name: string): Promise<{ id: string; createdTime: string }[]> {
@@ -110,8 +111,8 @@ export async function ensureFolder(ctx: DriveCtx, parent: string, rawName: strin
   return id;
 }
 
-export async function ensurePath(ctx: DriveCtx, segments: string[]): Promise<string> {
-  let parent = 'root';
+export async function ensurePath(ctx: DriveCtx, segments: string[], start = 'root'): Promise<string> {
+  let parent = start;
   for (const seg of segments) parent = await ensureFolder(ctx, parent, seg);
   return parent;
 }
@@ -155,8 +156,12 @@ export async function trashFile(ctx: DriveCtx, id: string): Promise<void> {
   await trash(ctx, id);
 }
 
+/** Folder yang sudah terbukti milik aplikasi (per isolate) — tidak perlu dicek ulang. */
+const verifiedAppFolders = new Set<string>();
+
 /** Folder buatan aplikasi ini? (appProperties hanya terlihat oleh aplikasi pembuatnya.) */
 export async function isAppFolder(ctx: DriveCtx, id: string): Promise<boolean> {
+  if (verifiedAppFolders.has(id)) return true;
   try {
     const res = await driveFetch(ctx, (base) => [
       `${base}/drive/v3/files/${encodeURIComponent(id)}?supportsAllDrives=true&fields=${encodeURIComponent('id,mimeType,trashed,appProperties')}`,
@@ -167,7 +172,9 @@ export async function isAppFolder(ctx: DriveCtx, id: string): Promise<boolean> {
       return false;
     }
     const m = (await res.json()) as DriveFileMeta;
-    return m.mimeType === FOLDER_MIME && !m.trashed && m.appProperties?.cfV4 === '1';
+    const ok = m.mimeType === FOLDER_MIME && !m.trashed && m.appProperties?.cfV4 === '1';
+    if (ok) verifiedAppFolders.add(id);
+    return ok;
   } catch {
     return false;
   }

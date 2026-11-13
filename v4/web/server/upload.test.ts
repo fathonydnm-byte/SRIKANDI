@@ -39,6 +39,7 @@ function world(over: { begin?: unknown; beginStatus?: number; commitStatus?: num
       if (fn === 'drive_task_list') return Response.json({ tasks: [
         { id: 'T1', kind: 'RENAME_FOLDER', drive_id: 'F4', new_name: '13_Berkas baru' },
         { id: 'T2', kind: 'RENAME_FILE', drive_id: 'LEGACY1', new_name: '13_1_x.pdf' },
+        { id: 'T3', kind: 'RENAME_FILE', drive_id: 'BUSY1', new_name: '13_2_y.pdf' },
       ] });
       if (fn === 'upload_cancel') return Response.json({ ok: true, drive_file_id: over.cancelFile ?? null });
       if (fn === 'upload_commit') return Response.json(over.commitStatus && over.commitStatus >= 400 ? { code: 'P0001', message: 'UPLOAD_ATTESTATION_EXPIRED: Sesi unggah sudah dipakai.', hint: 'UPLOAD_ATTESTATION_EXPIRED' } : { item_id: 'ITM-1' }, { status: over.commitStatus ?? 200 });
@@ -62,8 +63,8 @@ function world(over: { begin?: unknown; beginStatus?: number; commitStatus?: num
       return new Response(null, { status: 200, headers: { Location: 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=ABC' } });
     }
     const m = /^\/drive\/v3\/files\/([^/]+)$/.exec(u.pathname);
-    if (m && init?.method === 'PATCH') return m[1] === 'LEGACY1' ? new Response('{"error":{}}', { status: 403 }) : Response.json({});
-    if (m && m[1] === 'KNOWN1') return Response.json({ id: 'KNOWN1', mimeType: 'application/vnd.google-apps.folder', trashed: false, appProperties: { cfV4: '1' } });
+    if (m && init?.method === 'PATCH') return m[1] === 'LEGACY1' ? new Response('{"error":{}}', { status: 403 }) : m[1] === 'BUSY1' ? new Response('', { status: 503 }) : Response.json({});
+    if (m && (m[1] === 'KNOWN1' || m[1] === 'ROOTAPP')) return Response.json({ id: m[1], mimeType: 'application/vnd.google-apps.folder', trashed: false, appProperties: { cfV4: '1' } });
     if (m && m[1] === 'LEGACYFOLDER') return Response.json({ id: 'LEGACYFOLDER', mimeType: 'application/vnd.google-apps.folder', trashed: false });
     if (m && u.searchParams.get('alt') === 'media') return new Response(over.head ?? '%PDF-1.7\n...', { status: 206 });
     if (m) return over.file === null ? new Response('', { status: 404 }) : Response.json(over.file ?? {});
@@ -106,12 +107,15 @@ describe('POST /api/files/upload-session', () => {
     expect(h.get('X-Upload-Content-Length')).toBe('1000');
     expect(h.get('X-Upload-Content-Type')).toBe('application/pdf');
     expect(init.body).toEqual({ name: '12_3_Surat.pdf', parents: ['F4'], mimeType: 'application/pdf', appProperties: { cfV4: '1', cfSession: 'UPS-1' } });
-    const reg = w.calls.find((c) => c.url.endsWith('/rpc/upload_register_folder'))!.body as Record<string, unknown>;
-    expect(reg).toEqual({
-      p_session_id: 'UPS-1', p_folder_id: 'F4', p_attested_at: NOW,
-      p_attestation: createHmac('sha256', ENV.UPLOAD_ATTEST_SECRET!).update(folderAttestationCanonical('UPS-1', 'F4', NOW)).digest('hex'),
-    });
+    // Akar unit (CENTRAL FILE V4/BAU) dan folder tujuan dicatat ke DB, bertanda tangan.
+    const regs = w.calls.filter((c) => c.url.endsWith('/rpc/upload_register_folder')).map((c) => c.body as Record<string, unknown>);
+    const sig = (id: string, kind: 'ROOT' | 'TARGET') => createHmac('sha256', ENV.UPLOAD_ATTEST_SECRET!).update(folderAttestationCanonical('UPS-1', id, NOW, kind)).digest('hex');
+    expect(regs).toEqual([
+      { p_session_id: 'UPS-1', p_folder_id: 'F2', p_kind: 'ROOT', p_attested_at: NOW, p_attestation: sig('F2', 'ROOT') },
+      { p_session_id: 'UPS-1', p_folder_id: 'F4', p_kind: 'TARGET', p_attested_at: NOW, p_attestation: sig('F4', 'TARGET') },
+    ]);
     expect(folderAttestationCanonical('S', 'F', 7)).toBe('CFFD1\nS\nF\n7');
+    expect(folderAttestationCanonical('S', 'F', 7, 'ROOT')).toBe('CFFD1\nS\nF\n7\nROOT');
   });
 
   it('folder dipakai ulang dari cache; known_folder_id melewati pencarian', async () => {
@@ -132,6 +136,24 @@ describe('POST /api/files/upload-session', () => {
     clearFolderCache();
     await handleUploadSession(post('/api/files/upload-session', SESSION_BODY), ENV, l.fetchFn, NOW);
     expect((l.calls.find((c) => c.url.includes('/upload/drive/v3/files'))!.body as { parents: string[] }).parents).toEqual(['F4']);
+  });
+
+  it('root_folder_id v4 dari DB: start dingin tanpa mencari akar; akar asing diabaikan', async () => {
+    const r = world({ begin: { ...BEGIN, root_folder_id: 'ROOTAPP' } });
+    await handleUploadSession(post('/api/files/upload-session', SESSION_BODY), ENV, r.fetchFn, NOW);
+    expect(r.folders.map((f) => `${f.parent}/${f.name}`)).toEqual(['ROOTAPP/2026', 'F1/Berkas 12']);
+    const regs = r.calls.filter((c) => c.url.endsWith('/rpc/upload_register_folder')).map((c) => (c.body as { p_kind: string; p_folder_id: string }));
+    expect(regs.map((x) => `${x.p_kind}:${x.p_folder_id}`)).toEqual(['TARGET:F2']);
+    // Folder yang sudah terverifikasi tidak dicek ulang di isolate yang sama.
+    const before = r.calls.filter((c) => c.url.includes('/drive/v3/files/ROOTAPP')).length;
+    await handleUploadSession(post('/api/files/upload-session', SESSION_BODY), ENV, r.fetchFn, NOW);
+    expect(r.calls.filter((c) => c.url.includes('/drive/v3/files/ROOTAPP')).length).toBe(before);
+    // Akar tercatat tapi bukan milik aplikasi → bangun akar v4 dan catat sebagai ROOT.
+    clearFolderCache();
+    const bad = world({ begin: { ...BEGIN, root_folder_id: 'LEGACYFOLDER' } });
+    await handleUploadSession(post('/api/files/upload-session', SESSION_BODY), ENV, bad.fetchFn, NOW);
+    expect(bad.folders[0]).toMatchObject({ parent: 'root', name: 'CENTRAL FILE V4' });
+    expect(bad.calls.filter((c) => c.url.endsWith('/rpc/upload_register_folder')).map((c) => (c.body as { p_kind: string }).p_kind)).toEqual(['ROOT', 'TARGET']);
   });
 
   it('folder kembar karena balapan: pakai yang tertua, buang yang baru', async () => {
@@ -280,12 +302,14 @@ describe('POST /api/files/drive-tasks', () => {
   it('ganti nama milik aplikasi; file lama 3.x tercatat gagal; hasil bertanda tangan', async () => {
     const w = world();
     const res = await handleDriveTasks(post('/x', {}), ENV, w.fetchFn, NOW);
-    expect(await res.json()).toEqual({ ok: true, done: 1, failed: 1, remaining: 0 });
+    expect(await res.json()).toEqual({ ok: true, done: 1, failed: 2, remaining: 0 });
     const completes = w.calls.filter((c) => c.url.endsWith('/rpc/drive_task_complete')).map((c) => c.body as Record<string, unknown>);
     const sig = (id: string, ok: boolean) => createHmac('sha256', ENV.UPLOAD_ATTEST_SECRET!).update(taskAttestationCanonical(id, ok, NOW)).digest('hex');
     expect(completes).toEqual([
-      { p_task_id: 'T1', p_ok: true, p_error: null, p_attested_at: NOW, p_attestation: sig('T1', true) },
-      { p_task_id: 'T2', p_ok: false, p_error: 'NOT_APP_FILE', p_attested_at: NOW, p_attestation: sig('T2', false) },
+      { p_task_id: 'T1', p_ok: true, p_error: null, p_permanent: false, p_attested_at: NOW, p_attestation: sig('T1', true) },
+      { p_task_id: 'T2', p_ok: false, p_error: 'NOT_APP_FILE', p_permanent: true, p_attested_at: NOW, p_attestation: sig('T2', false) },
+      // Galat sementara: dicoba lagi nanti (tidak permanen).
+      { p_task_id: 'T3', p_ok: false, p_error: 'HTTP_503', p_permanent: false, p_attested_at: NOW, p_attestation: sig('T3', false) },
     ]);
     expect(taskAttestationCanonical('T', false, 5)).toBe('CFDT1\nT\nfail\n5');
   });

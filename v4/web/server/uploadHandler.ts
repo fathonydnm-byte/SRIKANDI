@@ -121,8 +121,10 @@ export function attestationCanonical(sessionId: string, driveFileId: string, siz
   return `CFUP1\n${sessionId}\n${driveFileId}\n${size}\n${md5}\n${mime}\n${attestedAt}`;
 }
 
-export function folderAttestationCanonical(sessionId: string, folderId: string, attestedAt: number): string {
-  return `CFFD1\n${sessionId}\n${folderId}\n${attestedAt}`;
+export type FolderKind = 'TARGET' | 'ROOT';
+
+export function folderAttestationCanonical(sessionId: string, folderId: string, attestedAt: number, kind: FolderKind = 'TARGET'): string {
+  return `CFFD1\n${sessionId}\n${folderId}\n${attestedAt}${kind === 'ROOT' ? '\nROOT' : ''}`;
 }
 
 export function taskAttestationCanonical(taskId: string, ok: boolean, attestedAt: number): string {
@@ -179,15 +181,24 @@ export async function handleUploadSession(request: Request, env: FileEnv, fetchF
   const appOrigin = new URL(request.url).origin;
   let folderId: string;
   let uploadUrl: string | null;
-  let registerFolder: boolean;
+  const toRegister: { id: string; kind: FolderKind }[] = [];
   try {
-    // Hanya folder buatan aplikasi ini yang bisa ditulis dengan izin drive.file;
-    // folder berkas dari 3.x (known_folder_id lama) diganti pohon CENTRAL FILE V4.
-    const known = begin.known_folder_id && DRIVE_ID_RE.test(begin.known_folder_id) && (await isAppFolder(ctx, begin.known_folder_id))
-      ? begin.known_folder_id
-      : null;
-    folderId = known ?? (await ensurePath(ctx, [ROOT_FOLDER_NAME, begin.unit_code, ...begin.folder_path]));
-    registerFolder = !known;
+    // Hanya folder buatan aplikasi ini yang bisa ditulis dengan izin drive.file.
+    // ID dari DB (v4) tetap dicek kepemilikannya sebelum dipakai.
+    const appOwned = async (id: string | null | undefined): Promise<string | null> =>
+      id && DRIVE_ID_RE.test(id) && (await isAppFolder(ctx, id)) ? id : null;
+    const known = await appOwned(begin.known_folder_id);
+    if (known) {
+      folderId = known;
+    } else {
+      let root = await appOwned(begin.root_folder_id);
+      if (!root) {
+        root = await ensurePath(ctx, [ROOT_FOLDER_NAME, begin.unit_code]);
+        if (root !== begin.root_folder_id) toRegister.push({ id: root, kind: 'ROOT' });
+      }
+      folderId = await ensurePath(ctx, begin.folder_path, root);
+      toRegister.push({ id: folderId, kind: 'TARGET' });
+    }
     const res = await driveFetch(ctx, (base) => [
       `${base}/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true&fields=id`,
       {
@@ -210,11 +221,13 @@ export async function handleUploadSession(request: Request, env: FileEnv, fetchF
   }
   if (!uploadUrl) return jsonError('UPSTREAM');
 
-  // Catat folder (bertanda tangan) agar unggahan berikutnya langsung ke sana.
-  if (registerFolder) {
+  // Catat folder (bertanda tangan) agar unggahan berikutnya tanpa pencarian Drive.
+  for (const f of toRegister) {
     const at = nowSec;
-    const attestation = await attest(env.UPLOAD_ATTEST_SECRET!, folderAttestationCanonical(begin.session_id, folderId, at));
-    await callRpc(env, jwt, 'upload_register_folder', { p_session_id: begin.session_id, p_folder_id: folderId, p_attested_at: at, p_attestation: attestation }, fetchFn).catch(() => null);
+    const attestation = await attest(env.UPLOAD_ATTEST_SECRET!, folderAttestationCanonical(begin.session_id, f.id, at, f.kind));
+    await callRpc(env, jwt, 'upload_register_folder', {
+      p_session_id: begin.session_id, p_folder_id: f.id, p_kind: f.kind, p_attested_at: at, p_attestation: attestation,
+    }, fetchFn).catch(() => null);
   }
 
   const context = await signPayload(CONTEXT_PURPOSE, { v: 1, sid: begin.session_id, folder: folderId, size, mime, exp: nowSec + CONTEXT_TTL_SECONDS } satisfies UploadContext, env.UPLOAD_ATTEST_SECRET!);

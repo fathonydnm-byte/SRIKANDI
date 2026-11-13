@@ -13,8 +13,10 @@ import { attest, taskAttestationCanonical } from './uploadHandler';
  * (aturan 3.x); dicatat di drive_task_complete dan dicoba lagi kemudian.
  *
  * Catatan: dengan izin drive.file, file/folder lama dari 3.x tidak bisa
- * di-rename oleh gerbang (403) — tugas itu tercatat gagal.
+ * di-rename oleh gerbang (403) — tugas itu langsung ditutup gagal permanen
+ * (p_permanent), begitu juga 404 dan tugas tak sah. Galat lain dicoba lagi.
  */
+const PERMANENT = new Set(['NOT_APP_FILE', 'NOT_FOUND', 'INVALID_TASK']);
 const MAX_PER_CALL = 25;
 const ID_RE = /^[A-Za-z0-9_-]{1,200}$/;
 
@@ -58,7 +60,7 @@ export async function handleDriveTasks(request: Request, env: FileEnv, fetchFn: 
     }
     const at = nowSec;
     const attestation = await attest(env.UPLOAD_ATTEST_SECRET, taskAttestationCanonical(t.id, ok, at));
-    await callRpc(env, jwt, 'drive_task_complete', { p_task_id: t.id, p_ok: ok, p_error: error, p_attested_at: at, p_attestation: attestation }, fetchFn).catch(() => null);
+    await callRpc(env, jwt, 'drive_task_complete', { p_task_id: t.id, p_ok: ok, p_error: error, p_permanent: !ok && PERMANENT.has(error ?? ''), p_attested_at: at, p_attestation: attestation }, fetchFn).catch(() => null);
     if (ok) done++;
     else failed++;
   }
