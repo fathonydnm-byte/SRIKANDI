@@ -222,9 +222,9 @@ begin
          last_error = 'Objek dikarantina (' || coalesce(p_request_id, '') || ')'
    where unit_id = p_unit_id and drive_id = pg_catalog.btrim(p_old_drive_id) and status = 'PENDING';
   get diagnostics v_tasks = row_count;
-  if p_item_id is not null and pg_catalog.to_regclass('public.content_documents') is not null
+  if p_item_id is not null
      and (select pg_catalog.count(*) from pg_catalog.pg_attribute
-           where attrelid = 'public.content_documents'::regclass and not attisdropped
+           where attrelid = pg_catalog.to_regclass('public.content_documents') and not attisdropped
              and attname in ('unit_id', 'item_id', 'source_pdf_id', 'status')) = 4 then
     execute 'update public.content_documents set status = ''STALE'' where unit_id = $1 and item_id = $2 '
             'and source_pdf_id = $3 and status is distinct from ''STALE'''

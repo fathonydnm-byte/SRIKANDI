@@ -265,7 +265,7 @@ function LabelsScreen({ unitId }: { unitId: string | null }) {
               <button type="button" className="btn btn-secondary" disabled={!chosen.length || tooMany || stage === 'saving'} onClick={() => setAsking(true)}>Catat sudah dicetak</button>
             </div>
             <SaveStage stage={stage} message={stage === 'saving' ? 'Mencatat cetakan…' : stage === 'saved' ? 'Cetakan tercatat.' : undefined} />
-            <p className="muted small">Di dialog cetak pilih ukuran A4, skala 100%, dan margin bawaan. Di HP, pilih “Simpan sebagai PDF” atau printer.</p>
+            <p className="muted small">Di dialog cetak pilih kertas A4 dan skala 100% (“Ukuran sebenarnya”); margin “Bawaan” atau “Tidak ada” menghasilkan posisi yang sama. Di HP, pilih “Simpan sebagai PDF” atau printer.</p>
           </div>
         </aside>
       </div>

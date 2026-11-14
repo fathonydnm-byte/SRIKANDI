@@ -36,7 +36,7 @@
   box-sizing: border-box;
   overflow: hidden;
   color: #000;
-  font-family: 'Times New Roman', 'Liberation Serif', Times, serif;
+  font-family: 'Times New Roman', Times, 'Liberation Serif', serif;
 }
 /* Garis potong 1,5 pt seperti persegi hitam 3.x; digambar di dalam kotak 70 × 30 mm. */
 .lf-cell::after {
@@ -213,7 +213,13 @@
   font-weight: 700;
 }
 
-/* ---------- Cetak: hanya lembar label (kontrol memakai .no-print) ---------- */
+/* ---------- Cetak: hanya lembar label (kontrol memakai .no-print) ----------
+ * Halaman bernama: margin 0 dan origin 25,4 mm dari tepi kertas, tidak bergantung
+ * pada @page global (8 mm) sehingga cetak tanda terima tidak berubah. */
+@page lidah {
+  size: A4;
+  margin: 0;
+}
 @media print {
   .lf-layout {
     display: block;
@@ -222,6 +228,7 @@
     position: static;
   }
   .lf-preview {
+    page: lidah;
     container-type: normal;
     max-width: none;
     width: auto;
@@ -232,11 +239,11 @@
   }
   .lf-page {
     --u: 1mm;
-    --lf-origin: 17.4; /* 25,4 mm dari tepi kertas − margin @page 8 mm */
-    width: 194mm;
-    height: 227.4mm;
+    --lf-origin: 25.4;
+    width: 210mm;
+    height: 296mm;
     box-shadow: none;
-    overflow: visible;
+    overflow: hidden;
     break-inside: avoid;
   }
   .lf-page + .lf-page {

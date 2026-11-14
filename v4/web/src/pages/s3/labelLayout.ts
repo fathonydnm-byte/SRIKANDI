@@ -62,7 +62,7 @@ export const measureText: Measure = (text, sizePt, bold) => {
     }
   }
   if (canvasCtx) {
-    canvasCtx.font = `${bold ? 'bold ' : ''}${sizePt}pt "Times New Roman", "Liberation Serif", Times, serif`;
+    canvasCtx.font = `${bold ? 'bold ' : ''}${sizePt}pt "Times New Roman", Times, "Liberation Serif", serif`;
     return canvasCtx.measureText(text).width * 0.75;
   }
   let sum = 0;
@@ -76,25 +76,27 @@ export const measureText: Measure = (text, sizePt, bold) => {
   return sum * (bold ? 1.04 : 1);
 };
 
-export function wrapText(text: string, maxWidthPt: number, sizePt: number, measure: Measure = measureText): string[] {
+/** maxWidthPt: lebar tetap, atau fungsi lebar per nomor baris (baris di samping logo lebih sempit). */
+export function wrapText(text: string, maxWidth: number | ((line: number) => number), sizePt: number, measure: Measure = measureText): string[] {
+  const widthOf = (n: number) => (typeof maxWidth === 'number' ? maxWidth : maxWidth(n));
   const words = text.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
   let current = '';
   for (const word of words) {
     const candidate = current ? `${current} ${word}` : word;
-    if (measure(candidate, sizePt, false) <= maxWidthPt) {
+    if (measure(candidate, sizePt, false) <= widthOf(lines.length)) {
       current = candidate;
       continue;
     }
     if (current) lines.push(current);
-    if (measure(word, sizePt, false) <= maxWidthPt) {
+    if (measure(word, sizePt, false) <= widthOf(lines.length)) {
       current = word;
       continue;
     }
     // kata tunggal lebih lebar dari label: pecah per karakter
     let part = '';
     for (const ch of Array.from(word)) {
-      if (part && measure(part + ch, sizePt, false) > maxWidthPt) {
+      if (part && measure(part + ch, sizePt, false) > widthOf(lines.length)) {
         lines.push(part);
         part = ch;
       } else part += ch;
@@ -105,6 +107,8 @@ export function wrapText(text: string, maxWidthPt: number, sizePt: number, measu
   return lines.length ? lines : [''];
 }
 
+const ASCENT = 0.891; // Times New Roman
+const DESCENT = 0.212;
 const clean = (v: string) => v.replace(/\s+/g, ' ').trim();
 
 /**
@@ -126,10 +130,16 @@ export function layoutLabel(label: LabelData, measure: Measure = measureText): L
   const titleWidth = width - 8 * PT_PER_MM;
   const titleTop = 17 * PT_PER_MM; // baseline baris pertama, dari tepi atas
   const available = (LABEL_H_MM - 2.2) * PT_PER_MM - titleTop;
+  // Baris yang secara vertikal masih berada di kotak logo (12,5 mm, 2 mm dari atas) hanya boleh selebar ruang di kiri logo.
+  const logoBottom = 14.5 * PT_PER_MM;
+  const narrow = logoX - left - 2 * PT_PER_MM;
+  const widthFor = (n: number, size: number) =>
+    titleTop + n * size * 1.08 - ASCENT * size < logoBottom + 0.5 * PT_PER_MM ? Math.min(narrow, titleWidth) : titleWidth;
   let titleSize = 11.5;
   let lines: string[] = [];
   while (titleSize >= 7) {
-    lines = wrapText(title, titleWidth, titleSize, measure);
+    const size = titleSize;
+    lines = wrapText(title, (n) => widthFor(n, size), size, measure);
     if (lines.length * titleSize * 1.08 <= available + 0.1) break;
     if (titleSize === 7) break;
     titleSize = Math.max(7, titleSize - 0.5);
@@ -138,11 +148,12 @@ export function layoutLabel(label: LabelData, measure: Measure = measureText): L
   if (lines.length > maxLines) {
     lines = lines.slice(0, maxLines);
     let last = lines[maxLines - 1] ?? '';
-    while (last.length && measure(`${last}...`, titleSize, false) > titleWidth) last = last.slice(0, -1).trim();
+    const lastWidth = widthFor(maxLines - 1, titleSize);
+    while (last.length && measure(`${last}...`, titleSize, false) > lastWidth) last = last.slice(0, -1).trim();
     lines[maxLines - 1] = `${last.replace(/[.,;:]+$/, '')}...`;
   }
-  // Times: ascent 0,891 / descent 0,216 → baseline = (L − 1,107·S)/2 + 0,891·S dari atas kotak baris.
-  const baselineOffset = (lineHeight: number, size: number) => (lineHeight - 1.107 * size) / 2 + 0.891 * size;
+  // Sans: ascent 0,905 / descent 0,212 → baseline = (L − (a+d)·S)/2 + a·S dari atas kotak baris.
+  const baselineOffset = (lineHeight: number, size: number) => (lineHeight - (ASCENT + DESCENT) * size) / 2 + ASCENT * size;
   return {
     header,
     headerSize,
