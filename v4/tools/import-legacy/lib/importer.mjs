@@ -268,6 +268,9 @@ function crossCheck(data, existing, report, fatal) {
   for (const [k, e] of [...data.penerimaan_cetak_log]) {
     if (!penerimaanIds.has(e.out.penerimaan_id)) reject('penerimaan_cetak_log', k, e, `penerimaan ${e.out.penerimaan_id} tidak ditemukan (log cetak tanpa penerimaan)`);
   }
+  for (const [k, e] of [...data.folder_label_log]) {
+    if (!berkasIds.has(e.out.berkas_id)) reject('folder_label_log', k, e, `berkas ${e.out.berkas_id} tidak ditemukan (log cetak lidah tanpa berkas)`);
+  }
   // optional links: keep the row, clear the dangling reference, report the original value
   const klasIds = ids('klasifikasi');
   const pegawaiIds = ids('pegawai');
@@ -444,7 +447,7 @@ async function loadExisting(client, unitId) {
   existing.item = new Set(await q('select id v from public.item where unit_id = $1'));
   existing.penerimaan_item = new Set(await q('select id v from public.penerimaan_item where unit_id = $1'));
   existing.penerimaanItemArsip = new Set(await q('select arsip_id v from public.penerimaan_item where unit_id = $1 and arsip_id is not null'));
-  for (const t of ['unit_settings', 'riwayat_nomor', 'audit_log', 'jenis_naskah', 'penerimaan_cetak_log']) existing[t] = new Set();
+  for (const t of ['unit_settings', 'riwayat_nomor', 'audit_log', 'jenis_naskah', 'penerimaan_cetak_log', 'folder_label_log']) existing[t] = new Set();
   return existing;
 }
 

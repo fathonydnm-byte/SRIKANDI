@@ -1,0 +1,251 @@
+/*
+ * Cetak Lidah Folder. Semua ukuran lembar memakai satuan --u:
+ *  - cetak: --u = 1 mm (A4 nyata; label 70 × 30 mm);
+ *  - layar: --u = lebar kontainer / 210 (lembar menyusut, bentuk identik).
+ * Margin halaman cetak mengikuti @page global (8 mm); origin label tetap
+ * 25,4 mm dari tepi kertas seperti 3.x (offset dikurangi margin saat cetak).
+ */
+.lf-preview {
+  container-type: inline-size;
+  width: 100%;
+  max-width: 560px;
+  margin-inline: auto;
+}
+.lf-sheets {
+  display: grid;
+  gap: 14px;
+}
+.lf-page {
+  --u: calc(100cqw / 210);
+  --lf-origin: 25.4;
+  position: relative;
+  width: calc(210 * var(--u));
+  height: calc(297 * var(--u));
+  background: #fff;
+  box-shadow: var(--shadow-subtle), 0 0 0 1px var(--line);
+  overflow: hidden;
+}
+.lf-grid {
+  position: absolute;
+  left: calc(var(--lf-origin) * var(--u));
+  top: calc(var(--lf-origin) * var(--u));
+  display: grid;
+}
+.lf-cell {
+  position: relative;
+  box-sizing: border-box;
+  overflow: hidden;
+  color: #000;
+  font-family: 'Times New Roman', 'Liberation Serif', Times, serif;
+}
+/* Garis potong 1,5 pt seperti persegi hitam 3.x; digambar di dalam kotak 70 × 30 mm. */
+.lf-cell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 0 solid #000;
+  border-right-width: calc(1.5 * 0.3528 * var(--u));
+  border-bottom-width: calc(1.5 * 0.3528 * var(--u));
+  pointer-events: none;
+}
+.lf-cell:nth-child(odd)::after {
+  border-left-width: calc(1.5 * 0.3528 * var(--u));
+}
+.lf-cell:nth-child(-n + 2)::after {
+  border-top-width: calc(1.5 * 0.3528 * var(--u));
+}
+.lf-logo {
+  position: absolute;
+  right: calc(2 * var(--u));
+  top: calc(2 * var(--u));
+  width: calc(12.5 * var(--u));
+  height: calc(12.5 * var(--u));
+  object-fit: contain;
+}
+.lf-head,
+.lf-title {
+  position: absolute;
+  left: calc(4 * var(--u));
+  margin: 0;
+  white-space: nowrap;
+}
+.lf-head {
+  font-weight: 700;
+}
+.lf-line {
+  white-space: nowrap;
+}
+.lf-slot-hint {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font: 600 calc(3.2 * var(--u)) / 1 Arial, Helvetica, sans-serif;
+  color: #94a3b8;
+}
+.lf-cell.is-skipped {
+  background: repeating-linear-gradient(135deg, #f1f5f9, #f1f5f9 calc(1.5 * var(--u)), #fff calc(1.5 * var(--u)), #fff calc(3 * var(--u)));
+}
+.lf-cell.is-skipped .lf-slot-hint {
+  color: #64748b;
+}
+
+/* ---------- Layar: halaman ---------- */
+.lf-layout {
+  display: grid;
+  gap: 16px;
+}
+@media (min-width: 1024px) {
+  .lf-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 440px);
+    align-items: start;
+  }
+  .lf-aside {
+    position: sticky;
+    top: 16px;
+  }
+}
+.lf-section {
+  display: grid;
+  gap: 12px;
+}
+.lf-toolbar {
+  display: grid;
+  gap: 10px;
+}
+.lf-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.lf-toolbar-row .btn {
+  flex: 1 1 150px;
+}
+.lf-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  max-height: 62vh;
+  overflow: auto;
+}
+.lf-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: var(--touch);
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  cursor: pointer;
+}
+.lf-row:has(input:checked) {
+  border-color: var(--navy);
+  background: var(--green-50);
+}
+.lf-row input {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-top: 2px;
+  accent-color: var(--navy);
+}
+.lf-row-main {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.lf-row-title {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.lf-row-sub {
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.lf-row .badge-pill {
+  margin-top: 4px;
+  justify-self: start;
+}
+.lf-slots {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  max-width: 420px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.lf-slot {
+  min-height: var(--touch);
+  padding: 6px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  color: #334155;
+  font-weight: 700;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.lf-slot small {
+  display: block;
+  font-weight: 400;
+  color: var(--muted);
+}
+.lf-slot[aria-checked='true'] {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+.lf-slot[aria-checked='true'] small {
+  color: #d1e7dd;
+}
+.lf-slot.is-before {
+  background: #f1f5f9;
+  color: var(--muted);
+}
+.lf-summary {
+  margin: 0;
+  font-weight: 700;
+}
+
+/* ---------- Cetak: hanya lembar label (kontrol memakai .no-print) ---------- */
+@media print {
+  .lf-layout {
+    display: block;
+  }
+  .lf-aside {
+    position: static;
+  }
+  .lf-preview {
+    container-type: normal;
+    max-width: none;
+    width: auto;
+    margin: 0;
+  }
+  .lf-sheets {
+    display: block;
+  }
+  .lf-page {
+    --u: 1mm;
+    --lf-origin: 17.4; /* 25,4 mm dari tepi kertas − margin @page 8 mm */
+    width: 194mm;
+    height: 227.4mm;
+    box-shadow: none;
+    overflow: visible;
+    break-inside: avoid;
+  }
+  .lf-page + .lf-page {
+    break-before: page;
+  }
+  .lf-cell.is-skipped {
+    background: none;
+  }
+  .lf-slot-hint {
+    display: none;
+  }
+}

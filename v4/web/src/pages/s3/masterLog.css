@@ -1,0 +1,278 @@
+/* Master Log Perubahan. Memakai variabel global.css; kartu di HP, tabel di layar lebar. */
+.ml-table-wrap {
+  min-width: 0;
+}
+.ml-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  display: block;
+}
+.ml-table thead {
+  display: none;
+}
+.ml-table tbody {
+  display: grid;
+  gap: 10px;
+}
+.ml-table tr {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-subtle);
+  min-width: 0;
+}
+.ml-table tr.ml-row-issue {
+  border-left: 4px solid var(--danger);
+}
+.ml-table td {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr);
+  gap: 8px;
+  padding: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  align-items: start;
+}
+.ml-table td[data-label]::before {
+  content: attr(data-label);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  padding-top: 2px;
+}
+.ml-table td > * {
+  grid-column: 2;
+}
+.ml-table td.ml-open {
+  display: block;
+  margin-top: 4px;
+}
+.ml-table td.ml-open .btn {
+  width: 100%;
+  min-height: var(--touch);
+}
+.ml-sub {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+}
+.ml-oid {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+.ml-actor,
+.ml-summary {
+  font-weight: 600;
+}
+.ml-summary {
+  font-weight: 400;
+}
+.ml-action {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+@media (min-width: 900px) {
+  .ml-table-wrap {
+    background: var(--white);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-subtle);
+    overflow-x: auto;
+  }
+  .ml-table {
+    display: table;
+  }
+  .ml-table thead {
+    display: table-header-group;
+  }
+  .ml-table tbody {
+    display: table-row-group;
+  }
+  .ml-table tr {
+    display: table-row;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .ml-table tr.ml-row-issue {
+    border-left: 0;
+  }
+  .ml-table th {
+    text-align: left;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: var(--muted);
+    background: var(--bg);
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line-strong);
+    white-space: nowrap;
+  }
+  .ml-table td {
+    display: table-cell;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  .ml-table tr.ml-row-issue td:first-child {
+    box-shadow: inset 4px 0 0 var(--danger);
+  }
+  .ml-table tbody tr:last-child td {
+    border-bottom: 0;
+  }
+  .ml-table td[data-label]::before {
+    content: none;
+  }
+  .ml-table td > * {
+    grid-column: auto;
+  }
+  .ml-table td.ml-open {
+    display: table-cell;
+    margin: 0;
+    text-align: right;
+  }
+  .ml-table td.ml-open .btn {
+    width: auto;
+    white-space: nowrap;
+  }
+  .ml-time {
+    white-space: nowrap;
+  }
+  .ml-summary {
+    display: block;
+    max-width: 38ch;
+  }
+}
+
+/* Lembar rincian */
+.ml-detail-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0 0;
+}
+.ml-facts {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+.ml-facts > div {
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr);
+  gap: 8px;
+  font-size: 14px;
+}
+.ml-facts dt {
+  color: var(--muted);
+  font-weight: 600;
+}
+.ml-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.ml-subtitle {
+  margin: 4px 0 8px;
+  font-size: 16px;
+}
+.ml-changes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.ml-change {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.ml-change-key {
+  margin: 0;
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+}
+.ml-change-kind {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.ml-line {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+  gap: 8px;
+  font-size: 14px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+}
+.ml-line-tag {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  padding-top: 1px;
+}
+.ml-before {
+  background: var(--danger-bg);
+}
+.ml-before .ml-val {
+  text-decoration: line-through;
+  text-decoration-color: var(--danger-line);
+}
+.ml-after {
+  background: #f0fdf4;
+}
+.ml-val {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.ml-empty {
+  font-style: italic;
+  color: var(--muted);
+}
+.ml-unchanged {
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+.ml-raw summary {
+  cursor: pointer;
+  min-height: var(--touch);
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  color: var(--navy);
+}
+.ml-raw h4 {
+  margin: 8px 0 4px;
+  font-size: 13px;
+}
+.ml-raw pre {
+  margin: 0;
+  padding: 10px;
+  background: #f1f5f9;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  overflow: auto;
+  max-height: 14rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

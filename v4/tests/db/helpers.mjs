@@ -9,7 +9,9 @@ export const ALL_PUBLIC_TABLES = [
   'klasifikasi', 'pegawai', 'berkas', 'item', 'penerimaan', 'penerimaan_item',
   'riwayat_nomor', 'schema_migrations_log',
   // Sprint 2
-  'jenis_naskah', 'penerimaan_cetak_log', 'upload_sessions', 'drive_tasks'
+  'jenis_naskah', 'penerimaan_cetak_log', 'upload_sessions', 'drive_tasks',
+  // Sprint 3 (lidah folder)
+  'folder_label_log'
 ];
 
 export function newPool(max = 10) {

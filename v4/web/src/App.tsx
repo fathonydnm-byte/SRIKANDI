@@ -16,6 +16,8 @@ import { SearchPage } from './pages/search/SearchPage';
 // Layar registrasi dimuat terpisah (PIMPINAN dan pencarian dari HP tidak perlu mengunduhnya).
 const ReceiptsPage = lazy(() => import('./pages/s2/ReceiptsPage').then((m) => ({ default: m.ReceiptsPage })));
 const RegistrationPage = lazy(() => import('./pages/s2/RegistrationPage').then((m) => ({ default: m.RegistrationPage })));
+const MasterLogPage = lazy(() => import('./pages/s3/MasterLogPage').then((m) => ({ default: m.MasterLogPage })));
+const LabelsPage = lazy(() => import('./pages/s3/LabelsPage').then((m) => ({ default: m.LabelsPage })));
 const MediaPage = lazy(() => import('./pages/s2/MediaPage').then((m) => ({ default: m.MediaPage })));
 const ReceiptPrintPage = lazy(() => import('./pages/s2/ReceiptPrintPage').then((m) => ({ default: m.ReceiptPrintPage })));
 
@@ -35,6 +37,8 @@ const BUILT: Record<string, () => ReactElement> = {
   penerimaan: () => <Lazy><ReceiptsPage /></Lazy>,
   pemberkasan: () => <Lazy><RegistrationPage /></Lazy>,
   'alih-media': () => <Lazy><MediaPage /></Lazy>,
+  'lidah-folder': () => <Lazy><LabelsPage /></Lazy>,
+  'master-log': () => <Lazy><MasterLogPage /></Lazy>,
 };
 const CARI = MODULES.find((m) => m.id === 'cari')!;
 const DASHBOARD = MODULES.find((m) => m.id === 'dashboard')!;

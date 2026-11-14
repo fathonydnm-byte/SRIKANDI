@@ -242,6 +242,23 @@ export function fixtureDefinition() {
         TIMESTAMP: '2026-02-04T08:00:00+07:00' }
     ]
   };
+  sheets.LOG_CETAK_LIDAH = {
+    headers: ['PRINT_ID', 'TIMESTAMP', 'USER_EMAIL', 'BATCH_ID', 'BERKAS_ID', 'NO_BERKAS_SNAPSHOT', 'KODE_KLASIFIKASI_SNAPSHOT',
+      'JUDUL_BERKAS_SNAPSHOT', 'START_SLOT', 'PDF_FILE_NAME', 'STATUS'],
+    rows: [
+      { PRINT_ID: 'PRN-1', TIMESTAMP: '2026-02-05T09:00:00+07:00', USER_EMAIL: 'petugas@contoh.invalid', BATCH_ID: 'LBL-1', BERKAS_ID: 'BRK-1',
+        NO_BERKAS_SNAPSHOT: 2, KODE_KLASIFIKASI_SNAPSHOT: 'PR.01.01', JUDUL_BERKAS_SNAPSHOT: 'Renstra 2025 (judul lama)', START_SLOT: 3,
+        PDF_FILE_NAME: 'Lidah_Folder_20260205_090000.pdf', STATUS: 'PDF_DIBUAT' },
+      { PRINT_ID: 'PRN-2', TIMESTAMP: D(2026, 2, 6, 10, 0), USER_EMAIL: 'petugas@contoh.invalid', BATCH_ID: 'LBL-2', BERKAS_ID: 'BRK-1',
+        NO_BERKAS_SNAPSHOT: '1', KODE_KLASIFIKASI_SNAPSHOT: 'PR.01.01', JUDUL_BERKAS_SNAPSHOT: 'Renstra 2025 (fiktif)', START_SLOT: '1',
+        PDF_FILE_NAME: 'Lidah_Folder_20260206_100000.pdf', STATUS: 'PDF_DIBUAT' },
+      { PRINT_ID: 'PRN-3', TIMESTAMP: '2026-02-06T10:00:00+07:00', USER_EMAIL: 'petugas@contoh.invalid', BATCH_ID: 'LBL-2', BERKAS_ID: 'BRK-2',
+        NO_BERKAS_SNAPSHOT: 2, KODE_KLASIFIKASI_SNAPSHOT: 'KU.02', JUDUL_BERKAS_SNAPSHOT: 'Pelaksanaan anggaran 2026 (fiktif)', START_SLOT: 2,
+        PDF_FILE_NAME: 'Lidah_Folder_20260206_100000.pdf', STATUS: '' },
+      // orphan: berkas does not exist
+      { PRINT_ID: 'PRN-4', TIMESTAMP: '2026-02-06T10:00:00+07:00', BATCH_ID: 'LBL-2', BERKAS_ID: 'BRK-TIDAK-ADA', NO_BERKAS_SNAPSHOT: 9, START_SLOT: 1 }
+    ]
+  };
   sheets.SYSTEM_BACKUPS = { headers: ['BACKUP_ID', 'STATUS'], rows: [{ BACKUP_ID: 'BKP-1', STATUS: 'COMPLETE' }] };
   sheets['Catatan Petugas'] = { headers: ['CATATAN'], rows: [{ CATATAN: 'lembar kerja pribadi' }] };
   sheets.MASTER_JENIS_NASKAH = {

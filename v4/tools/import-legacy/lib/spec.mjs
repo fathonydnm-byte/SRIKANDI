@@ -5,7 +5,7 @@
 //   pii?: plaintext encrypted with app.encrypt_pii on write }
 import {
   convert as cv, SECURITY, SATUAN, NASIB, TINGKAT, KONDISI, MEDIA_SUMBER, BENTUK_DIGITAL,
-  VERIFIKASI, RECEIPT_STATUS, FILING_STATUS, JENIS_OBJEK, AUDIT_RESULT, enumOf
+  VERIFIKASI, RECEIPT_STATUS, FILING_STATUS, JENIS_OBJEK, AUDIT_RESULT, enumOf, ValueError
 } from './convert.mjs';
 
 const T = cv.text, I = cv.int, B = cv.bool, D = cv.date, TS = cv.timestamp;
@@ -198,6 +198,27 @@ export const TABLES = [
     ]
   },
   {
+    // Sprint 3: folder-label print log (LOG_CETAK_LIDAH), append-only. One row per berkas per print.
+    table: 'folder_label_log', sheets: ['LOG_CETAK_LIDAH'], key: ['id'], appendOnly: true, label: 'Log cetak lidah folder',
+    columns: [
+      { h: 'PRINT_ID', c: 'id', t: T, required: true },
+      { h: 'TIMESTAMP', c: 'printed_at', t: TS, required: true },
+      { h: 'USER_EMAIL', c: 'user_email', t: T },
+      { h: 'BATCH_ID', c: 'batch_id', t: T, required: true },
+      { h: 'BERKAS_ID', c: 'berkas_id', t: T, required: true },
+      { h: 'NO_BERKAS_SNAPSHOT', c: 'no_berkas_snapshot', t: T },
+      { h: 'KODE_KLASIFIKASI_SNAPSHOT', c: 'kode_klasifikasi_snapshot', t: T },
+      { h: 'JUDUL_BERKAS_SNAPSHOT', c: 'judul_berkas_snapshot', t: T },
+      { h: 'START_SLOT', c: 'start_slot', t: (v) => {
+        const n = I(v);
+        if (n !== null && (n < 1 || n > 14)) throw new ValueError(`posisi awal ${n} di luar 1–14`);
+        return n;
+      } },
+      { h: 'PDF_FILE_NAME', c: 'pdf_file_name', t: T },
+      { h: 'STATUS', c: 'status', t: enumOf(['DICETAK'], { 'PDF DIBUAT': 'PDF_DIBUAT' }), def: 'PDF_DIBUAT' }
+    ]
+  },
+  {
     table: 'item', sheets: ['DB_ITEM'], key: ['id'], label: 'Item arsip',
     columns: [
       { h: 'ITEM_ID', c: 'id', t: T, required: true },
@@ -334,7 +355,6 @@ export const DEFERRED_SHEETS = {
   'PEMINJAMAN': { sprint: 4, module: 'Peminjaman' },
   'LOG_CETAK_OUT_INDICATOR': { sprint: 4, module: 'Peminjaman (log cetak Out Indicator)' },
   'LOG_CETAK_BERITA_ACARA': { sprint: 4, module: 'Peminjaman (log cetak Berita Acara)' },
-  'LOG_CETAK_LIDAH': { sprint: 3, module: 'Label lidah folder (log cetak)' },
   'USUL_PINDAH': { sprint: 5, module: 'Usul pemindahan' },
   'USUL_PINDAH_DETAIL': { sprint: 5, module: 'Usul pemindahan (detail berkas)' },
   'USUL_PINDAH_ITEM': { sprint: 5, module: 'Usul pemindahan (detail item)' },

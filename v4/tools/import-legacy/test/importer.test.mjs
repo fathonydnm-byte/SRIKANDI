@@ -32,7 +32,7 @@ async function unitId(code = FIXTURE_UNIT.code) {
   return (await pool.query('select id from public.units where code = $1', [code])).rows[0]?.id;
 }
 
-const TABLES = ['unit_settings', 'klasifikasi', 'jenis_naskah', 'pegawai', 'berkas', 'penerimaan', 'penerimaan_cetak_log', 'item',
+const TABLES = ['unit_settings', 'klasifikasi', 'jenis_naskah', 'pegawai', 'berkas', 'penerimaan', 'penerimaan_cetak_log', 'folder_label_log', 'item',
   'penerimaan_item', 'riwayat_nomor', 'audit_log'];
 async function snapshot(id) {
   const out = {};
@@ -88,7 +88,7 @@ test('first import: rows, statuses, dates, links and PII stored as expected', as
   const counts = Object.fromEntries(Object.entries(r.tables).map(([t, s]) => [t, [s.read, s.inserted, s.rejected]]));
   assert.deepEqual(counts, {
     unit_settings: [10, 8, 0], klasifikasi: [6, 6, 0], jenis_naskah: [2, 2, 0], pegawai: [2, 2, 0], berkas: [5, 5, 0],
-    penerimaan: [3, 3, 0], penerimaan_cetak_log: [3, 2, 1], item: [6, 5, 1], penerimaan_item: [4, 3, 1], riwayat_nomor: [5, 5, 0],
+    penerimaan: [3, 3, 0], penerimaan_cetak_log: [3, 2, 1], folder_label_log: [4, 3, 1], item: [6, 5, 1], penerimaan_item: [4, 3, 1], riwayat_nomor: [5, 5, 0],
     audit_log: [5, 5, 0]
   });
   const id = await unitId();
@@ -184,7 +184,7 @@ test('first import: rows, statuses, dates, links and PII stored as expected', as
 
 test('first import: reconciliation report (orphans, totals, legacy reports, unknown/deferred sheets, open questions)', () => {
   const r = firstReport;
-  assert.deepEqual(r.orphans.rejected.map((o) => `${o.table}:${o.id}`).sort(), ['item:ITM-5', 'penerimaan_cetak_log:RCPL-3', 'penerimaan_item:RCVI-4']);
+  assert.deepEqual(r.orphans.rejected.map((o) => `${o.table}:${o.id}`).sort(), ['folder_label_log:PRN-4', 'item:ITM-5', 'penerimaan_cetak_log:RCPL-3', 'penerimaan_item:RCVI-4']);
   assert.deepEqual(r.orphans.linksCleared.map((o) => `${o.table}.${o.column}=${o.value}`).sort(),
     ['berkas.klasifikasi_id=K-HILANG', 'penerimaan.penyerah_pegawai_id=PGW-HILANG']);
   assert.deepEqual(r.orphans.arsipWithoutSource, [{ itemId: 'ITM-6', arsipId: 'ARS-HILANG', sumber: 'PENERIMAAN_ARSIP' }]);
@@ -262,6 +262,18 @@ test('Sprint 2 sheets: MASTER_JENIS_NASKAH and LOG_CETAK_PENERIMAAN imported fai
   const logs = (await pool.query('select id, cetak_ke, jenis_cetak, printed_at, print_token from public.penerimaan_cetak_log where unit_id = $1 order by cetak_ke', [id])).rows;
   assert.deepEqual(logs.map((l) => [l.id, l.cetak_ke, l.jenis_cetak, l.print_token]), [['RCPL-1', 1, 'PERTAMA', 'RCPRINT-1'], ['RCPL-2', 2, 'CETAK ULANG', 'RCPRINT-2']]);
   assert.equal(logs[1].printed_at.toISOString(), '2026-02-03T03:00:00.000Z');
+});
+
+test('Sprint 3 sheet: LOG_CETAK_LIDAH imported faithfully (orphan rejected, snapshot types, legacy status, slot)', async () => {
+  const id = await unitId();
+  const logs = (await pool.query(
+    `select id, batch_id, berkas_id, no_berkas_snapshot, kode_klasifikasi_snapshot, judul_berkas_snapshot, start_slot, status, printed_at, user_email
+       from public.folder_label_log where unit_id = $1 order by id`, [id])).rows;
+  assert.deepEqual(logs.map((l) => [l.id, l.berkas_id, l.no_berkas_snapshot, l.start_slot, l.status]),
+    [['PRN-1', 'BRK-1', '2', 3, 'PDF_DIBUAT'], ['PRN-2', 'BRK-1', '1', 1, 'PDF_DIBUAT'], ['PRN-3', 'BRK-2', '2', 2, 'PDF_DIBUAT']]);
+  assert.equal(logs[0].printed_at.toISOString(), '2026-02-05T02:00:00.000Z');
+  assert.equal(logs[1].printed_at.toISOString(), '2026-02-06T03:00:00.000Z');
+  assert.equal(logs[2].user_email, 'petugas@contoh.invalid');
 });
 
 test('second run: zero changes and identical database state', async () => {
