@@ -9,6 +9,8 @@ v4/
 ├── web/        Tampilan: Vite + React + TypeScript, PWA, di-host di Cloudflare Pages
 ├── supabase/   Skema Postgres, RLS, seed (migrasi Supabase)
 ├── gateway-apps-script/  Gerbang token Drive (Apps Script, akun instansi) — cara pasang: PASANG.md
+├── mirror-apps-script/   Cermin spreadsheet + backup harian (Apps Script kedua, akun instansi) — PASANG.md
+├── tools/restore-backup/  Restore paket backup ke Postgres (bash v4/tools/restore-backup/test.sh)
 └── tests/db/   Tes skema/RLS (jalankan: bash v4/tests/db/run.sh)
 ```
 

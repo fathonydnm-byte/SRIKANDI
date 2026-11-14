@@ -1,6 +1,6 @@
 /* Cadangan & Cermin. Memakai variabel global.css; satu kolom di HP, dua kolom di layar lebar. */
 .bk-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
-.bk-card { background: var(--white); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--shadow-subtle); padding: 14px; display: grid; gap: 12px; min-width: 0; }
+.bk-card { align-content: start; background: var(--white); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--shadow-subtle); padding: 14px; display: grid; gap: 12px; min-width: 0; }
 .bk-card-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
 .bk-card-head h2 { margin: 0; font-size: 18px; }
 .bk-kind { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--line); min-width: 0; }

@@ -9,7 +9,7 @@ Dokumen ini mencatat seluruh pekerjaan v4 dari awal sampai hari ini, keputusan y
 | Komponen | Acuan |
 | --- | --- |
 | Repo | `fathonydnm-byte/SRIKANDI` (publik), branch `claude/clever-bardeen-mmrijr`. Branch `claude/arsip-input-app-uinsa-m3uigw` berisi kode Apps Script produksi dan **tidak** memuat folder `v4/`. |
-| Kode v4 | `v4/web` (aplikasi + Pages Functions), `v4/supabase` (migrasi + kontrak API), `v4/tests/db`, `v4/tools/import-legacy`, `v4/gateway-apps-script`, `v4/mirror-apps-script` (sedang dikerjakan) |
+| Kode v4 | `v4/web` (aplikasi + Pages Functions), `v4/supabase` (migrasi + kontrak API), `v4/tests/db`, `v4/tools/import-legacy`, `v4/tools/restore-backup`, `v4/gateway-apps-script`, `v4/mirror-apps-script` |
 | Staging | https://central-file-uinsa.pages.dev |
 | Hosting web | Cloudflare Pages, proyek `central-file-uinsa`, akun `bag.umum@uinsa.ac.id` |
 | Database + login | Supabase, proyek `bycimuphbyfkwywcbsvx` (Singapura, Postgres 17), akun `bag.umum@uinsa.ac.id` |
@@ -113,7 +113,7 @@ Angka tes adalah hasil yang dijalankan ulang orchestrator, kecuali disebut lain.
 | S1 Baca + impor | Importer spreadsheet lama, Pencarian Arsip, detail item/berkas, dashboard setara 3.x, unduhan PDF aman lewat gerbang | Selesai, tayang; pemilik sudah membuka PDF dari HP |
 | S2 Registrasi | Penerimaan + tanda terima + cetak, antrean, pemberkasan, input manual, penomoran definitif, Alih Media, jembatan unggah | Selesai, tayang; unggah ke Drive asli **belum dikonfirmasi** |
 | S3 bagian 1 | Master Log, Cetak Lidah Folder, Perubahan, Koreksi & Pembatalan, Karantina, Kelola Pengguna | Selesai, tayang; beberapa alur belum diuji pemilik (§6) |
-| S3 bagian 2 | Cermin spreadsheet, backup harian, alat pemulihan, halaman "Cadangan & Cermin" | **Sedang dikerjakan**, belum direview |
+| S3 bagian 2 | Cermin spreadsheet, backup harian, alat pemulihan, halaman "Cadangan & Cermin" | **Kode selesai dan semua tes lulus, tetapi BELUM dipasang**: migrasi 0022 belum di staging, web belum di-deploy, proyek Apps Script cermin belum dibuat (§7) |
 | S4 Peminjaman | Pinjam/kembali multi-berkas, Out Indicator A5, Berita Acara Google Docs | Belum mulai |
 | S5 Retensi + RC | Monitoring, usul pemindahan, tiga dokumen, outbox, polling keputusan | Belum mulai |
 | S6 Scan + isi | Scan kamera, OCR, Cari Isi Berkas, Cek JRA | Belum mulai |
@@ -153,7 +153,8 @@ Angka tes adalah hasil yang dijalankan ulang orchestrator, kecuali disebut lain.
 - Tab lama yang **belum** diimpor (menunggu sprintnya): PEMINJAMAN 14, LOG_CETAK_BERITA_ACARA 28, LOG_CETAK_OUT_INDICATOR 9 (S4); USUL_PINDAH 3, USUL_PINDAH_DETAIL 3, USUL_PINDAH_ITEM 6, OUTBOX_RECORD_CENTER 1, MASTER_JRA 0 (S5); DB_SEARCH_DOCUMENTS 1 (S6); SYSTEM_BACKUPS 120, SYSTEM_JOBS 120, SYSTEM_JOB_QUEUE 75, SYSTEM_HEALTH_LOG 122, SYSTEM_MIGRATIONS 13 (belum diputuskan: diarsipkan sebagai histori).
 - Kunci rahasia Record Center lama sengaja tidak diimpor; dipasang ulang di S5.
 - Pendaftaran akun bebas di Supabase dimatikan.
-- Tes terakhir yang dijalankan orchestrator: database 229, importer 15, web 347, gerbang 11 — semuanya lulus. Angka ini belum mencakup pekerjaan S3 bagian 2.
+- Staging menayangkan kode sampai commit `6418669` (Kelola Pengguna). Kode S3 bagian 2 ada di repo tetapi belum tayang.
+- Tes terakhir yang dijalankan orchestrator pada kode di repo (termasuk S3 bagian 2): database 246, importer 15, pemulihan backup 13, web 409, Apps Script cermin + gerbang 45 — semuanya lulus.
 
 Cara memasang perubahan:
 
@@ -175,15 +176,32 @@ Cara memasang perubahan:
 | Instalasi PWA dan "Bagikan berkas" di HP | Belum |
 | CI di GitHub | Belum diperiksa |
 | Batas paket gratis Supabase/Cloudflare | Dari sumber sekunder; belum dicek di halaman resmi |
-| Pemulihan dari backup | Belum ada sampai S3 bagian 2 selesai |
+| Cermin spreadsheet dan backup | Kode lulus tes lokal dengan Google tiruan; belum pernah dipasang atau berjalan nyata |
+| Pemulihan dari backup | Terbukti secara lokal; belum pernah dari paket nyata |
 
 ## 7. Pekerjaan berikutnya
 
-### S3 bagian 2 — cermin spreadsheet dan backup (sedang berjalan)
+### S3 bagian 2 — cermin spreadsheet dan backup (kode selesai, belum dipasang)
 
-Rancangan: proyek Apps Script kedua (`v4/mirror-apps-script`) di akun `bag.umum`, berjalan tiap malam, mengambil data lewat `POST /api/jobs/export` (bertanda tangan `JOB_SECRET`), menulis satu spreadsheet cermin per unit (nama tab dan kolom seperti spreadsheet lama, termasuk DAFTAR BERKAS dan DAFTAR ISI BERKAS) dan satu paket backup harian di `CENTRAL FILE V4/<kode unit>/BACKUP/`. Migrasi 0022 (`backup_runs`, `job_nonces`), alat `v4/tools/restore-backup`, halaman "Cadangan & Cermin". Pekerjaan malam ini sekaligus mencegah proyek Supabase dijeda.
+Isi: proyek Apps Script kedua (`v4/mirror-apps-script`) di akun `bag.umum`, berjalan tiap malam, mengambil data lewat `POST /api/jobs/export` (bertanda tangan `JOB_SECRET`), menulis satu spreadsheet cermin per unit (nama tab dan kolom seperti spreadsheet lama, termasuk DAFTAR BERKAS dan DAFTAR ISI BERKAS) dan satu paket backup harian di `CENTRAL FILE V4/<kode unit>/BACKUP/`. Migrasi 0022 (`backup_runs`, `job_nonces`), alat `v4/tools/restore-backup`, halaman "Cadangan & Cermin" (`/cadangan`). Pekerjaan malam ini sekaligus mencegah proyek Supabase dijeda.
 
-Setelah direview: pasang 0022, deploy, lalu pemilik memasang proyek Apps Script kedua dan menambahkan `JOB_SECRET` di Cloudflare.
+Yang sudah dibuktikan secara lokal: uji bolak-balik ekspor → paket → pulihkan ke database kosong menghasilkan 17 tabel yang sama persis; paket rusak ditolak tanpa menyentuh database; permintaan ulang (replay) dan parameter yang diubah setelah ditandatangani ditolak. Google Drive/Sheets dan PostgREST dalam uji itu tiruan.
+
+Langkah pemasangan yang tersisa, berurutan:
+
+1. Pasang `0022_s3_backup.sql` ke Supabase staging.
+2. Jalankan workflow `v4 deploy (staging)`.
+3. Pemilik membuat proyek Apps Script kedua mengikuti `v4/mirror-apps-script/PASANG.md`: tempel `Code.gs` dan `appsscript.json`, jalankan `setupMirror`, salin `JOB_SECRET` ke Cloudflare Pages sebagai tipe Secret, atur alamat aplikasi, `installNightlyTrigger`, lalu `runNow`.
+4. Deploy ulang supaya `JOB_SECRET` terpakai, lalu periksa halaman "Cadangan & Cermin" dan spreadsheet cermin di Drive.
+5. Lakukan satu latihan pemulihan dari paket nyata ke database kosong.
+
+Hal yang perlu diketahui sebelum memasang:
+
+- Izin `spreadsheets` pada proyek cermin mencakup semua Google Sheets yang bisa dibuka akun `bag.umum`, termasuk spreadsheet produksi lama. Kodenya hanya membuka spreadsheet yang dibuatnya sendiri, tetapi izinnya lebih lebar dari itu. Alternatif yang lebih sempit: menulis lewat Sheets REST API dengan izin `drive.file` saja (belum dikerjakan).
+- Akan ada dua folder bernama `CENTRAL FILE V4` di Drive: satu milik gerbang (unggahan), satu milik proyek cermin. Masing-masing proyek hanya bisa melihat folder buatannya sendiri.
+- Akun login dan profil pengguna tidak ikut dalam paket backup; setelah bencana, admin membuat ulang akun.
+- Paket backup tidak dienkripsi tersendiri; kolom data pribadi di dalamnya tetap terenkripsi.
+- Belum pernah berjalan terhadap Google, Supabase, atau Cloudflare asli; batas kuota Apps Script (6 menit per eksekusi, 10 juta sel per spreadsheet) hanya diperhitungkan, belum diuji.
 
 ### S4 — Peminjaman
 
@@ -211,4 +229,4 @@ Ikuti handoff lama §6: UAT pemilik, uji pemulihan, impor ulang dari ekspor terb
 
 ## 8. Prompt untuk sesi baru
 
-> Lanjutkan Central File UINSA v4 berdasarkan `docs/HANDOFF_CENTRAL_FILE_V4_2026-11-14.md` dan `docs/PRD_CENTRAL_FILE_V4_2026-11-13.md` pada branch `claude/clever-bardeen-mmrijr`. Baca `v4/supabase/API_S2.md`, `API_S3.md`, dan migrasi 0010 sebelum menulis RPC baru. Bertindak sebagai orchestrator: pecah pekerjaan ke sub-agent (Sonnet untuk yang tidak terlalu kompleks, Opus untuk penomoran, keamanan, dan transaksi), jalankan ulang semua tes sendiri, dan minta persetujuan pemilik hanya untuk hal yang sangat penting. Selesaikan dan review S3 bagian 2, lalu lanjut S4. Jangan ubah produksi Apps Script, jangan kirim apa pun ke Record Center produksi, dan jangan deploy pekerjaan yang belum direview ke staging.
+> Lanjutkan Central File UINSA v4 berdasarkan `docs/HANDOFF_CENTRAL_FILE_V4_2026-11-14.md` dan `docs/PRD_CENTRAL_FILE_V4_2026-11-13.md` pada branch `claude/clever-bardeen-mmrijr`. Baca `v4/supabase/API_S2.md`, `API_S3.md`, dan migrasi 0010 sebelum menulis RPC baru. Bertindak sebagai orchestrator: pecah pekerjaan ke sub-agent (Sonnet untuk yang tidak terlalu kompleks, Opus untuk penomoran, keamanan, dan transaksi), jalankan ulang semua tes sendiri, dan minta persetujuan pemilik hanya untuk hal yang sangat penting. Pasang S3 bagian 2 mengikuti §7 (migrasi 0022, deploy, pemasangan proyek Apps Script cermin oleh pemilik, latihan pemulihan), lalu lanjut S4. Tanyakan dulu kepada pemilik hasil uji unggah PDF di Alih Media dan tiga pertanyaan terbuka di §2.4. Jangan ubah produksi Apps Script, jangan kirim apa pun ke Record Center produksi, dan jangan deploy pekerjaan yang belum direview ke staging.
