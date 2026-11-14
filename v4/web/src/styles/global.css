@@ -2621,3 +2621,30 @@ a.stat-card:focus-visible {
     scroll-behavior: auto !important;
   }
 }
+
+/* Kategori arsip (CF-01) pada berkas baru */
+.check-group {
+  border: 0;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+}
+.check-group legend {
+  width: 100%;
+  margin-bottom: 4px;
+}
+.check-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  cursor: pointer;
+  font-weight: 500;
+}
+.check-row input {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--green-700, #0b5d3b);
+}

@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHmac } from 'node:crypto';
-import { attestationCanonical, CHUNK_SIZE, folderAttestationCanonical, handleUploadCancel, handleUploadComplete, handleUploadSession, magicMatches, taskAttestationCanonical, validSessionUrl } from './uploadHandler';
+import { attestationCanonical, CHUNK_SIZE, folderAttestationCanonical, handleUploadCancel, handleUploadChunk, handleUploadComplete, handleUploadSession, magicMatches, taskAttestationCanonical, validSessionUrl } from './uploadHandler';
 import { handleDriveTasks } from './driveTasks';
 import { clearFolderCache } from './drive';
 import { clearGatewayCache } from './gateway';
@@ -318,6 +318,73 @@ describe('POST /api/files/drive-tasks', () => {
     const w = world({ cancelFile: 'ORPHAN1' });
     await handleUploadCancel(post('/x', { sessionId: 'UPS-1' }), ENV, w.fetchFn);
     expect(w.calls.some((c) => c.init?.method === 'PATCH' && c.url.includes('/ORPHAN1'))).toBe(true);
+  });
+});
+
+describe('PUT /api/files/upload-chunk (cadangan CORS)', () => {
+  const SESSION_URL = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=ABC';
+  function chunkReq(ctx: string, range: string, body: Uint8Array | null, opts: { sid?: string; length?: string | null; auth?: boolean } = {}) {
+    const headers: Record<string, string> = { 'X-Upload-Context': ctx, 'Content-Range': range };
+    if (opts.auth !== false) headers.Authorization = `Bearer ${JWT}`;
+    const len = opts.length === undefined ? String(body?.byteLength ?? 0) : opts.length;
+    if (len !== null) headers['Content-Length'] = len;
+    return new Request(`https://cf.example/api/files/upload-chunk?sid=${opts.sid ?? 'UPS-1'}`, {
+      method: 'PUT', headers, ...(body ? { body, duplex: 'half' } : {}),
+    } as RequestInit);
+  }
+  function google(reply: (init: RequestInit) => Response) {
+    const seen: { url: string; init: RequestInit; bytes: number }[] = [];
+    const fetchFn = vi.fn<FetchFn>(async (url, init) => {
+      const bytes = init?.body ? (await new Response(init.body as BodyInit).arrayBuffer()).byteLength : 0;
+      seen.push({ url, init: init!, bytes });
+      return reply(init!);
+    });
+    return { fetchFn, seen };
+  }
+
+  it('mengalirkan potongan ke URL sesi dari konteks; 308 → JSON {range}; 200 → {id}', async () => {
+    const context = await sessionContext();
+    const g = google(() => new Response(null, { status: 308, headers: { Range: 'bytes=0-499' } }));
+    const res = await handleUploadChunk(chunkReq(context, 'bytes 0-499/1000', new Uint8Array(500)), ENV, g.fetchFn, NOW);
+    expect(await res.json()).toEqual({ ok: true, upstreamStatus: 308, range: 'bytes=0-499', id: null });
+    expect(g.seen[0]!.url).toBe(SESSION_URL);
+    expect(g.seen[0]!.bytes).toBe(500);
+    expect(new Headers(g.seen[0]!.init.headers).get('Content-Range')).toBe('bytes 0-499/1000');
+    expect(new Headers(g.seen[0]!.init.headers).get('Authorization')).toBeNull(); // tanpa token Google/pengguna
+    const done = google(() => Response.json({ id: 'DRV1' }));
+    const fin = await handleUploadChunk(chunkReq(context, 'bytes 500-999/1000', new Uint8Array(500)), ENV, done.fetchFn, NOW);
+    expect(await fin.json()).toEqual({ ok: true, upstreamStatus: 200, range: null, id: 'DRV1' });
+    // Tanya posisi (tanpa badan) dan status lain diteruskan apa adanya.
+    const gone = google(() => new Response('', { status: 404 }));
+    expect(await (await handleUploadChunk(chunkReq(context, 'bytes */1000', null), ENV, gone.fetchFn, NOW)).json()).toEqual({ ok: true, upstreamStatus: 404, range: null, id: null });
+  });
+
+  it('menolak konteks palsu/sesi lain, rentang tak cocok, tanpa Content-Length, dan potongan terlalu besar', async () => {
+    const context = await sessionContext();
+    const never = vi.fn<FetchFn>();
+    const cases: [Request, number][] = [
+      [chunkReq(context.slice(0, -2) + 'AA', 'bytes 0-9/1000', new Uint8Array(10)), 400],
+      [chunkReq(context, 'bytes 0-9/1000', new Uint8Array(10), { sid: 'UPS-2' }), 400],
+      [chunkReq(context, 'bytes 0-9/999', new Uint8Array(10)), 400],
+      [chunkReq(context, 'bytes 0-1000/1000', new Uint8Array(10)), 400],
+      [chunkReq(context, 'bytes 0-9/1000', new Uint8Array(10), { length: '9' }), 400],
+      [chunkReq(context, 'bytes 0-9/1000', new Uint8Array(10), { length: null }), 400],
+      [chunkReq(context, 'bytes 0-9/1000', new Uint8Array(10), { auth: false }), 401],
+      [chunkReq(context, 'garbage', null), 400],
+    ];
+    for (const [req, status] of cases) expect((await handleUploadChunk(req, ENV, never, NOW)).status).toBe(status);
+    // Sesi besar: satu potongan melebihi CHUNK_SIZE ditolak sebelum dibaca.
+    const big = world({ begin: { ...BEGIN, max_bytes: 200 * 1024 * 1024 } });
+    const bigCtx = ((await (await handleUploadSession(post('/x', { ...SESSION_BODY, size: 50 * 1024 * 1024 }), ENV, big.fetchFn, NOW)).json()) as { context: string }).context;
+    const over = CHUNK_SIZE + 1;
+    expect((await handleUploadChunk(chunkReq(bigCtx, `bytes 0-${over - 1}/${50 * 1024 * 1024}`, new Uint8Array(1), { length: String(over) }), ENV, never, NOW)).status).toBe(413);
+    expect(never).not.toHaveBeenCalled();
+  });
+
+  it('Google tak terjangkau → 502', async () => {
+    const context = await sessionContext();
+    const down = vi.fn<FetchFn>(async () => { throw new TypeError('fetch failed'); });
+    expect((await handleUploadChunk(chunkReq(context, 'bytes */1000', null), ENV, down, NOW)).status).toBe(502);
   });
 });
 

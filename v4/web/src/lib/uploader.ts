@@ -8,7 +8,11 @@
  *  - jeda/lanjut, otomatis jeda saat offline dan lanjut saat online;
  *  - setelah gangguan jaringan, posisi ditanyakan ke Google (bytes * / total);
  *  - ulang dengan backoff; batal menghentikan sesi di server dan Google;
- *  - requestId sama dipakai ulang bila sesi diminta ulang (tanpa duplikat).
+ *  - requestId sama dipakai ulang bila sesi diminta ulang (tanpa duplikat);
+ *  - CADANGAN: bila potongan PERTAMA gagal tipe jaringan/CORS saat PUT langsung
+ *    ke Google, unggahan itu pindah ke /api/files/upload-chunk (server
+ *    meneruskan ke URL sesi), dan pilihan itu diingat untuk sesi tab
+ *    (sessionStorage) — pengguna tidak melihat pesan apa pun.
  */
 import { newRequestId } from './api';
 import type { UserMessage } from './errors';
@@ -110,6 +114,44 @@ export const xhrTransport: Transport = (url, init) =>
     xhr.send(init.body ?? null);
   });
 
+export const MODE_KEY = 'cf.upload.mode';
+type Mode = 'direct' | 'proxy';
+
+function rememberedMode(): Mode {
+  try {
+    return window.sessionStorage.getItem(MODE_KEY) === 'proxy' ? 'proxy' : 'direct';
+  } catch {
+    return 'direct';
+  }
+}
+function rememberProxy(): void {
+  try {
+    window.sessionStorage.setItem(MODE_KEY, 'proxy');
+  } catch {
+    // penyimpanan tidak tersedia: cukup untuk unggahan ini saja
+  }
+}
+
+/** Jawaban JSON jalur cadangan → bentuk jawaban Google (308 + Range / 200 + {id}). */
+interface ProxyReply { ok?: unknown; upstreamStatus?: unknown; range?: unknown; id?: unknown }
+
+function fromProxy(r: TransportResponse): TransportResponse {
+  let data: ProxyReply | null;
+  try {
+    data = JSON.parse(r.text || 'null') as ProxyReply | null;
+  } catch {
+    data = null;
+  }
+  if (r.status !== 200 || !data || data.ok !== true || typeof data.upstreamStatus !== 'number') {
+    // Galat jalur cadangan sendiri: 5xx/401 → coba lagi; lainnya → ditolak.
+    const status = r.status >= 500 || r.status === 0 ? 503 : r.status === 401 ? 503 : 400;
+    return { status, header: () => null, text: '' };
+  }
+  const range = typeof data.range === 'string' ? data.range : null;
+  const text = typeof data.id === 'string' ? JSON.stringify({ id: data.id }) : '';
+  return { status: data.upstreamStatus, header: (n) => (n.toLowerCase() === 'range' ? range : null), text };
+}
+
 const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export function startUpload(req: UploadRequest, deps: UploadDeps): UploadHandle {
@@ -127,6 +169,8 @@ export function startUpload(req: UploadRequest, deps: UploadDeps): UploadHandle 
   let current: AbortController | null = null;
   let session: { sessionId: string; uploadUrl: string; chunkSize: number; context: string } | null = null;
   let sent = 0;
+  let mode: Mode = rememberedMode();
+  let firstChunkPending = true;
 
   const emit = (stage: UploadStage, message?: UserMessage) => deps.onProgress?.({ stage, sent, total, ...(message ? { message } : {}) });
 
@@ -163,7 +207,7 @@ export function startUpload(req: UploadRequest, deps: UploadDeps): UploadHandle 
     if (!res.ok || !data || data.ok !== true) {
       const code = typeof data?.code === 'string' ? data.code : res.status === 401 ? 'UNAUTHENTICATED' : res.status >= 500 ? 'UPSTREAM' : 'UNKNOWN';
       const message = typeof data?.message === 'string' ? data.message : undefined;
-      throw uploadError(code, ['BAD_REQUEST', 'FORBIDDEN', 'CONFLICT', 'TOO_LARGE', 'NOT_FOUND', 'INVALID_FILE'].includes(code) ? message : undefined);
+      throw uploadError(code, ['BAD_REQUEST', 'FORBIDDEN', 'CONFLICT', 'TOO_LARGE', 'NOT_FOUND'].includes(code) ? message : undefined);
     }
     return data;
   }
@@ -186,15 +230,23 @@ export function startUpload(req: UploadRequest, deps: UploadDeps): UploadHandle 
 
   async function put(headers: Record<string, string>, body: Blob | null, base: number): Promise<TransportResponse> {
     current = new AbortController();
+    const progress = body ? { onProgress: (loaded: number) => { sent = Math.min(base + loaded, total); emit('mengunggah'); } } : {};
     try {
-      return await transport(session!.uploadUrl, {
-        method: 'PUT',
-        headers,
-        body,
-        signal: current.signal,
-        ...(body ? { onProgress: (loaded: number) => { sent = Math.min(base + loaded, total); emit('mengunggah'); } } : {}),
-      });
+      if (mode === 'proxy') {
+        const token = await deps.getToken();
+        if (!token) throw fileError('UNAUTHENTICATED');
+        const r = await transport(`/api/files/upload-chunk?sid=${encodeURIComponent(session!.sessionId)}`, {
+          method: 'PUT',
+          headers: { ...headers, Authorization: `Bearer ${token}`, 'X-Upload-Context': session!.context },
+          body,
+          signal: current.signal,
+          ...progress,
+        });
+        return fromProxy(r);
+      }
+      return await transport(session!.uploadUrl, { method: 'PUT', headers, body, signal: current.signal, ...progress });
     } catch (error) {
+      if (error instanceof FileAccessError) throw error;
       if (aborted) throw uploadError('CANCELLED');
       if (paused) throw new PauseSignal();
       void error;
@@ -233,7 +285,22 @@ export function startUpload(req: UploadRequest, deps: UploadDeps): UploadHandle 
           const end = Math.min(offset + session!.chunkSize, total);
           sent = offset;
           emit('mengunggah');
-          res = await put({ 'Content-Range': total === 0 ? 'bytes */0' : `bytes ${offset}-${end - 1}/${total}` }, req.file.slice(offset, end), offset);
+          try {
+            res = await put({ 'Content-Range': total === 0 ? 'bytes */0' : `bytes ${offset}-${end - 1}/${total}` }, req.file.slice(offset, end), offset);
+          } catch (error) {
+            // Potongan pertama gagal tipe jaringan saat PUT langsung (biasanya CORS):
+            // pindah ke jalur cadangan tanpa menunggu/menampilkan galat.
+            if (firstChunkPending && mode === 'direct' && error instanceof FileAccessError && error.code === 'NETWORK'
+                && !paused && !aborted && navigator.onLine !== false) {
+              mode = 'proxy';
+              rememberProxy();
+              needQuery = true; // Google mungkin sudah menerima sebagian
+              firstChunkPending = false;
+              continue;
+            }
+            throw error;
+          }
+          firstChunkPending = false;
         }
         if (res.status === 308) {
           offset = nextOffsetFromRange(res.header('Range'));

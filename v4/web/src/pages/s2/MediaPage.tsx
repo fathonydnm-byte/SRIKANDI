@@ -33,18 +33,22 @@ export function MediaPage() {
 
   const berkasList = load.kind === 'ok' ? load.data.berkas : [];
   const deepBerkas = deepItem ? berkasList.find((b) => b.items.some((i) => i.id === deepItem)) : undefined;
-  const berkasId = chosenBerkas ?? deepBerkas?.id ?? '';
-  const berkas = berkasList.find((b) => b.id === berkasId);
-  const itemId = chosenItem ?? (deepBerkas ? deepItem! : '');
+  // Pilihan hanya sah bila masih ada di daftar TERKINI (setelah muat ulang,
+  // berkas/item yang sudah lengkap hilang dan pilihan lama gugur).
+  const berkas = berkasList.find((b) => b.id === (chosenBerkas ?? deepBerkas?.id ?? ''));
+  const berkasId = berkas?.id ?? '';
+  const wantedItem = chosenItem ?? (deepBerkas ? deepItem! : '');
   // Item yang sedang/selesai diunggah disembunyikan dari pilihan.
   const busyIds = new Set(jobs.filter((j) => j.request.purpose === 'ITEM_PDF' && !j.error && j.progress.stage !== 'dibatalkan').map((j) => j.request.objectId));
-  const items = (berkas?.items ?? []).filter((i) => !busyIds.has(i.id) || i.id === itemId);
-  const selected = items.find((i) => i.id === itemId);
+  const items = (berkas?.items ?? []).filter((i) => !busyIds.has(i.id) || i.id === wantedItem);
+  const selected = items.find((i) => i.id === wantedItem);
+  const itemId = selected?.id ?? '';
+  const ready = load.kind === 'ok';
 
   function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!selected || !berkas) return setError('Pilih item tanpa PDF terlebih dahulu.');
+    if (!ready || !selected || !berkas) return setError('Pilih item tanpa PDF terlebih dahulu.');
     if (!file) return setError('Pilih file PDF alih media.');
     if (file.size > ITEM_PDF_MAX) return setError('PDF harus kurang dari 100 MB.');
     const label = `PDF Berkas ${berkas.number ?? '–'} / Item ${selected.number ?? '–'}`;
@@ -84,7 +88,7 @@ export function MediaPage() {
           <div className="form-grid-2">
             <div className="field">
               <label htmlFor={ids.b}>Berkas induk *</label>
-              <select id={ids.b} value={berkasId} onChange={(e) => { setChosenBerkas(e.target.value); setChosenItem(''); if (deepItem) setSp({}, { replace: true }); }}>
+              <select id={ids.b} value={berkasId} disabled={!ready || !berkasList.length} onChange={(e) => { setChosenBerkas(e.target.value); setChosenItem(''); if (deepItem) setSp({}, { replace: true }); }}>
                 <option value="">{load.kind === 'loading' ? 'Memuat daftar berkas…' : berkasList.length ? 'Pilih berkas induk' : 'Semua item sudah memiliki PDF'}</option>
                 {berkasList.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
               </select>
@@ -124,7 +128,7 @@ export function MediaPage() {
             <span className="save-stage" aria-live="polite">
               {jobs.filter((j) => j.request.purpose === 'ITEM_PDF' && j.progress.stage === 'mengunggah').map((j) => `${j.label}: ${STAGE_LABELS[j.progress.stage]} ${percent(j.progress)}%`).join(' · ')}
             </span>
-            <button type="submit" className="btn btn-primary">Upload Alih Media</button>
+            <button type="submit" className="btn btn-primary" disabled={!ready}>Upload Alih Media</button>
           </div>
         </form>
       )}

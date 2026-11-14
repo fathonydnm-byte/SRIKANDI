@@ -6,7 +6,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { isBusinessError, newRequestId } from '../../lib/api';
 import type { UserMessage } from '../../lib/errors';
 import { formatDate, formatNumber } from '../../lib/format';
-import { runDriveTasks, s2, type BerkasOption, type BerkasTarget, type FilingOptions, type QueueItem, type RegistrationOptions } from '../../lib/s2api';
+import { runDriveTasks, s2, type ArchiveCategory, type BerkasOption, type BerkasTarget, type FilingOptions, type QueueItem, type RegistrationOptions } from '../../lib/s2api';
 import { uploads } from '../../lib/uploadStore';
 import { useLoad } from '../../lib/useLoad';
 import { ClassificationPicker } from './ClassificationPicker';
@@ -25,11 +25,19 @@ interface NewBerkas {
   filing_cabinet: string;
   drawer: string;
   notes: string;
+  categories: Partial<Record<ArchiveCategory['key'], boolean>>;
 }
 const blankBerkas = (): NewBerkas => ({
   title: '', classification_id: null, active_retention_value: '', active_retention_unit: 'TAHUN', inactive_retention_value: '', inactive_retention_unit: 'TAHUN',
-  final_disposition: '', filing_cabinet: '', drawer: '', notes: '',
+  final_disposition: '', filing_cabinet: '', drawer: '', notes: '', categories: {},
 });
+
+/** Kategori CF-01 → arsip_vital/arsip_terjaga (hanya yang ditawarkan server). */
+function categoryFlags(cats: ArchiveCategory[] | undefined, chosen: NewBerkas['categories']): { arsip_vital?: boolean; arsip_terjaga?: boolean } {
+  const out: { arsip_vital?: boolean; arsip_terjaga?: boolean } = {};
+  for (const c of cats ?? []) out[c.key] = chosen[c.key] ?? c.default;
+  return out;
+}
 
 interface ManualItem {
   primary_letter_number: string;
@@ -193,6 +201,22 @@ function BerkasSection({ opts, mode, setMode, berkasId, setBerkasId, nb, setNb, 
             <div className="field"><label htmlFor={`${id}-dr`}>No. Laci</label><div className="field-control"><input id={`${id}-dr`} value={nb.drawer} onChange={(e) => set('drawer', e.target.value)} autoComplete="off" /></div></div>
             <div className="field"><label htmlFor={`${id}-fo`}>No. Folder</label><div className="field-control"><input id={`${id}-fo`} value="Otomatis mengikuti No. Berkas" disabled /></div></div>
           </div>
+          {(opts.archive_categories?.length ?? 0) > 0 && (
+            <fieldset className="check-group">
+              <legend className="mini-title">Kategori Arsip</legend>
+              {opts.archive_categories!.map((cat) => (
+                <label key={cat.key} className="check-row">
+                  <input type="checkbox" checked={nb.categories[cat.key] ?? cat.default}
+                    onChange={(e) => set('categories', { ...nb.categories, [cat.key]: e.target.checked })} />
+                  <span>{cat.label}</span>
+                </label>
+              ))}
+            </fieldset>
+          )}
+          <div className="field">
+            <label htmlFor={`${id}-mb`}>Media berkas</label>
+            <div className="field-control"><input id={`${id}-mb`} value="Otomatis dari media item (mis. TEKSTUAL)" disabled /></div>
+          </div>
           <div className="field">
             <label htmlFor={`${id}-bn`}>Catatan berkas</label>
             <textarea id={`${id}-bn`} rows={2} maxLength={1000} value={nb.notes} onChange={(e) => set('notes', e.target.value)} />
@@ -263,6 +287,7 @@ export function RegistrationPage() {
       ...(nb.filing_cabinet.trim() ? { filing_cabinet: nb.filing_cabinet.trim() } : {}),
       ...(nb.drawer.trim() ? { drawer: nb.drawer.trim() } : {}),
       ...(nb.notes.trim() ? { notes: nb.notes.trim() } : {}),
+      ...categoryFlags(regLoad.kind === 'ok' ? regLoad.data.archive_categories : undefined, nb.categories),
     };
   }
 

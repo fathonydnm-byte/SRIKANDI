@@ -37,6 +37,8 @@ const REG: RegistrationOptions = {
   ],
   retention_units: ['TAHUN', 'BULAN'], final_dispositions: ['MUSNAH', 'PERMANEN', 'DINILAI KEMBALI'],
   security_classifications: ['BIASA/TERBUKA', 'TERBATAS', 'RAHASIA', 'SANGAT RAHASIA'], development_levels: ['ASLI', 'COPY'],
+  archive_categories: [{ key: 'arsip_vital', label: 'Arsip vital', default: false }, { key: 'arsip_terjaga', label: 'Arsip terjaga', default: false }],
+  media_berkas_values: ['TEKSTUAL', 'AUDIO VISUAL', 'DIGITAL', 'KOMBINASI', 'BELUM DITETAPKAN'],
 };
 
 const QUEUE: FilingOptions = {
@@ -227,13 +229,17 @@ describe('Registrasi Berkas Baru', () => {
     await user.type(screen.getByLabelText('Retensi aktif *'), '2');
     await user.type(screen.getByLabelText('Retensi inaktif *'), '3');
     await user.selectOptions(screen.getByLabelText('Nasib akhir *'), 'PERMANEN');
+    expect(screen.getByRole('checkbox', { name: 'Arsip terjaga' })).not.toBeChecked();
+    await user.click(screen.getByRole('checkbox', { name: 'Arsip vital' }));
+    // Media berkas diturunkan server dari item: hanya ditampilkan, tanpa isian.
+    expect(screen.getByLabelText('Media berkas')).toBeDisabled();
     await user.type(screen.getByLabelText('Uraian informasi arsip *'), 'Laporan triwulan');
     const pdf = new File(['%PDF-1.4'], 'laporan.pdf', { type: 'application/pdf' });
     await user.upload(screen.getByLabelText('PDF alih media (opsional)'), pdf);
     await user.click(screen.getByRole('button', { name: 'Simpan Item' }));
     expect(await screen.findByText(/Tersimpan: Berkas 2 \/ Item 1\. PDF sedang diunggah\./)).toBeInTheDocument();
     expect(create.mock.calls[0]![0]).toMatchObject({
-      p_target: { mode: 'NEW', title: 'Laporan 2026', classification_id: 'K2', active_retention_value: 2, inactive_retention_value: 3, final_disposition: 'PERMANEN' },
+      p_target: { mode: 'NEW', title: 'Laporan 2026', classification_id: 'K2', active_retention_value: 2, inactive_retention_value: 3, final_disposition: 'PERMANEN', arsip_vital: true, arsip_terjaga: false },
       p_item: { description: 'Laporan triwulan', page_count: 1, development_level: 'ASLI', security_classification: 'BIASA/TERBUKA' },
     });
     expect(start).toHaveBeenCalledWith(expect.objectContaining({ purpose: 'ITEM_PDF', objectId: 'ITM-NEW', fileName: 'laporan.pdf' }), 'PDF Berkas 2 / Item 1', expect.any(Function));
@@ -247,12 +253,22 @@ describe('Registrasi Berkas Baru', () => {
 describe('Alih Media Arsip', () => {
   it('pilih berkas → item tanpa PDF → unggah; titik sambung pemindai belum aktif', async () => {
     const start = vi.spyOn(uploads, 'start').mockReturnValue('JOB');
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
     renderApp('/alih-media', setup('PETUGAS', {
-      media_options: () => ({ data: { ok: true, unit_id: 'unit-1', total_missing: 1, berkas: [{ id: 'BRK-1', number: 1, title: 'Renstra', label: '1 – Renstra (1 belum ada PDF)',
-        items: [{ id: 'ITM-2', number: 2, description: 'Belum ada PDF', document_date: '2026-01-02', page_count: 4, file_status: 'BELUM DIUNGGAH', planned_file_name: '1_2_Belum ada PDF.pdf', label: '2 – Belum ada PDF' }] }] }, error: null }),
+      media_options: async () => { await gate; return { data: { ok: true, unit_id: 'unit-1', total_missing: 1, berkas: [{ id: 'BRK-1', number: 1, title: 'Renstra', label: '1 – Renstra (1 belum ada PDF)',
+        items: [{ id: 'ITM-2', number: 2, description: 'Belum ada PDF', document_date: '2026-01-02', page_count: 4, file_status: 'BELUM DIUNGGAH', planned_file_name: '1_2_Belum ada PDF.pdf', label: '2 – Belum ada PDF' }] }] }, error: null }; },
     }).client);
     const user = userEvent.setup();
-    await user.selectOptions(await screen.findByLabelText('Berkas induk *'), 'BRK-1');
+    // Selama memuat, pilihan berkas terkunci (tidak bisa memilih daftar kosong/basi).
+    const berkasSel = await screen.findByLabelText('Berkas induk *');
+    expect(berkasSel).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Upload Alih Media' })).toBeDisabled();
+    release();
+    // Tunggu opsinya benar-benar ada (bukan hanya elemen select) sebelum memilih.
+    await screen.findByRole('option', { name: '1 – Renstra (1 belum ada PDF)' });
+    await waitFor(() => expect(berkasSel).toBeEnabled());
+    await user.selectOptions(berkasSel, 'BRK-1');
     const itemSel = screen.getByLabelText('Item tanpa PDF *');
     expect(within(itemSel).getAllByRole('option')).toHaveLength(2);
     await user.selectOptions(itemSel, 'ITM-2');

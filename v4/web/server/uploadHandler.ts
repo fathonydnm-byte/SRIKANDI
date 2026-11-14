@@ -13,6 +13,9 @@ import { MIN_SECRET_LENGTH } from './ticket';
  *   POST /api/files/upload-session   upload_begin (sebagai pengguna) → folder → sesi resumable Drive
  *   POST /api/files/upload-complete  verifikasi file di Drive → atestasi HMAC → upload_commit
  *   POST /api/files/upload-cancel    upload_cancel + hapus sesi resumable
+ *   PUT  /api/files/upload-chunk     CADANGAN bila Google menolak PUT langsung dari
+ *                                    browser (CORS): potongan dialirkan ke URL sesi
+ *                                    yang terikat di konteks bertanda tangan.
  *
  * Token Google tidak pernah dikirim ke browser. Browser hanya menerima URL
  * sesi resumable (kapabilitas untuk SATU unggahan itu saja).
@@ -42,6 +45,8 @@ interface UploadContext {
   folder: string;
   size: number;
   mime: string;
+  /** URL sesi resumable (bertanda tangan) untuk jalur cadangan upload-chunk. */
+  url?: string;
   exp: number;
 }
 
@@ -230,7 +235,7 @@ export async function handleUploadSession(request: Request, env: FileEnv, fetchF
     }, fetchFn).catch(() => null);
   }
 
-  const context = await signPayload(CONTEXT_PURPOSE, { v: 1, sid: begin.session_id, folder: folderId, size, mime, exp: nowSec + CONTEXT_TTL_SECONDS } satisfies UploadContext, env.UPLOAD_ATTEST_SECRET!);
+  const context = await signPayload(CONTEXT_PURPOSE, { v: 1, sid: begin.session_id, folder: folderId, size, mime, url: uploadUrl, exp: nowSec + CONTEXT_TTL_SECONDS } satisfies UploadContext, env.UPLOAD_ATTEST_SECRET!);
   return json({ ok: true, sessionId: begin.session_id, uploadUrl, chunkSize: CHUNK_SIZE, context, maxBytes: begin.max_bytes ?? null });
 }
 
@@ -328,4 +333,71 @@ export async function handleUploadCancel(request: Request, env: FileEnv, fetchFn
     await fetchFn(target, { method: 'DELETE' }).then((r) => r.body?.cancel()).catch(() => null);
   }
   return json({ ok: true });
+}
+
+// ---------------------------------------------------------------------------
+const RANGE_RE = /^bytes (\d{1,15})-(\d{1,15})\/(\d{1,15})$/;
+const QUERY_RE = /^bytes \*\/(\d{1,15})$/;
+
+/**
+ * PUT /api/files/upload-chunk?sid=<session>  (header X-Upload-Context, Content-Range, Content-Length)
+ *
+ * Jalur cadangan: potongan dialirkan (tanpa ditampung) ke URL sesi resumable
+ * yang ada di konteks bertanda tangan — browser tidak bisa mengarahkan ke URL
+ * lain. Ukuran dibatasi satu potongan (CHUNK_SIZE) dan harus cocok dengan
+ * Content-Range serta ukuran sesi. Jawaban Google diteruskan sebagai JSON
+ * { ok, upstreamStatus, range, id } (tanpa 308 yang membingungkan XHR).
+ */
+export async function handleUploadChunk(request: Request, env: FileEnv, fetchFn: FetchFn, nowSec = Math.floor(Date.now() / 1000)): Promise<Response> {
+  if (request.method !== 'PUT') return jsonError('METHOD');
+  if (!env.UPLOAD_ATTEST_SECRET || env.UPLOAD_ATTEST_SECRET.length < MIN_SECRET_LENGTH) return jsonError('NOT_CONFIGURED');
+  if (!bearer(request)) return jsonError('UNAUTHENTICATED');
+  const sid = new URL(request.url).searchParams.get('sid') ?? '';
+  const c = await verifyPayload<UploadContext>(CONTEXT_PURPOSE, request.headers.get('X-Upload-Context'), env.UPLOAD_ATTEST_SECRET, nowSec);
+  const sessionUrl = c?.url ? validSessionUrl(c.url, env) : null;
+  if (!c || !sid || c.sid !== sid || !sessionUrl) return jsonError('BAD_REQUEST');
+
+  const range = request.headers.get('Content-Range') ?? '';
+  const lengthHeader = request.headers.get('Content-Length');
+  const length = lengthHeader !== null && /^\d{1,15}$/.test(lengthHeader) ? Number(lengthHeader) : NaN;
+  let upstreamHeaders: Record<string, string>;
+  let body: ReadableStream<Uint8Array> | null = null;
+  const r = RANGE_RE.exec(range);
+  const q = QUERY_RE.exec(range);
+  if (r) {
+    const start = Number(r[1]);
+    const end = Number(r[2]);
+    const total = Number(r[3]);
+    const len = end - start + 1;
+    if (total !== c.size || end < start || end >= total) return jsonError('BAD_REQUEST');
+    if (len > CHUNK_SIZE || (Number.isFinite(length) && length > CHUNK_SIZE)) return jsonError('TOO_LARGE');
+    // Content-Length wajib & sama dengan rentang: badan tidak bisa melebihi batas.
+    if (length !== len || !request.body) return jsonError('BAD_REQUEST');
+    upstreamHeaders = { 'Content-Range': range, 'Content-Length': String(len) };
+    body = request.body;
+  } else if (q) {
+    if (Number(q[1]) !== c.size || (Number.isFinite(length) && length !== 0)) return jsonError('BAD_REQUEST');
+    upstreamHeaders = { 'Content-Range': range, 'Content-Length': '0' };
+  } else {
+    return jsonError('BAD_REQUEST');
+  }
+
+  const local = driveApiBase(env);
+  const target = local !== 'https://www.googleapis.com' ? sessionUrl.replace('https://www.googleapis.com', local) : sessionUrl;
+  let res: Response;
+  try {
+    res = await fetchFn(target, { method: 'PUT', headers: upstreamHeaders, body, ...(body ? { duplex: 'half' } : {}) } as RequestInit);
+  } catch {
+    return jsonError('UPSTREAM');
+  }
+  const upstreamStatus = res.status;
+  let id: string | null = null;
+  if (upstreamStatus === 200 || upstreamStatus === 201) {
+    const data = (await res.json().catch(() => null)) as { id?: unknown } | null;
+    id = typeof data?.id === 'string' && DRIVE_ID_RE.test(data.id) ? data.id : null;
+  } else {
+    await res.body?.cancel();
+  }
+  const upstreamRange = upstreamStatus === 308 ? res.headers.get('Range') : null;
+  return json({ ok: true, upstreamStatus, range: upstreamRange && /^bytes=0-\d{1,15}$/.test(upstreamRange) ? upstreamRange : null, id });
 }

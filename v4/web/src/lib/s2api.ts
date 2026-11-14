@@ -170,6 +170,17 @@ export interface RegistrationOptions {
   final_dispositions: string[];
   security_classifications: Security[];
   development_levels: DevelopmentLevel[];
+  /** 0015: kategori CF-01 opsional (arsip vital / terjaga), bawaan false. */
+  archive_categories?: ArchiveCategory[];
+  /** 0015: nilai media berkas (hanya baca; diturunkan server dari item). */
+  media_berkas_values?: string[];
+  archive_creator?: { name: string; unit_name: string };
+}
+
+export interface ArchiveCategory {
+  key: 'arsip_vital' | 'arsip_terjaga';
+  label: string;
+  default: boolean;
 }
 
 export interface QueueItem {
@@ -216,6 +227,8 @@ export type BerkasTarget =
       filing_cabinet?: string;
       drawer?: string;
       notes?: string;
+      arsip_vital?: boolean;
+      arsip_terjaga?: boolean;
     };
 
 export interface DriveTask {

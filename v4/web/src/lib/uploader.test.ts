@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
-import { guessMime, nextOffsetFromRange, startUpload, type Transport, type TransportResponse, type UploadProgress } from './uploader';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { guessMime, MODE_KEY, nextOffsetFromRange, startUpload, type Transport, type TransportResponse, type UploadProgress } from './uploader';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const token = async () => 'jwt';
@@ -55,6 +55,81 @@ function apiFetch(over: Partial<Record<string, (body: Record<string, unknown>) =
 }
 
 const file = (n = 10) => new Blob([new Uint8Array(n).fill(65)], { type: '' });
+
+beforeEach(() => window.sessionStorage.clear());
+
+/** Jalur cadangan palsu: /api/files/upload-chunk meneruskan ke fakeGoogle dan menjawab JSON. */
+function proxyOver(g: ReturnType<typeof fakeGoogle>, opts: { corsBlocksDirect?: boolean } = {}) {
+  const urls: string[] = [];
+  const headers: Record<string, string>[] = [];
+  const transport: Transport = async (url, init) => {
+    urls.push(url);
+    headers.push(init.headers);
+    if (url.startsWith('https://www.googleapis.com/')) {
+      if (opts.corsBlocksDirect) throw new TypeError('network'); // XHR onerror (CORS)
+      return g.transport(url, init);
+    }
+    const { Authorization: _a, 'X-Upload-Context': _c, ...rest } = init.headers;
+    void _a; void _c;
+    const r = await g.transport(url, { ...init, headers: rest });
+    return res(200, {}, JSON.stringify({ ok: true, upstreamStatus: r.status, range: r.header('Range'), id: r.text ? (JSON.parse(r.text) as { id: string }).id : null }));
+  };
+  return { transport, urls, headers };
+}
+
+describe('jalur cadangan upload-chunk', () => {
+  it('langsung ke Google bila CORS diizinkan: tidak pernah memakai cadangan', async () => {
+    const g = fakeGoogle(10);
+    const p = proxyOver(g);
+    await startUpload({ purpose: 'ITEM_PDF', objectId: 'X', file: file(), fileName: 'a.pdf' }, { getToken: token, fetchFn: apiFetch().fn, transport: p.transport, sleep: noSleep }).promise;
+    expect(p.urls.every((u) => u.startsWith('https://www.googleapis.com/'))).toBe(true);
+    expect(window.sessionStorage.getItem(MODE_KEY)).toBeNull();
+  });
+
+  it('potongan pertama ditolak (CORS) → pindah ke cadangan tanpa pesan galat, diingat untuk sesi tab', async () => {
+    const g = fakeGoogle(10);
+    const p = proxyOver(g, { corsBlocksDirect: true });
+    const stages: UploadProgress[] = [];
+    let slept = 0;
+    const r = await startUpload({ purpose: 'ITEM_PDF', objectId: 'X', file: file(), fileName: 'a.pdf' }, {
+      getToken: token, fetchFn: apiFetch().fn, transport: p.transport, sleep: async () => { slept++; }, onProgress: (x) => stages.push(x),
+    }).promise;
+    expect(r.driveFileId).toBe('DRIVE1');
+    expect(p.urls[0]).toMatch(/^https:\/\/www\.googleapis\.com\//);
+    expect(p.urls.slice(1).every((u) => u === '/api/files/upload-chunk?sid=SES1')).toBe(true);
+    expect(g.log).toEqual(['bytes */10', 'bytes 0-3/10', 'bytes 4-7/10', 'bytes 8-9/10']);
+    expect(p.headers[1]).toMatchObject({ Authorization: 'Bearer jwt', 'X-Upload-Context': 'CTX' });
+    expect(slept).toBe(0); // tanpa backoff
+    expect(stages.some((x) => x.stage === 'gagal' || x.message)).toBe(false);
+    expect(window.sessionStorage.getItem(MODE_KEY)).toBe('proxy');
+    // Unggahan berikutnya di tab yang sama langsung lewat cadangan.
+    const g2 = fakeGoogle(10);
+    const p2 = proxyOver(g2, { corsBlocksDirect: true });
+    await startUpload({ purpose: 'ITEM_PDF', objectId: 'Y', file: file(), fileName: 'b.pdf' }, { getToken: token, fetchFn: apiFetch().fn, transport: p2.transport, sleep: noSleep }).promise;
+    expect(p2.urls.every((u) => u.startsWith('/api/files/upload-chunk'))).toBe(true);
+  });
+
+  it('gangguan setelah potongan pertama berhasil TIDAK memicu cadangan (tetap langsung, tanya posisi)', async () => {
+    const g = fakeGoogle(10, { failPutNo: 2 });
+    const p = proxyOver(g);
+    await startUpload({ purpose: 'ITEM_PDF', objectId: 'X', file: file(), fileName: 'a.pdf' }, { getToken: token, fetchFn: apiFetch().fn, transport: p.transport, sleep: noSleep }).promise;
+    expect(p.urls.every((u) => u.startsWith('https://www.googleapis.com/'))).toBe(true);
+    expect(window.sessionStorage.getItem(MODE_KEY)).toBeNull();
+  });
+
+  it('galat jalur cadangan sendiri: 5xx diulang, 4xx ditolak dengan pesan biasa', async () => {
+    window.sessionStorage.setItem(MODE_KEY, 'proxy');
+    let n = 0;
+    const g = fakeGoogle(10);
+    const p = proxyOver(g);
+    const flaky: Transport = async (url, init) => (++n === 1 ? res(502, {}, '{"ok":false,"code":"UPSTREAM"}') : p.transport(url, init));
+    await startUpload({ purpose: 'ITEM_PDF', objectId: 'X', file: file(), fileName: 'a.pdf' }, { getToken: token, fetchFn: apiFetch().fn, transport: flaky, sleep: noSleep }).promise;
+    expect(g.received).toBe(10);
+    const bad: Transport = async () => res(400, {}, '{"ok":false,"code":"BAD_REQUEST"}');
+    await expect(startUpload({ purpose: 'ITEM_PDF', objectId: 'X', file: file(), fileName: 'a.pdf' }, { getToken: token, fetchFn: apiFetch().fn, transport: bad, sleep: noSleep }).promise)
+      .rejects.toMatchObject({ code: 'UPLOAD_REJECTED' });
+  });
+});
 
 describe('pengunggah resumable', () => {
   it('memotong file, melapor progres, lalu mengesahkan', async () => {
