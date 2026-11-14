@@ -73,6 +73,14 @@ const CODE_ACTIONS: Record<string, string> = {
   BATCH_LIMIT: 'Pilih paling banyak 100 item per penyimpanan.',
   CLASSIFICATION_INVALID: 'Pilih kode klasifikasi lain.',
   BERKAS_TRANSFERRED: 'Pilih berkas lain yang belum dipindahkan.',
+  NO_CHANGES: 'Ubah minimal satu isian atau pilih PDF pengganti.',
+  OBJECT_BORROWED: 'Tunggu sampai arsip dikembalikan, lalu coba lagi.',
+  LAST_ITEM_IN_BERKAS: 'Batalkan seluruh berkas, atau tambahkan item lain lebih dulu.',
+  ALREADY_CANCELLED: 'Muat ulang daftar; arsip ini sudah dibatalkan.',
+  UPLOAD_SESSION_STATE: 'Pilih file lagi dan ulangi dari awal.',
+  UPLOAD_FILE_IN_USE: 'Pilih file lain; file ini sudah terpakai pada catatan lain.',
+  FILE_TYPE: 'Pilih file dengan tipe yang diizinkan.',
+  FILE_TOO_LARGE: 'Pilih file yang lebih kecil atau kompres lebih dulu.',
 };
 
 /** Error RPC → ApiError. P0001: hint = KODE, message = "KODE: pesan". */
