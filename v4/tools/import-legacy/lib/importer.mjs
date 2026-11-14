@@ -447,7 +447,7 @@ async function loadExisting(client, unitId) {
   existing.item = new Set(await q('select id v from public.item where unit_id = $1'));
   existing.penerimaan_item = new Set(await q('select id v from public.penerimaan_item where unit_id = $1'));
   existing.penerimaanItemArsip = new Set(await q('select arsip_id v from public.penerimaan_item where unit_id = $1 and arsip_id is not null'));
-  for (const t of ['unit_settings', 'riwayat_nomor', 'audit_log', 'jenis_naskah', 'penerimaan_cetak_log', 'folder_label_log']) existing[t] = new Set();
+  for (const t of ['unit_settings', 'riwayat_nomor', 'audit_log', 'jenis_naskah', 'penerimaan_cetak_log', 'folder_label_log', 'karantina']) existing[t] = new Set();
   return existing;
 }
 

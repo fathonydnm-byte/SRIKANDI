@@ -32,7 +32,7 @@ async function unitId(code = FIXTURE_UNIT.code) {
   return (await pool.query('select id from public.units where code = $1', [code])).rows[0]?.id;
 }
 
-const TABLES = ['unit_settings', 'klasifikasi', 'jenis_naskah', 'pegawai', 'berkas', 'penerimaan', 'penerimaan_cetak_log', 'folder_label_log', 'item',
+const TABLES = ['unit_settings', 'klasifikasi', 'jenis_naskah', 'pegawai', 'berkas', 'penerimaan', 'penerimaan_cetak_log', 'folder_label_log', 'karantina', 'item',
   'penerimaan_item', 'riwayat_nomor', 'audit_log'];
 async function snapshot(id) {
   const out = {};
@@ -88,7 +88,7 @@ test('first import: rows, statuses, dates, links and PII stored as expected', as
   const counts = Object.fromEntries(Object.entries(r.tables).map(([t, s]) => [t, [s.read, s.inserted, s.rejected]]));
   assert.deepEqual(counts, {
     unit_settings: [10, 8, 0], klasifikasi: [6, 6, 0], jenis_naskah: [2, 2, 0], pegawai: [2, 2, 0], berkas: [5, 5, 0],
-    penerimaan: [3, 3, 0], penerimaan_cetak_log: [3, 2, 1], folder_label_log: [4, 3, 1], item: [6, 5, 1], penerimaan_item: [4, 3, 1], riwayat_nomor: [5, 5, 0],
+    penerimaan: [3, 3, 0], penerimaan_cetak_log: [3, 2, 1], folder_label_log: [4, 3, 1], karantina: [4, 3, 1], item: [6, 5, 1], penerimaan_item: [4, 3, 1], riwayat_nomor: [5, 5, 0],
     audit_log: [5, 5, 0]
   });
   const id = await unitId();
@@ -274,6 +274,24 @@ test('Sprint 3 sheet: LOG_CETAK_LIDAH imported faithfully (orphan rejected, snap
   assert.equal(logs[0].printed_at.toISOString(), '2026-02-05T02:00:00.000Z');
   assert.equal(logs[1].printed_at.toISOString(), '2026-02-06T03:00:00.000Z');
   assert.equal(logs[2].user_email, 'petugas@contoh.invalid');
+});
+
+test('Sprint 3 sheet: SYSTEM_QUARANTINE imported faithfully; quarantined Drive ids count as in use', async () => {
+  const id = await unitId();
+  const rows = (await pool.query(
+    `select id, occurred_at, user_email, object_type, object_id, original_url, original_parent_ids, quarantine_folder_id, module, reason, status, notes,
+            related_object_id, app_owned from public.karantina where unit_id = $1 order by id`, [id])).rows;
+  assert.deepEqual(rows.map((q) => [q.id, q.object_type, q.object_id, q.module, q.status]), [
+    ['QRT-1', 'FILE', 'drv-file-lama-1', 'EDIT_ARSIP', 'QUARANTINED'], ['QRT-2', 'FOLDER', 'drv-folder-3', 'PENGHAPUSAN_BERKAS', 'QUARANTINED'],
+    ['QRT-3', 'FILE', 'drv-file-gagal-1', 'PENGHAPUSAN_ITEM', 'FAILED']]);
+  assert.equal(rows[0].occurred_at.toISOString(), '2026-02-07T02:30:00.000Z');
+  assert.equal(rows[1].occurred_at.toISOString(), '2026-01-21T01:00:00.000Z');
+  assert.deepEqual([rows[0].original_url, rows[1].original_parent_ids, rows[0].notes, rows[0].related_object_id, rows[0].app_owned],
+    ['https://drive.google.com/file/d/drv-file-lama-1/view', 'drv-root-a,drv-root-b', 'Versi alih media sebelum penggantian', null, null]);
+  assert.deepEqual(firstReport.tables.karantina.rejectedRows.map((x) => x.id), ['QRT-4']);
+  // a quarantined legacy file can never be attached to an active record again (0018)
+  const { rows: [u] } = await pool.query("select app.drive_id_in_use('drv-file-lama-1', null) a, app.drive_id_in_use('drv-file-tidak-ada', null) b");
+  assert.deepEqual([u.a, u.b], [true, false]);
 });
 
 test('second run: zero changes and identical database state', async () => {

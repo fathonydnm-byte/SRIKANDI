@@ -219,6 +219,27 @@ export const TABLES = [
     ]
   },
   {
+    // Sprint 3: SYSTEM_QUARANTINE (ReliabilityService.quarantineDriveObject_) -> karantina (0018).
+    // The v4-only columns (related object, action binding, app_owned, ...) stay NULL for legacy rows.
+    table: 'karantina', sheets: ['SYSTEM_QUARANTINE'], key: ['id'], label: 'Karantina (objek Drive)',
+    columns: [
+      { h: 'QUARANTINE_ID', c: 'id', t: T, required: true },
+      { h: 'TIMESTAMP', c: 'occurred_at', t: TS, required: true },
+      { h: 'USER_EMAIL', c: 'user_email', t: T },
+      { h: 'OBJECT_TYPE', c: 'object_type', t: enumOf(['FILE', 'FOLDER']), required: true },
+      { h: 'OBJECT_ID', c: 'object_id', t: T, required: true },
+      { h: 'ORIGINAL_NAME', c: 'original_name', t: T },
+      { h: 'ORIGINAL_URL', c: 'original_url', t: T },
+      { h: 'ORIGINAL_PARENT_IDS', c: 'original_parent_ids', t: T },
+      { h: 'QUARANTINE_FOLDER_ID', c: 'quarantine_folder_id', t: T },
+      { h: 'QUARANTINE_URL', c: 'quarantine_url', t: T },
+      { h: 'MODULE', c: 'module', t: T },
+      { h: 'REASON', c: 'reason', t: T },
+      { h: 'STATUS', c: 'status', t: enumOf(['QUARANTINED', 'FAILED']), def: 'QUARANTINED' },
+      { h: 'NOTES', c: 'notes', t: T }
+    ]
+  },
+  {
     table: 'item', sheets: ['DB_ITEM'], key: ['id'], label: 'Item arsip',
     columns: [
       { h: 'ITEM_ID', c: 'id', t: T, required: true },
@@ -364,7 +385,6 @@ export const DEFERRED_SHEETS = {
   'SYSTEM_JOBS': { sprint: 3, module: 'Sistem (pekerjaan terjadwal)' },
   'SYSTEM_JOB_QUEUE': { sprint: 3, module: 'Sistem (antrean pekerjaan)' },
   'SYSTEM_HEALTH_LOG': { sprint: 3, module: 'Sistem (health)' },
-  'SYSTEM_QUARANTINE': { sprint: 3, module: 'Sistem (karantina)' },
   'DB_SEARCH_DOCUMENTS': { sprint: 6, module: 'Cari Isi Berkas (indeks isi)' },
   // found in the real pilot export
   'MASTER_JRA': { sprint: 5, module: 'Master JRA (retensi)' },

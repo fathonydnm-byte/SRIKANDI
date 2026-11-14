@@ -250,6 +250,25 @@ test('PDF replacement (3.30.5): classification and condition preserved, old file
   await expectCode(rpc(pool, fx.user.petugasA, 'upload_cancel', { p_session_id: session.session_id }), 'UPLOAD_SESSION_STATE');
 });
 
+test('PDF replacement of a LEGACY file (not app-owned): bound in karantina, admin-only, never re-attachable', async () => {
+  const m = await manual(fx.user.petugasA, newBerkasTarget({ title: 'PDF lama' }), { description: 'Impor lama' });
+  const legacy = 'legacyPdf' + randomUUID().replace(/-/g, '').slice(0, 20);
+  await owner(pool, `update public.item set drive_file_id = $2, drive_file_url = 'https://drive.google.com/file/d/' || $2 || '/view',
+                       status_file = 'TERSEDIA', nama_file = 'lama.pdf' where id = $1`, [m.item_id, legacy]);
+  const r = await replacement(fx.user.petugasA, m.item_id);
+  const res = await update(fx.user.petugasA, m.item_id, await payloadOf(m.item_id), { session: r.session.session_id });
+  const [q] = await owner(pool, 'select object_id, app_owned, original_name from public.karantina where id = $1', [res.quarantine_id]);
+  assert.deepEqual([q.object_id, q.app_owned, q.original_name], [legacy, false, 'lama.pdf']);
+  // only the karantina row references the legacy id now: it must still count as "in use"
+  const victim = await manual(fx.user.petugasA, existing(m.berkas_id), { description: 'Penerima lama' });
+  const s2 = await begin(fx.user.petugasA, 'ITEM_PDF', victim.item_id);
+  await expectCode(gatewayCommit(pool, fx.user.petugasA, s2, { fileId: legacy, size: 2048 }), 'UPLOAD_FILE_IN_USE');
+  assert.equal(await rpc(pool, fx.user.pimpinanA, 'get_file_access', { p_drive_file_id: legacy }), null);
+  assert.equal((await rpc(pool, fx.user.adminA, 'get_file_access', { p_drive_file_id: legacy })).object_type, 'KARANTINA');
+  // no rename task is ever queued for the legacy file
+  assert.equal((await owner(pool, 'select count(*)::int n from public.drive_tasks where drive_id = $1', [legacy]))[0].n, 0);
+});
+
 test('PDF replacement attestation/forgery: other unit, other user, other item, unattested, re-binding a used file', async () => {
   const m = await withPdf(fx.user.petugasA, newBerkasTarget({ title: 'Forgery' }), { description: 'Sasaran' });
   const other = await withPdf(fx.user.petugasA, existing(m.berkas_id), { description: 'Item lain' });

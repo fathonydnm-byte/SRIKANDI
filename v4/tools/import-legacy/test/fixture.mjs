@@ -260,6 +260,27 @@ export function fixtureDefinition() {
     ]
   };
   sheets.SYSTEM_BACKUPS = { headers: ['BACKUP_ID', 'STATUS'], rows: [{ BACKUP_ID: 'BKP-1', STATUS: 'COMPLETE' }] };
+  // Sprint 3: RELIABILITY_QUARANTINE_HEADERS_ (fictional Drive ids)
+  sheets.SYSTEM_QUARANTINE = {
+    headers: ['QUARANTINE_ID', 'TIMESTAMP', 'USER_EMAIL', 'OBJECT_TYPE', 'OBJECT_ID', 'ORIGINAL_NAME', 'ORIGINAL_URL', 'ORIGINAL_PARENT_IDS',
+      'QUARANTINE_FOLDER_ID', 'QUARANTINE_URL', 'MODULE', 'REASON', 'STATUS', 'NOTES'],
+    rows: [
+      // PDF replaced through Edit Arsip (old version)
+      { QUARANTINE_ID: 'QRT-1', TIMESTAMP: '2026-02-07T09:30:00+07:00', USER_EMAIL: 'petugas@contoh.invalid', OBJECT_TYPE: 'FILE',
+        OBJECT_ID: 'drv-file-lama-1', ORIGINAL_NAME: '1_1_Draf renstra.pdf', ORIGINAL_URL: link('https://drive.google.com/file/d/drv-file-lama-1/view'),
+        ORIGINAL_PARENT_IDS: 'drv-folder-1', QUARANTINE_FOLDER_ID: 'drv-qrt-case-1', QUARANTINE_URL: 'https://drive.google.com/drive/folders/drv-qrt-case-1',
+        MODULE: 'EDIT_ARSIP', REASON: 'PDF hasil pindai ulang (fiktif)', STATUS: 'QUARANTINED', NOTES: 'Versi alih media sebelum penggantian' },
+      // folder of the deleted berkas BRK-3; lower-case type as typed by hand
+      { QUARANTINE_ID: 'QRT-2', TIMESTAMP: D(2026, 1, 21, 8, 0), USER_EMAIL: 'admin@contoh.invalid', OBJECT_TYPE: 'folder',
+        OBJECT_ID: 'drv-folder-3', ORIGINAL_NAME: '2_Berkas dihapus (fiktif)', ORIGINAL_PARENT_IDS: 'drv-root-a,drv-root-b',
+        QUARANTINE_FOLDER_ID: 'drv-qrt-case-2', MODULE: 'PENGHAPUSAN_BERKAS', REASON: 'Berkas ganda (fiktif)', STATUS: '' },
+      // move failed in 3.x: still a quarantine record
+      { QUARANTINE_ID: 'QRT-3', TIMESTAMP: '2026-02-08T10:00:00+07:00', OBJECT_TYPE: 'FILE', OBJECT_ID: 'drv-file-gagal-1',
+        MODULE: 'PENGHAPUSAN_ITEM', REASON: 'Salah input (fiktif)', STATUS: 'FAILED', NOTES: 'Access denied (fiktif)' },
+      // unknown status: row rejected, import continues
+      { QUARANTINE_ID: 'QRT-4', TIMESTAMP: '2026-02-09T10:00:00+07:00', OBJECT_TYPE: 'FILE', OBJECT_ID: 'drv-file-x', STATUS: 'DIPULIHKAN' }
+    ]
+  };
   sheets['Catatan Petugas'] = { headers: ['CATATAN'], rows: [{ CATATAN: 'lembar kerja pribadi' }] };
   sheets.MASTER_JENIS_NASKAH = {
     headers: ['JENIS_NASKAH_ID', 'KATEGORI', 'SUBJENIS_NASKAH_ID', 'SUBJENIS', 'POLA_DEFAULT', 'AKTIF', 'URUTAN'],

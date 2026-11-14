@@ -264,6 +264,7 @@ test('indexes used for the newest-first page (no full sort)', async () => {
   try {
     await c.query('begin');
     await c.query('set local enable_seqscan = off');
+    await c.query('set local enable_bitmapscan = off');
     const plan = async (sql) => (await c.query(`explain ${sql}`)).rows.map((r) => r['QUERY PLAN']).join('\n');
     const pusat = await plan('select id from public.audit_log order by occurred_at desc, id desc limit 50');
     assert.match(pusat, /audit_log_time_id_idx/);
