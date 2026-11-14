@@ -40,3 +40,15 @@ export async function hmacVerify(secret: string, message: Uint8Array, signature:
 export function randomToken(bytes = 16): string {
   return b64urlEncode(crypto.getRandomValues(new Uint8Array(bytes)));
 }
+
+export async function sha256Hex(message: string | Uint8Array): Promise<string> {
+  const data = typeof message === 'string' ? enc.encode(message) : message;
+  return toHex(new Uint8Array(await crypto.subtle.digest('SHA-256', data as BufferSource)));
+}
+
+export function fromHex(text: string): Uint8Array | null {
+  if (!/^(?:[0-9a-f]{2})*$/i.test(text)) return null;
+  const out = new Uint8Array(text.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(text.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}

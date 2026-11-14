@@ -401,7 +401,7 @@ describe('request shape', () => {
   });
 });
 
-describe('the service key stays inside server/adminUsers.ts', () => {
+describe('the service key stays inside two server modules', () => {
   const root = join(__dirname, '..');
   function files(dir: string): string[] {
     return readdirSync(dir).flatMap((n) => {
@@ -409,12 +409,23 @@ describe('the service key stays inside server/adminUsers.ts', () => {
       return statSync(p).isDirectory() ? (n === 'node_modules' ? [] : files(p)) : [p];
     });
   }
-  it('is referenced by no browser code and by no other server module', () => {
-    const hits = [...files(join(root, 'src')), ...files(join(root, 'server')), ...files(join(root, 'functions')), ...files(join(root, 'public'))]
-      .filter((f) => /\.(ts|tsx|js|json|html|svg|webmanifest)$/.test(f))
-      .filter((f) => readFileSync(f, 'utf8').includes('SUPABASE_SERVICE_ROLE_KEY'))
+  const hits = [...files(join(root, 'src')), ...files(join(root, 'server')), ...files(join(root, 'functions')), ...files(join(root, 'public'))]
+    .filter((f) => /\.(ts|tsx|js|json|html|svg|webmanifest)$/.test(f))
+    .filter((f) => readFileSync(f, 'utf8').includes('SUPABASE_SERVICE_ROLE_KEY'))
+    .map((f) => relative(root, f))
+    .sort();
+  it('is referenced by no browser code and by no other server module (deliberately: adminUsers.ts and, since Sprint 3, jobsExport.ts)', () => {
+    expect(hits.filter((f) => !f.endsWith('.test.ts'))).toEqual(['server/adminUsers.ts', 'server/env.ts', 'server/jobsExport.ts']);
+  });
+  it('tests may mention it only in the two modules\' own tests and the export round-trip test', () => {
+    expect(hits.filter((f) => f.endsWith('.test.ts'))).toEqual(['server/adminUsers.test.ts', 'server/jobsExport.test.ts', 'server/jobsRoundtrip.test.ts']);
+  });
+  it('the job secret is read only by jobsExport.ts', () => {
+    const js = [...files(join(root, 'src')), ...files(join(root, 'server')), ...files(join(root, 'functions'))]
+      .filter((f) => /\.(ts|tsx)$/.test(f) && !f.endsWith('.test.ts'))
+      .filter((f) => readFileSync(f, 'utf8').includes('JOB_SECRET'))
       .map((f) => relative(root, f))
       .sort();
-    expect(hits).toEqual(['server/adminUsers.test.ts', 'server/adminUsers.ts', 'server/env.ts']);
+    expect(js).toEqual(['server/env.ts', 'server/jobsExport.ts']);
   });
 });

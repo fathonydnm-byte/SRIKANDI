@@ -12,6 +12,11 @@ export interface FileEnv {
    * dan hanya SETELAH user_admin_authorize (sebagai pemanggil) menyetujui. Tidak pernah dikirim ke browser.
    */
   SUPABASE_SERVICE_ROLE_KEY?: string;
+  /**
+   * Secret bersama dengan proyek Apps Script "Cermin & Backup" (v4/mirror-apps-script). Dipakai HANYA oleh
+   * server/jobsExport.ts untuk memeriksa tanda tangan HMAC permintaan ekspor malam. SECRET Cloudflare Pages.
+   */
+  JOB_SECRET?: string;
   /** HANYA untuk uji lokal: basis Drive API palsu di http://127.0.0.1/localhost. */
   DRIVE_API_BASE?: string;
 }

@@ -1,0 +1,15 @@
+{
+  "name": "central-file-v4-restore-backup",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Restore: paket backup harian (manifest.json + NDJSON.gz per tabel) -> database Postgres v4 yang sudah bermigrasi. Satu transaksi, idempoten, dengan pemeriksaan integritas.",
+  "type": "module",
+  "bin": { "cf-restore-backup": "./restore.mjs" },
+  "scripts": {
+    "test": "bash ./test.sh"
+  },
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "pg": "8.13.1"
+  }
+}

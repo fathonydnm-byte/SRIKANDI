@@ -29,7 +29,7 @@ for (const table of ALL_PUBLIC_TABLES) {
         await c.query('savepoint s');
         await expectSqlError(c.query(`insert into public.${table} default values`));
         await c.query('rollback to savepoint s');
-        const col = { units: 'name', profiles: 'full_name', schema_migrations_log: 'name' }[table] ?? 'unit_id';
+        const col = { units: 'name', profiles: 'full_name', schema_migrations_log: 'name', job_nonces: 'action' }[table] ?? 'unit_id';
         await expectSqlError(c.query(`update public.${table} set ${col} = ${col} where false`));
         await c.query('rollback to savepoint s');
         await expectSqlError(c.query(`delete from public.${table} where false`));

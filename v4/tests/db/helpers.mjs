@@ -13,7 +13,9 @@ export const ALL_PUBLIC_TABLES = [
   // Sprint 3 (lidah folder)
   'folder_label_log',
   // Sprint 3 (edit / koreksi & pembatalan, 0018)
-  'karantina', 'pembatalan_arsip'
+  'karantina', 'pembatalan_arsip',
+  // Sprint 3 (cermin + backup, 0022)
+  'job_nonces', 'backup_runs'
 ];
 
 export function newPool(max = 10) {

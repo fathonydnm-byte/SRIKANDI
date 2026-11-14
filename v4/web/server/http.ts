@@ -17,7 +17,9 @@ export type ErrorCode =
   | 'SERVICE_KEY_MISSING'
   | 'EMAIL_EXISTS'
   | 'WEAK_PASSWORD'
-  | 'PARTIAL_FAILURE';
+  | 'PARTIAL_FAILURE'
+  | 'JOB_DENIED'
+  | 'JOB_NOT_CONFIGURED';
 
 const MESSAGES: Record<ErrorCode, string> = {
   NOT_CONFIGURED: 'Layanan file belum dikonfigurasi. Hubungi Admin Pusat.',
@@ -38,6 +40,8 @@ const MESSAGES: Record<ErrorCode, string> = {
   EMAIL_EXISTS: 'Email ini sudah terdaftar. Cari pengguna di daftar lalu atur ulang kata sandi sementaranya.',
   WEAK_PASSWORD: 'Kata sandi sementara tidak memenuhi syarat.',
   PARTIAL_FAILURE: 'Perubahan akun tidak tuntas. Muat ulang daftar pengguna, periksa status akun, lalu ulangi.',
+  JOB_DENIED: 'Permintaan ditolak.',
+  JOB_NOT_CONFIGURED: 'Ekspor terjadwal belum dikonfigurasi di server.',
 };
 
 const STATUS: Record<ErrorCode, number> = {
@@ -59,6 +63,8 @@ const STATUS: Record<ErrorCode, number> = {
   EMAIL_EXISTS: 409,
   WEAK_PASSWORD: 422,
   PARTIAL_FAILURE: 502,
+  JOB_DENIED: 401,
+  JOB_NOT_CONFIGURED: 503,
 };
 
 const BASE_HEADERS = {
