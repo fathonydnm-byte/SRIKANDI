@@ -283,3 +283,7 @@ Sheets outside Config.js found in the pilot:
 | PENERIMAAN_ID / NOMOR_TANDA_TERIMA_SNAPSHOT / PRINT_TOKEN | penerimaan_id / nomor_tanda_terima_snapshot / print_token | t (token unique per unit) |
 | CETAK_KE / JENIS_CETAK / STATUS_SNAPSHOT | cetak_ke / jenis_cetak / status_snapshot | i / t (PERTAMA, CETAK ULANG) / t |
 | TIMESTAMP / USER_EMAIL / PDF_FILE_NAME | printed_at / user_email / pdf_file_name | ts / t / t |
+| LOG_CETAK_LIDAH.PRINT_ID | folder_label_log.id | t (append-only) |
+| TIMESTAMP / USER_EMAIL / BATCH_ID / BERKAS_ID | printed_at / user_email / batch_id / berkas_id | ts / t / t / t (berkas must exist) |
+| NO_BERKAS_SNAPSHOT / KODE_KLASIFIKASI_SNAPSHOT / JUDUL_BERKAS_SNAPSHOT | no_berkas_snapshot / kode_klasifikasi_snapshot / judul_berkas_snapshot | t |
+| START_SLOT / PDF_FILE_NAME / STATUS | start_slot / pdf_file_name / status | i (1–14) / t / t (PDF_DIBUAT, DICETAK) |

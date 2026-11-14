@@ -11,7 +11,9 @@ export const ALL_PUBLIC_TABLES = [
   // Sprint 2
   'jenis_naskah', 'penerimaan_cetak_log', 'upload_sessions', 'drive_tasks',
   // Sprint 3 (lidah folder)
-  'folder_label_log'
+  'folder_label_log',
+  // Sprint 3 (edit / koreksi & pembatalan, 0018)
+  'karantina', 'pembatalan_arsip'
 ];
 
 export function newPool(max = 10) {
