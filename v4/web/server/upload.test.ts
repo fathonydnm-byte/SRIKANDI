@@ -24,7 +24,7 @@ const BEGIN = {
 interface Folder { id: string; name: string; parent: string; createdTime: string }
 
 /** Dunia palsu: gerbang + Drive (folder, resumable, file) + PostgREST. */
-function world(over: { begin?: unknown; beginStatus?: number; commitStatus?: number; file?: Record<string, unknown> | null; head?: string; folders?: Folder[]; raceFolder?: boolean; cancelFile?: string } = {}) {
+function world(over: { begin?: unknown; beginStatus?: number; commitStatus?: number; file?: Record<string, unknown> | null; head?: string | Uint8Array; folders?: Folder[]; raceFolder?: boolean; cancelFile?: string } = {}) {
   const folders: Folder[] = over.folders ? [...over.folders] : [];
   const calls: { url: string; init?: RequestInit; body?: unknown }[] = [];
   let seq = 0;
@@ -66,7 +66,7 @@ function world(over: { begin?: unknown; beginStatus?: number; commitStatus?: num
     if (m && init?.method === 'PATCH') return m[1] === 'LEGACY1' ? new Response('{"error":{}}', { status: 403 }) : m[1] === 'BUSY1' ? new Response('', { status: 503 }) : Response.json({});
     if (m && (m[1] === 'KNOWN1' || m[1] === 'ROOTAPP')) return Response.json({ id: m[1], mimeType: 'application/vnd.google-apps.folder', trashed: false, appProperties: { cfV4: '1' } });
     if (m && m[1] === 'LEGACYFOLDER') return Response.json({ id: 'LEGACYFOLDER', mimeType: 'application/vnd.google-apps.folder', trashed: false });
-    if (m && u.searchParams.get('alt') === 'media') return new Response(over.head ?? '%PDF-1.7\n...', { status: 206 });
+    if (m && u.searchParams.get('alt') === 'media') return new Response((over.head ?? '%PDF-1.7\n...') as BodyInit, { status: 206 });
     if (m) return over.file === null ? new Response('', { status: 404 }) : Response.json(over.file ?? {});
     if (init?.method === 'DELETE') return new Response(null, { status: 499 });
     throw new Error(`unexpected ${init?.method} ${url}`);
@@ -216,6 +216,36 @@ async function sessionContext(): Promise<string> {
 }
 
 const GOOD_FILE = { id: 'DRV1', size: '1000', md5Checksum: 'd41d8cd98f00b204e9800998ecf8427e', mimeType: 'application/pdf', parents: ['F4'], trashed: false, appProperties: { cfV4: '1', cfSession: 'UPS-1' }, webViewLink: 'https://drive.google.com/file/d/DRV1/view' };
+
+describe('tujuan unggah S3 (ITEM_PDF_REPLACE, DELETION_EVIDENCE)', () => {
+  it('tujuan baru diteruskan apa adanya ke upload_begin; bukti gambar PNG lolos sesi', async () => {
+    const w = world({ begin: { ...BEGIN, drive_name: '20261114-101500_ITEM_1-2_x.png', folder_path: ['BUKTI PENGHAPUSAN'], max_bytes: 26214400 } });
+    const res = await handleUploadSession(post('/x', { ...SESSION_BODY, purpose: 'DELETION_EVIDENCE', objectId: 'ITM-1', fileName: 'bukti.png', mime: 'image/png', size: 5000 }), ENV, w.fetchFn, NOW);
+    expect(res.status).toBe(200);
+    expect(w.calls.find((c) => c.url.endsWith('/rpc/upload_begin'))!.body).toMatchObject({ p_purpose: 'DELETION_EVIDENCE', p_mime: 'image/png' });
+    const r2 = world({ begin: { ...BEGIN, max_bytes: 104857599 } });
+    expect((await handleUploadSession(post('/x', { ...SESSION_BODY, purpose: 'ITEM_PDF_REPLACE', size: 90 * 1024 * 1024 }), ENV, r2.fetchFn, NOW)).status).toBe(200);
+  });
+
+  it('bukti PNG/JPEG: tanda tangan byte diperiksa; isi HTML berlabel PNG ditolak dan dibuang', async () => {
+    const session = async () => ((await (await handleUploadSession(post('/x', { ...SESSION_BODY, purpose: 'DELETION_EVIDENCE', fileName: 'b.png', mime: 'image/png', size: 1000 }), ENV, world().fetchFn, NOW)).json()) as { context: string }).context;
+    const file = { ...GOOD_FILE, mimeType: 'image/png' };
+    const bad = world({ file, head: '<html>' });
+    expect((await handleUploadComplete(post('/x', { sessionId: 'UPS-1', driveFileId: 'DRV1', context: await session() }), ENV, bad.fetchFn, NOW)).status).toBe(422);
+    expect(bad.calls.some((c) => c.url.endsWith('/rpc/upload_cancel'))).toBe(true);
+    const good = world({ file, head: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]) });
+    const ok = await handleUploadComplete(post('/x', { sessionId: 'UPS-1', driveFileId: 'DRV1', context: await session() }), ENV, good.fetchFn, NOW);
+    expect(ok.status).toBe(200);
+    expect((good.calls.find((c) => c.url.endsWith('/rpc/upload_commit'))!.body as { p_mime: string }).p_mime).toBe('image/png');
+  });
+
+  it('LAST_ITEM_IN_BERKAS dari upload_begin → 409 dengan pesan server', async () => {
+    const w = world({ begin: { code: 'P0001', message: 'LAST_ITEM_IN_BERKAS: Item terakhir tidak bisa dibatalkan sendiri.', hint: 'LAST_ITEM_IN_BERKAS' }, beginStatus: 400 });
+    const res = await handleUploadSession(post('/x', { ...SESSION_BODY, purpose: 'DELETION_EVIDENCE' }), ENV, w.fetchFn, NOW);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ message: 'Item terakhir tidak bisa dibatalkan sendiri.' });
+  });
+});
 
 describe('POST /api/files/upload-complete', () => {
   it('verifikasi di Drive → atestasi HMAC → upload_commit sebagai pengguna', async () => {

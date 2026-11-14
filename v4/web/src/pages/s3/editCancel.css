@@ -1,0 +1,25 @@
+/* Perubahan, Penghapusan, Karantina. Memakai variabel global.css. */
+.pick-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 320px; overflow-y: auto; }
+.pick-group { margin: 8px 0 4px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; overflow-wrap: anywhere; }
+.pick-option { width: 100%; min-height: var(--touch); display: grid; gap: 2px; text-align: left; padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--white); color: var(--ink); cursor: pointer; overflow-wrap: anywhere; }
+.pick-option.is-selected { border-color: var(--navy); box-shadow: var(--focus); }
+.pick-option:disabled { background: #f1f5f9; color: var(--muted); cursor: not-allowed; }
+.pick-title { font-weight: 600; }
+.pick-sub { font-size: 13px; color: var(--muted); }
+.pick-why { font-size: 13px; color: var(--danger); font-weight: 600; }
+.pick-selected { margin: 4px 0 0; overflow-wrap: anywhere; }
+.reason-counter.is-ok { color: var(--success); }
+.readonly-box { padding: 10px 12px; background: #f1f5f9; border-radius: var(--radius-sm); overflow-wrap: anywhere; font-size: 14px; }
+.impact-box { border: 1px solid var(--danger-line); background: var(--danger-bg); border-radius: var(--radius-md); padding: 12px 14px; overflow-wrap: anywhere; }
+.impact-box ul, .result-list { margin: 6px 0 0; padding-left: 20px; }
+.result-box { border: 1px solid var(--line); border-radius: var(--radius-md); padding: 12px 14px; background: var(--white); overflow-wrap: anywhere; }
+.result-box h2 { margin: 0 0 6px; font-size: 16px; }
+.cancel-confirm-input { text-transform: uppercase; }
+.q-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.q-card { border: 1px solid var(--line); border-radius: var(--radius-md); padding: 12px 14px; background: var(--white); display: grid; gap: 6px; overflow-wrap: anywhere; min-width: 0; }
+.q-card h3 { margin: 0; font-size: 15px; }
+.q-meta { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr); gap: 2px 8px; margin: 0; font-size: 14px; }
+.q-meta dt { color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; padding-top: 2px; }
+.q-meta dd { margin: 0; }
+.danger-note { border-left: 4px solid var(--danger); }
+@media (min-width: 900px) { .q-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

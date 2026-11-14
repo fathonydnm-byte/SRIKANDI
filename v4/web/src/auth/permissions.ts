@@ -122,6 +122,9 @@ export const MODULES: readonly ModuleDef[] = [
     summary: 'Monitoring retensi dan usul pemindahan ke Record Center.' },
   { id: 'master-log', path: '/master-log', label: 'Master Log Perubahan', shortLabel: 'Log', icon: '🔒', group: 'Keamanan & Audit', anyOf: ['masterlog.lihat'], sprint: 'S3',
     summary: 'Riwayat perubahan (audit) per orang.' },
+  // Admin saja: memakai kemampuan 'masterlog.lihat' (ADMIN_UNIT dan ADMIN_PUSAT), sama seperti RLS karantina.
+  { id: 'karantina', path: '/karantina', label: 'Karantina', shortLabel: 'Karantina', icon: '🗃️', group: 'Keamanan & Audit', anyOf: ['masterlog.lihat'], sprint: 'S3',
+    summary: 'File lama yang diganti atau dibatalkan, tersimpan tanpa dihapus.' },
   { id: 'pengaturan', path: '/pengaturan', label: 'Pengaturan', shortLabel: 'Pengaturan', icon: '⚙️', group: 'Keamanan & Audit', anyOf: SETTINGS_CAPS, sprint: 'S3',
     summary: 'Pengguna unit, master pegawai, pengaturan unit; untuk Admin Pusat juga unit, backup, dan koneksi Record Center.' },
 ];

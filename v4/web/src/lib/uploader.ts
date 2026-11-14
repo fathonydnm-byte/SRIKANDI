@@ -74,7 +74,7 @@ const UPLOAD_MESSAGES: Record<string, UserMessage> = {
   SESSION_EXPIRED: { title: 'Sesi unggah kedaluwarsa.', action: 'Pilih file lagi untuk mengulang unggahan.' },
   UPLOAD_REJECTED: { title: 'Google Drive menolak unggahan.', action: 'Coba lagi beberapa saat lagi. Bila berlanjut, hubungi Admin Pusat.' },
   TOO_LARGE: { title: 'Ukuran file melebihi batas.', action: 'Kompres PDF atau pisahkan menjadi beberapa file.' },
-  INVALID_FILE: { title: 'File bukan PDF yang sah.', action: 'Pilih file PDF lain.' },
+  INVALID_FILE: { title: 'Isi file tidak sesuai tipenya.', action: 'Pilih file PDF/gambar lain yang tidak rusak.' },
   UPLOAD_MISMATCH: { title: 'File yang terunggah tidak sesuai.', action: 'Ulangi unggahan.' },
   NETWORK_LOST: { title: 'Koneksi terputus terlalu lama.', action: 'Periksa internet, lalu tekan Lanjutkan.' },
   CANCELLED: { title: 'Unggahan dibatalkan.', action: 'Pilih file lagi bila ingin mengunggah.' },

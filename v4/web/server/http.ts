@@ -27,7 +27,7 @@ const MESSAGES: Record<ErrorCode, string> = {
   METHOD: 'Metode tidak didukung.',
   FORBIDDEN: 'Anda tidak berhak melakukan tindakan ini.',
   TOO_LARGE: 'Ukuran file melebihi batas yang diizinkan.',
-  INVALID_FILE: 'File bukan PDF yang sah. Pilih file PDF lain.',
+  INVALID_FILE: 'Isi file tidak sesuai tipenya (bukan PDF/gambar yang sah). Pilih file lain.',
   UPLOAD_MISMATCH: 'File yang terunggah tidak sesuai dengan sesi unggah. Ulangi unggahan.',
   CONFLICT: 'Data sudah berubah. Muat ulang lalu coba lagi.',
 };
