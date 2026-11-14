@@ -125,6 +125,9 @@ export const MODULES: readonly ModuleDef[] = [
   // Admin saja: memakai kemampuan 'masterlog.lihat' (ADMIN_UNIT dan ADMIN_PUSAT), sama seperti RLS karantina.
   { id: 'karantina', path: '/karantina', label: 'Karantina', shortLabel: 'Karantina', icon: '🗃️', group: 'Keamanan & Audit', anyOf: ['masterlog.lihat'], sprint: 'S3',
     summary: 'File lama yang diganti atau dibatalkan, tersimpan tanpa dihapus.' },
+  // Admin saja (kemampuan 'masterlog.lihat', seperti Karantina). Server menegakkan: backup_status (RLS backup_runs). Hanya-baca.
+  { id: 'cadangan', path: '/cadangan', label: 'Cadangan & Cermin', shortLabel: 'Cadangan', icon: '💾', group: 'Keamanan & Audit', anyOf: ['masterlog.lihat'], sprint: 'S3',
+    summary: 'Status cermin spreadsheet dan cadangan harian per unit, dengan peringatan bila terlambat atau gagal.' },
   // Admin Unit (unitnya sendiri) dan Admin Pusat. Server tetap yang menegakkan: user_admin_authorize.
   { id: 'pengguna', path: '/pengguna', label: 'Kelola Pengguna', shortLabel: 'Pengguna', icon: '👥', group: 'Keamanan & Audit', anyOf: ['pengguna.kelola'], sprint: 'S3',
     summary: 'Buat akun, ubah peran dan unit, nonaktifkan, dan atur ulang kata sandi sementara.' },

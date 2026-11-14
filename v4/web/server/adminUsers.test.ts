@@ -417,8 +417,8 @@ describe('the service key stays inside two server modules', () => {
   it('is referenced by no browser code and by no other server module (deliberately: adminUsers.ts and, since Sprint 3, jobsExport.ts)', () => {
     expect(hits.filter((f) => !f.endsWith('.test.ts'))).toEqual(['server/adminUsers.ts', 'server/env.ts', 'server/jobsExport.ts']);
   });
-  it('tests may mention it only in the two modules\' own tests and the export round-trip test', () => {
-    expect(hits.filter((f) => f.endsWith('.test.ts'))).toEqual(['server/adminUsers.test.ts', 'server/jobsExport.test.ts', 'server/jobsRoundtrip.test.ts']);
+  it('tests may mention it only in the two modules\' own tests', () => {
+    expect(hits.filter((f) => f.endsWith('.test.ts'))).toEqual(['server/adminUsers.test.ts', 'server/jobsExport.test.ts']);
   });
   it('the job secret is read only by jobsExport.ts', () => {
     const js = [...files(join(root, 'src')), ...files(join(root, 'server')), ...files(join(root, 'functions'))]

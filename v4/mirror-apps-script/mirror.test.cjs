@@ -155,6 +155,14 @@ test('extractInventory_: Drive file ids with name, size, checksum', () => {
   assert.deepEqual(plain(w.call('extractInventory_', 'audit_log', [{ id: 'x', object_id: 'y' }])), []);
 });
 
+test('derived (generated) columns are dropped from rows: not mirrored, not in the package', () => {
+  const w = createWorld();
+  const rows = [{ id: 'I1', search_doc: 'besar', a: 1 }];
+  assert.deepEqual(plain(w.call('stripDerived_', 'item', rows)), [{ id: 'I1', a: 1 }]);
+  assert.deepEqual(plain(w.call('stripDerived_', 'penerimaan', [{ id: 'x', search_doc: 'tetap' }])), [{ id: 'x', search_doc: 'tetap' }]);
+  assert.deepEqual(plain(w.call('buildManifest_', { createdAt: 'x', day: 'd', unit: {}, schemaVersion: '0022', tables: [] }, [])).derived_columns_omitted, { item: ['search_doc'], berkas: ['search_doc'] });
+});
+
 test('keysetAfter_ and part names', () => {
   const w = createWorld();
   assert.deepEqual(plain(w.call('keysetAfter_', ['id'], { id: 'X', a: 1 })), ['X']);

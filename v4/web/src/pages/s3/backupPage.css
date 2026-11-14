@@ -1,0 +1,33 @@
+/* Cadangan & Cermin. Memakai variabel global.css; satu kolom di HP, dua kolom di layar lebar. */
+.bk-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+.bk-card { background: var(--white); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--shadow-subtle); padding: 14px; display: grid; gap: 12px; min-width: 0; }
+.bk-card-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.bk-card-head h2 { margin: 0; font-size: 18px; }
+.bk-kind { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--line); min-width: 0; }
+.bk-kind-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 10px; }
+.bk-kind-head h3 { margin: 0; font-size: 15px; }
+.bk-meta { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 14px; }
+.bk-meta dt { color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; padding-top: 2px; }
+.bk-meta dd { margin: 0; overflow-wrap: anywhere; }
+.bk-note { margin: 0; font-size: 14px; }
+.bk-note-error { color: var(--danger); }
+.bk-error { overflow-wrap: anywhere; }
+.bk-link { justify-self: start; min-height: var(--touch); }
+.bk-h2 { font-size: 17px; margin: 4px 0 8px; }
+.bk-history { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.bk-history li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; padding: 10px 12px; background: var(--white); border: 1px solid var(--line); border-radius: var(--radius-md); font-size: 14px; min-width: 0; }
+.bk-history li.is-failed { border-left: 4px solid var(--danger); }
+.bk-h-what { font-weight: 600; grid-column: 1; }
+.bk-h-time { grid-column: 1; color: var(--muted); font-size: 13px; }
+.bk-history .badge-pill { grid-column: 2; grid-row: 1; justify-self: end; }
+.bk-h-rows { grid-column: 2; grid-row: 2; justify-self: end; font-size: 13px; }
+.bk-h-error { grid-column: 1 / -1; color: var(--danger); overflow-wrap: anywhere; font-size: 13px; }
+@media (min-width: 900px) {
+  .bk-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bk-history li { grid-template-columns: 14rem minmax(0, 1fr) auto 8rem; align-items: center; }
+  .bk-h-time { grid-column: 1; grid-row: 1; }
+  .bk-h-what { grid-column: 2; grid-row: 1; }
+  .bk-history .badge-pill { grid-column: 3; grid-row: 1; }
+  .bk-h-rows { grid-column: 4; grid-row: 1; }
+  .bk-h-error { grid-row: 2; }
+}

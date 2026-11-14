@@ -78,6 +78,8 @@ var MIRROR_TABLES = {
     }
   }
 };
+/** Kolom turunan (generated) yang dihitung ulang database: tidak dimuat di cermin maupun paket (restore mengabaikannya). */
+var DERIVED_COLUMNS = { item: ['search_doc'], berkas: ['search_doc'] };
 var REPORT_BERKAS_SHEET = 'DAFTAR BERKAS';
 var REPORT_ITEM_SHEET = 'DAFTAR ISI BERKAS';
 var INFO_SHEET = '_INFO';
@@ -185,6 +187,12 @@ function mirrorColumns_(table, rows) {
   return Object.keys(rows[0]).filter(function (c) { return !/_enc$/.test(c); }).map(function (c) { return { col: c, header: headerFor_(table, c) }; });
 }
 
+function stripDerived_(table, rows) {
+  var drop = DERIVED_COLUMNS.hasOwnProperty(table) ? DERIVED_COLUMNS[table] : [];
+  if (drop.length) rows.forEach(function (r) { drop.forEach(function (c) { delete r[c]; }); });
+  return rows;
+}
+
 function rowsToValues_(columns, rows) {
   return rows.map(function (row) { return columns.map(function (c) { return safeCell_(row[c.col]); }); });
 }
@@ -263,6 +271,7 @@ function buildManifest_(info, parts) {
     day: info.day,
     unit: info.unit,
     schema_version: info.schemaVersion,
+    derived_columns_omitted: DERIVED_COLUMNS,
     tables: tables,
     total_rows: total,
     drive_inventory: inventory
@@ -752,7 +761,7 @@ function stepTable_(state) {
   }
   var page = fetchPage_(unit.id, table, u.after);
   if (u.after === null) u.total = page.total;
-  var rows = page.rows;
+  var rows = stripDerived_(table, page.rows);
   if (rows.length) {
     var columns = mirrorColumns_(table, rows);
     if (u.mirror) {
@@ -827,8 +836,7 @@ function stepReports_(state) {
     writeBlock_(sh, 1, head.concat([spec[2]]));
     writeBlock_(sh, REPORT_HEADER_ROW + 1, spec[3].map(function (r) { return r.map(safeCell_); }));
   });
-  u.rows['_laporan_berkas'] = rep.berkasRows.length;
-  u.rows['_laporan_item'] = rep.itemRows.length;
+  u.rep = { berkas: rep.berkasRows.length, item: rep.itemRows.length };
   state.step = 'SWAP';
 }
 
@@ -868,7 +876,7 @@ function stepSwap_(state) {
     if (sh) { ss.setActiveSheet(sh); ss.moveActiveSheet(idx + 1); }
   });
   SpreadsheetApp.flush();
-  var stats = { tables: u.rows, total_rows: sumRows_(u.rows) };
+  var stats = { tables: u.rows, reports: u.rep || {}, total_rows: sumRows_(u.rows) };
   apiJson_('RUN_FINISH', { run_id: u.runMirror, status: 'SUCCESS', stats: stats, mirror_url: sheetUrl_(u.ssId), mirror_file_id: u.ssId });
   u.mirrorDone = true;
   state.step = 'MANIFEST';
@@ -876,7 +884,7 @@ function stepSwap_(state) {
 
 function sumRows_(rows) {
   var n = 0;
-  Object.keys(rows).forEach(function (k) { if (k.charAt(0) !== '_') n += rows[k]; });
+  Object.keys(rows).forEach(function (k) { n += rows[k]; });
   return n;
 }
 
@@ -897,8 +905,8 @@ function writeInfo_(state, ss) {
     ['Tab', 'Jumlah baris']
   ];
   unitTables_(state, unit).forEach(function (t) { rows.push([sheetNameFor_(t), u.rows[t] || 0]); });
-  rows.push([REPORT_BERKAS_SHEET, u.rows._laporan_berkas || 0]);
-  rows.push([REPORT_ITEM_SHEET, u.rows._laporan_item || 0]);
+  rows.push([REPORT_BERKAS_SHEET, (u.rep && u.rep.berkas) || 0]);
+  rows.push([REPORT_ITEM_SHEET, (u.rep && u.rep.item) || 0]);
   writeBlock_(sh, 1, rows.map(function (r) { return [safeCell_(r[0]), safeCell_(r[1])]; }));
   sh.setTabColor('#9AA0A6');
   var p = sh.protect();
