@@ -7,6 +7,11 @@ export interface FileEnv {
   DRIVE_GATEWAY_SECRET?: string;
   /** HMAC untuk atestasi unggahan (upload_commit) dan konteks sesi unggah. */
   UPLOAD_ATTEST_SECRET?: string;
+  /**
+   * Kunci service-role Supabase (SECRET Cloudflare Pages). Dipakai HANYA oleh server/adminUsers.ts,
+   * dan hanya SETELAH user_admin_authorize (sebagai pemanggil) menyetujui. Tidak pernah dikirim ke browser.
+   */
+  SUPABASE_SERVICE_ROLE_KEY?: string;
   /** HANYA untuk uji lokal: basis Drive API palsu di http://127.0.0.1/localhost. */
   DRIVE_API_BASE?: string;
 }

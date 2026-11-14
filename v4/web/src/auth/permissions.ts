@@ -125,6 +125,9 @@ export const MODULES: readonly ModuleDef[] = [
   // Admin saja: memakai kemampuan 'masterlog.lihat' (ADMIN_UNIT dan ADMIN_PUSAT), sama seperti RLS karantina.
   { id: 'karantina', path: '/karantina', label: 'Karantina', shortLabel: 'Karantina', icon: '🗃️', group: 'Keamanan & Audit', anyOf: ['masterlog.lihat'], sprint: 'S3',
     summary: 'File lama yang diganti atau dibatalkan, tersimpan tanpa dihapus.' },
+  // Admin Unit (unitnya sendiri) dan Admin Pusat. Server tetap yang menegakkan: user_admin_authorize.
+  { id: 'pengguna', path: '/pengguna', label: 'Kelola Pengguna', shortLabel: 'Pengguna', icon: '👥', group: 'Keamanan & Audit', anyOf: ['pengguna.kelola'], sprint: 'S3',
+    summary: 'Buat akun, ubah peran dan unit, nonaktifkan, dan atur ulang kata sandi sementara.' },
   { id: 'pengaturan', path: '/pengaturan', label: 'Pengaturan', shortLabel: 'Pengaturan', icon: '⚙️', group: 'Keamanan & Audit', anyOf: SETTINGS_CAPS, sprint: 'S3',
     summary: 'Pengguna unit, master pegawai, pengaturan unit; untuk Admin Pusat juga unit, backup, dan koneksi Record Center.' },
 ];
@@ -158,4 +161,21 @@ export function mobileNav(role: Role | null | undefined): { primary: ModuleDef[]
 
 export function findModuleByPath(path: string): ModuleDef | undefined {
   return MODULES.find((m) => m.path === path);
+}
+
+/**
+ * Peran yang boleh diberikan pembuat akun (PRD §4). Hanya kenyamanan tampilan:
+ * server memeriksa lagi lewat user_admin_authorize dan user_profile_upsert_service.
+ */
+export function assignableRoles(actor: Role | null | undefined): readonly Role[] {
+  if (actor === 'ADMIN_PUSAT') return ROLES;
+  if (actor === 'ADMIN_UNIT') return ['PETUGAS', 'PIMPINAN'];
+  return [];
+}
+
+/** Admin Pusat: siapa pun; Admin Unit: hanya Petugas/Pimpinan di unitnya sendiri. */
+export function canManageUser(actor: { role: Role; unitId: string | null }, target: { role: Role; unitId: string | null }): boolean {
+  if (actor.role === 'ADMIN_PUSAT') return true;
+  if (actor.role === 'ADMIN_UNIT') return (target.role === 'PETUGAS' || target.role === 'PIMPINAN') && target.unitId === actor.unitId;
+  return false;
 }

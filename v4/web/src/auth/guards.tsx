@@ -5,6 +5,8 @@ import { FullScreenLoading } from '../components/FullScreenLoading';
 import { AccountBlockedPage, ProfileErrorPage } from '../pages/AccountBlockedPage';
 import type { ReactNode } from 'react';
 
+export const FORCED_PASSWORD_PATH = '/akun/kata-sandi';
+
 export interface DeniedState {
   denied?: string;
 }
@@ -21,6 +23,10 @@ export function RequireAuth() {
   if (p.kind === 'loading') return <FullScreenLoading label="Memuat profil pengguna…" />;
   if (p.kind === 'blocked') return <AccountBlockedPage reason={p.reason} />;
   if (p.kind === 'error') return <ProfileErrorPage message={p.message} />;
+  // Kata sandi sementara dari admin: semua rute diarahkan ke halaman Ubah kata sandi sampai diganti.
+  if (p.profile.must_change_password && location.pathname !== FORCED_PASSWORD_PATH) {
+    return <Navigate to={FORCED_PASSWORD_PATH} replace />;
+  }
   return <Outlet />;
 }
 

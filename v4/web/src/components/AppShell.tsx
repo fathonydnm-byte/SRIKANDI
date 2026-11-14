@@ -221,8 +221,15 @@ function MoreSheet({ modules, onClose }: { modules: ModuleDef[]; onClose(): void
   );
 }
 
+/**
+ * Selama kata sandi sementara belum diganti (profile.must_change_password): tanpa menu, hanya layar
+ * ganti kata sandi dan Keluar. Susunannya SAMA dengan tampilan penuh (bagian yang disembunyikan memakai
+ * slot null) supaya halaman Ubah kata sandi tidak dipasang ulang saat penanda hilang dan pesan sukses
+ * "Kata sandi berhasil diubah" tetap tampil.
+ */
 export function AppShell() {
   const { profile } = useProfile();
+  const forced = profile.must_change_password === true;
   const location = useLocation();
   const modules = visibleModules(profile.role);
   const { primary, more } = mobileNav(profile.role);
@@ -248,62 +255,84 @@ export function AppShell() {
   const moreActive = more.some((m) => m.path === location.pathname) || location.pathname === '/akun/kata-sandi';
 
   return (
-    <div className="shell">
+    <div className={`shell${forced ? ' shell-forced' : ''}`}>
       <a className="skip-link" href="#main">
         Langsung ke konten
       </a>
-      <Sidebar modules={modules} />
+      {forced ? null : <Sidebar modules={modules} />}
       <div className="shell-main">
         <header className="topbar">
-          <Link to="/dashboard" className="topbar-brand" aria-label="Central File — ke Dashboard">
-            <span className="brand-mark small">
-              <BrandMark size={22} />
+          {forced ? (
+            <span className="topbar-brand">
+              <span className="brand-mark small">
+                <BrandMark size={22} />
+              </span>
+              <span className="topbar-brand-text">
+                <strong>Central File</strong>
+                <small>{unitLabel}</small>
+              </span>
             </span>
-            <span className="topbar-brand-text">
-              <strong>Central File</strong>
-              <small>{unitLabel}</small>
-            </span>
-          </Link>
-          <div className="topbar-crumbs" aria-hidden="true">
-            <span>Central File</span>
-            <span>/</span>
-            <strong>{pageLabel(location.pathname)}</strong>
-          </div>
-          <QuickSearch />
-          <div className="topbar-actions">
-            <UnitSwitcher compact />
-            <span className="user-badge">
-              <span className="user-badge-name">{profile.full_name}</span>
-              <span className="user-badge-role">{ROLE_LABELS[profile.role]}</span>
-            </span>
-          </div>
+          ) : (
+            <Link to="/dashboard" className="topbar-brand" aria-label="Central File — ke Dashboard">
+              <span className="brand-mark small">
+                <BrandMark size={22} />
+              </span>
+              <span className="topbar-brand-text">
+                <strong>Central File</strong>
+                <small>{unitLabel}</small>
+              </span>
+            </Link>
+          )}
+          {forced ? (
+            <div className="topbar-actions">
+              <SignOutButton className="btn btn-secondary btn-sm" />
+            </div>
+          ) : (
+            <>
+              <div className="topbar-crumbs" aria-hidden="true">
+                <span>Central File</span>
+                <span>/</span>
+                <strong>{pageLabel(location.pathname)}</strong>
+              </div>
+              <QuickSearch />
+              <div className="topbar-actions">
+                <UnitSwitcher compact />
+                <span className="user-badge">
+                  <span className="user-badge-name">{profile.full_name}</span>
+                  <span className="user-badge-role">{ROLE_LABELS[profile.role]}</span>
+                </span>
+              </div>
+            </>
+          )}
         </header>
         <OfflineBanner />
         <main id="main" className="content" tabIndex={-1}>
           <Outlet />
         </main>
-        <UploadTray />
+        {forced ? null : <UploadTray />}
       </div>
 
-      <nav className="bottom-nav" aria-label="Navigasi utama">
-        {primary.map((m) => (
-          <NavLink key={m.id} to={m.path} className="bottom-nav-item">
-            <span className="bottom-nav-icon" aria-hidden="true">{m.icon}</span>
-            <span className="bottom-nav-label">{m.shortLabel}</span>
-          </NavLink>
-        ))}
-        <button
-          type="button"
-          ref={moreButton}
-          className={`bottom-nav-item${moreActive ? ' active' : ''}`}
-          aria-haspopup="dialog"
-          aria-expanded={sheetOpen}
-          onClick={() => setSheetOpen(true)}
-        >
-          <span className="bottom-nav-icon" aria-hidden="true">☰</span>
-          <span className="bottom-nav-label">Lainnya</span>
-        </button>
-      </nav>
+      {forced ? null : (
+        <nav className="bottom-nav" aria-label="Navigasi utama">
+          {primary.map((m) => (
+            <NavLink key={m.id} to={m.path} className="bottom-nav-item">
+              <span className="bottom-nav-icon" aria-hidden="true">{m.icon}</span>
+              <span className="bottom-nav-label">{m.shortLabel}</span>
+            </NavLink>
+          ))}
+          <button
+            type="button"
+            ref={moreButton}
+            className={`bottom-nav-item${moreActive ? ' active' : ''}`}
+            aria-haspopup="dialog"
+            aria-expanded={sheetOpen}
+            onClick={() => setSheetOpen(true)}
+          >
+            <span className="bottom-nav-icon" aria-hidden="true">☰</span>
+            <span className="bottom-nav-label">Lainnya</span>
+          </button>
+        </nav>
+      )}
 
       {sheetOpen ? <MoreSheet modules={more} onClose={closeSheet} /> : null}
     </div>

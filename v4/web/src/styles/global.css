@@ -2648,3 +2648,20 @@ a.stat-card:focus-visible {
   height: 22px;
   accent-color: var(--green-700, #0b5d3b);
 }
+
+/* Layar wajib-ganti kata sandi: tanpa sidebar, isi di tengah. */
+@media (min-width: 1024px) {
+  .shell.shell-forced {
+    display: block;
+  }
+  .shell-forced .topbar {
+    padding: 0 32px;
+  }
+  .shell-forced .topbar-brand {
+    display: flex;
+  }
+  .shell-forced .content {
+    max-width: 560px;
+    margin: 0 auto;
+  }
+}

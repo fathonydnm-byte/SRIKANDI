@@ -13,7 +13,11 @@ export type ErrorCode =
   | 'TOO_LARGE'
   | 'INVALID_FILE'
   | 'UPLOAD_MISMATCH'
-  | 'CONFLICT';
+  | 'CONFLICT'
+  | 'SERVICE_KEY_MISSING'
+  | 'EMAIL_EXISTS'
+  | 'WEAK_PASSWORD'
+  | 'PARTIAL_FAILURE';
 
 const MESSAGES: Record<ErrorCode, string> = {
   NOT_CONFIGURED: 'Layanan file belum dikonfigurasi. Hubungi Admin Pusat.',
@@ -30,6 +34,10 @@ const MESSAGES: Record<ErrorCode, string> = {
   INVALID_FILE: 'Isi file tidak sesuai tipenya (bukan PDF/gambar yang sah). Pilih file lain.',
   UPLOAD_MISMATCH: 'File yang terunggah tidak sesuai dengan sesi unggah. Ulangi unggahan.',
   CONFLICT: 'Data sudah berubah. Muat ulang lalu coba lagi.',
+  SERVICE_KEY_MISSING: 'Pengelolaan akun belum dikonfigurasi di server (kunci layanan belum dipasang). Hubungi Admin Pusat.',
+  EMAIL_EXISTS: 'Email ini sudah terdaftar. Cari pengguna di daftar lalu atur ulang kata sandi sementaranya.',
+  WEAK_PASSWORD: 'Kata sandi sementara tidak memenuhi syarat.',
+  PARTIAL_FAILURE: 'Perubahan akun tidak tuntas. Muat ulang daftar pengguna, periksa status akun, lalu ulangi.',
 };
 
 const STATUS: Record<ErrorCode, number> = {
@@ -47,6 +55,10 @@ const STATUS: Record<ErrorCode, number> = {
   INVALID_FILE: 422,
   UPLOAD_MISMATCH: 409,
   CONFLICT: 409,
+  SERVICE_KEY_MISSING: 503,
+  EMAIL_EXISTS: 409,
+  WEAK_PASSWORD: 422,
+  PARTIAL_FAILURE: 502,
 };
 
 const BASE_HEADERS = {

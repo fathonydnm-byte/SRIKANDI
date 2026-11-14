@@ -43,6 +43,7 @@ export function makeProfile(role: Role, overrides: Partial<Profile> = {}): Profi
     role,
     full_name: 'Siti Aminah',
     active: true,
+    must_change_password: false,
     ...overrides,
   };
 }

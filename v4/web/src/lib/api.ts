@@ -19,6 +19,8 @@ export interface Profile {
   role: Role;
   full_name: string;
   active: boolean;
+  /** true setelah admin membuat akun / mengatur ulang kata sandi: wajib ganti sebelum memakai aplikasi. */
+  must_change_password: boolean;
 }
 
 export interface Unit {
@@ -138,7 +140,7 @@ export async function callWrite<T>(
 export async function fetchProfile(client: SupabaseClient, userId: string): Promise<Profile | null> {
   const { data, error } = await client
     .from('profiles')
-    .select('user_id, unit_id, role, full_name, active')
+    .select('user_id, unit_id, role, full_name, active, must_change_password')
     .eq('user_id', userId)
     .maybeSingle();
   if (error) fail(error);

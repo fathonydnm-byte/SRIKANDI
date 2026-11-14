@@ -17,6 +17,7 @@ import { SearchPage } from './pages/search/SearchPage';
 const ReceiptsPage = lazy(() => import('./pages/s2/ReceiptsPage').then((m) => ({ default: m.ReceiptsPage })));
 const RegistrationPage = lazy(() => import('./pages/s2/RegistrationPage').then((m) => ({ default: m.RegistrationPage })));
 const MasterLogPage = lazy(() => import('./pages/s3/MasterLogPage').then((m) => ({ default: m.MasterLogPage })));
+const UsersPage = lazy(() => import('./pages/s3/UsersPage').then((m) => ({ default: m.UsersPage })));
 const LabelsPage = lazy(() => import('./pages/s3/LabelsPage').then((m) => ({ default: m.LabelsPage })));
 const EditPage = lazy(() => import('./pages/s3/EditPage').then((m) => ({ default: m.EditPage })));
 const CancelPage = lazy(() => import('./pages/s3/CancelPage').then((m) => ({ default: m.CancelPage })));
@@ -45,6 +46,7 @@ const BUILT: Record<string, () => ReactElement> = {
   edit: () => <Lazy><EditPage /></Lazy>,
   koreksi: () => <Lazy><CancelPage /></Lazy>,
   karantina: () => <Lazy><QuarantinePage /></Lazy>,
+  pengguna: () => <Lazy><UsersPage /></Lazy>,
 };
 const CARI = MODULES.find((m) => m.id === 'cari')!;
 const DASHBOARD = MODULES.find((m) => m.id === 'dashboard')!;

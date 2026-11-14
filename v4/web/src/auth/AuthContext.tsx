@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Session, SupabaseClient } from '@supabase/supabase-js';
 import { ApiError, fetchAccountStatus, fetchProfile, fetchUnit, fetchUnits, type Profile, type Unit } from '../lib/api';
 import { toUserMessage, type UserMessage } from '../lib/errors';
@@ -121,6 +121,12 @@ export function AuthProvider({
 
   const profileState: ProfileState =
     profile && profile.userId === userId ? profile.state : { kind: 'loading' };
+  // Dibaca di dalam updatePassword tanpa membuat callback-nya berubah tiap render.
+  const mustChange = profileState.kind === 'ready' && profileState.profile.must_change_password === true;
+  const mustChangeRef = useRef(false);
+  useEffect(() => {
+    mustChangeRef.current = mustChange;
+  }, [mustChange]);
   const role = profileState.kind === 'ready' ? profileState.profile.role : null;
 
   useEffect(() => {
@@ -171,8 +177,24 @@ export function AuthProvider({
       const { error } = await client.auth.updateUser({ password: newPassword });
       if (error) throwAuth(error);
       setRecovery(false);
+      // Kata sandi sementara dari admin tidak berlaku lagi: hapus penanda "wajib ganti" (server
+      // memeriksa bahwa kata sandi memang sudah berbeda). Berlaku untuk semua jalur: halaman
+      // Ubah kata sandi (termasuk layar wajib-ganti) dan tautan pemulihan (lupa kata sandi).
+      const flagged = mustChangeRef.current;
+      const cleared = await client.rpc('password_changed').then(
+        (res) => !res.error,
+        () => false,
+      );
+      if (!cleared && flagged) {
+        throw new ApiError('PASSWORD_FLAG', {
+          title: 'Kata sandi sudah diganti, tetapi status akun belum diperbarui.',
+          action: 'Muat ulang halaman, lalu masuk dengan kata sandi baru.',
+        });
+      }
+      // Tunggu profil terbaru supaya penjaga rute tidak mengembalikan pengguna ke layar wajib-ganti.
+      if (userId) setProfile({ userId, state: await resolveProfile(client, userId) });
     },
-    [client],
+    [client, userId],
   );
 
   const verifyCurrentPassword = useCallback(

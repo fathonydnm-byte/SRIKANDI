@@ -1,0 +1,151 @@
+/* Kelola Pengguna. Memakai variabel global.css; kartu di HP, tiga kolom di layar lebar. */
+.user-filters {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+  margin-bottom: 8px;
+}
+.user-filter-q {
+  grid-column: 1 / -1;
+}
+.user-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.user-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-subtle);
+  min-width: 0;
+}
+.user-card.is-inactive {
+  background: #f8fafc;
+  border-style: dashed;
+}
+.user-card.is-inactive .user-name {
+  color: var(--muted);
+}
+.user-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.user-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.user-email {
+  font-size: 14px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.user-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+.user-unit {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+.user-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.user-actions .btn {
+  min-height: var(--touch);
+  flex: 1 1 8rem;
+}
+.user-form-email {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.field-static-label {
+  font-weight: 600;
+  font-size: 14px;
+}
+.field-static {
+  margin: 0;
+  padding: 10px 12px;
+  min-height: var(--touch);
+  display: flex;
+  align-items: center;
+  background: #f1f5f9;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--touch);
+  font-weight: 600;
+  cursor: pointer;
+}
+.check-row input {
+  width: 22px;
+  height: 22px;
+  flex: none;
+}
+.temp-who {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.temp-box {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 2px solid var(--navy);
+  border-radius: var(--radius-md);
+  background: var(--green-50);
+}
+.temp-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.temp-password {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  overflow-wrap: anywhere;
+  user-select: all;
+  color: var(--ink);
+}
+@media (min-width: 720px) {
+  .user-filters {
+    grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr));
+    align-items: end;
+  }
+  .user-filter-q {
+    grid-column: auto;
+  }
+  .user-card {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) auto;
+    align-items: center;
+  }
+  .user-actions .btn {
+    flex: none;
+  }
+}
+
+.user-filters {
+  margin-top: 16px;
+}
