@@ -571,8 +571,14 @@ test('heavy phases (reports / swap / manifest) are not started with less than tw
   const st = JSON.parse(w.props.get('JOB_STATE'));
   assert.equal(st.step, 'REPORTS', 'paused BEFORE the heavy phase');
   assert.equal(w.triggers.length, 1);
-  // the continuation starts with a fresh budget and finishes
-  assert.equal(w.call('continueMirror'), 'DONE');
+  // Each continuation has a fresh budget; the rest of the units may need more than one.
+  let resumed = 'CONTINUE';
+  for (let i = 0; resumed === 'CONTINUE' && i < 10; i++) {
+    assert.equal(w.triggers.length, 1);
+    w.clock.now += w.triggers[0].afterMs;
+    resumed = w.call('continueMirror');
+  }
+  assert.equal(resumed, 'DONE');
   assert.equal(w.triggers.length, 0);
 });
 
