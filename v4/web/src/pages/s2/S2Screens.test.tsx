@@ -206,13 +206,45 @@ describe('Registrasi Berkas Baru', () => {
     const user = userEvent.setup();
     const blocked = await screen.findByRole('checkbox', { name: /Notulen tanpa tanggal/ });
     expect(blocked).toBeDisabled();
+    const filingButton = screen.getByRole('button', { name: 'Berkaskan Item Terpilih' });
+    const actions = filingButton.parentElement!;
+    await user.click(filingButton);
+    expect(within(actions).getByRole('alert')).toHaveTextContent('Pilih minimal satu item dari antrean penerimaan.');
+    expect(screen.getByRole('region', { name: 'Sumber Registrasi Item' })).toHaveFocus();
     await user.click(screen.getByRole('checkbox', { name: /Surat undangan rapat/ }));
     expect(screen.getByText(/1 item dipilih · 3 halaman/)).toBeInTheDocument();
+    await user.click(filingButton);
+    expect(within(actions).getByRole('alert')).toHaveTextContent('Pilih berkas induk atau buat berkas baru.');
+    expect(screen.getByRole('region', { name: 'Pilih Berkas Induk' })).toHaveFocus();
+    expect(commit).not.toHaveBeenCalled();
     await user.selectOptions(screen.getByLabelText('Berkas induk *'), 'BRK-1');
-    await user.click(screen.getByRole('button', { name: 'Berkaskan Item Terpilih' }));
+    await user.click(filingButton);
     expect(await screen.findByRole('link', { name: 'Berkas 1 / Item 3 — Surat undangan rapat' })).toHaveAttribute('href', '/cari/berkas/BRK-1');
+    expect(within(actions).queryByRole('alert')).not.toBeInTheDocument();
+    expect(within(actions).getByRole('status')).toHaveTextContent('1 item diberkaskan ke Berkas 1.');
     expect(commit.mock.calls[0]![0]).toMatchObject({ p_receipt_item_ids: ['RCVI-1'], p_target: { mode: 'EXISTING', berkas_id: 'BRK-1' } });
     expect(screen.queryByRole('checkbox', { name: /Surat undangan rapat/ })).not.toBeInTheDocument();
+  });
+
+  it('shows filing progress and a server rejection in the action bar, retaining the selection', async () => {
+    let rejectFiling!: (result: Awaited<ReturnType<RpcHandler>>) => void;
+    const commit = vi.fn<RpcHandler>(() => new Promise((resolve) => { rejectFiling = resolve; }));
+    renderApp('/pemberkasan', setup('PETUGAS', {
+      registration_options: () => ({ data: REG, error: null }), filing_options: () => ({ data: QUEUE, error: null }), filing_commit: commit,
+    }).client);
+    const user = userEvent.setup();
+    const item = await screen.findByRole('checkbox', { name: /Surat undangan rapat/ });
+    await user.click(item);
+    await user.selectOptions(screen.getByLabelText('Berkas induk *'), 'BRK-1');
+    const filingButton = screen.getByRole('button', { name: 'Berkaskan Item Terpilih' });
+    const actions = within(filingButton.parentElement!);
+    await user.click(filingButton);
+    expect(filingButton).toBeDisabled();
+    expect(actions.getByRole('status')).toHaveTextContent('Memberkaskan 1 item…');
+    rejectFiling({ data: null, error: { code: 'P0001', message: 'ITEM_ALREADY_FILED: Item sudah diberkaskan.' } });
+    expect(await actions.findByRole('alert')).toHaveTextContent('Item sudah diberkaskan.');
+    expect(filingButton).toBeEnabled();
+    expect(item).toBeChecked();
   });
 
   it('input manual ke berkas baru: klasifikasi primer→sekunder, lalu PDF diunggah setelah metadata tersimpan', async () => {

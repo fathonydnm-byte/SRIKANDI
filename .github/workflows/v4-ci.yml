@@ -39,6 +39,9 @@ jobs:
       - name: Tes gerbang Apps Script
         working-directory: v4/gateway-apps-script
         run: node --test gateway.test.cjs
+      - name: Tes cermin Apps Script
+        working-directory: v4/mirror-apps-script
+        run: node --test mirror.test.cjs
       # Build tanpa env Supabase: memastikan build lolos; aplikasi hasilnya
       # menampilkan layar "Konfigurasi aplikasi belum lengkap". Env asli hanya
       # di Cloudflare Pages.
@@ -73,6 +76,7 @@ jobs:
           if [ -f v4/tests/db/run.sh ]; then
             bash v4/tests/db/run.sh
             bash v4/tools/import-legacy/test.sh
+            bash v4/tools/restore-backup/test.sh
           else
             echo "::warning::v4/tests/db/run.sh belum ada; tes database dilewati."
           fi

@@ -111,6 +111,10 @@ test('chronological renumbering across berkas: numbers move, IDs stay, history a
   assert.equal((await berkasRow(x.berkas_id)).no_berkas_definitif, 2);
   const itemHist = await owner(pool, `select nomor_lama, nomor_baru from public.riwayat_nomor where objek_id = $1 order by created_at, nomor_baru`, [x.item_id]);
   assert.deepEqual(itemHist.map((h) => [h.nomor_lama, h.nomor_baru]), [[null, 1], [1, 2]]);
+  const xVersion = (await berkasRow(x.berkas_id)).version;
+  const z = await manual(fx.user.petugasA, newBerkasTarget({ title: 'Berkas Z' }), { document_date: '2025-01-01' });
+  assert.deepEqual([z.berkas_number, z.item_number, z.renumbered_berkas_count], [3, 1, 0]);
+  assert.equal((await berkasRow(x.berkas_id)).version, xVersion, 'unaffected berkas is not rewritten');
   // deferred uniqueness held throughout
   const dup = await owner(pool, `select no_berkas_definitif, count(*) from public.berkas where unit_id = $1 and not is_deleted
                                  and no_berkas_definitif is not null group by 1 having count(*) > 1`, [fx.unit.A]);

@@ -39,6 +39,7 @@ let bridge;
 let world;
 let packages; // code -> dir
 let sourceDump;
+let schemaVersion;
 
 function restoreCli(args, envExtra = {}) {
   const r = spawnSync(process.execPath, [RESTORE, ...args], {
@@ -83,6 +84,8 @@ before(async () => {
   assert.ok(SRC_DB && DST_DB && BUNDLE, 'run through test.sh (PGDATABASE, CF_RESTORE_DB, CF_JOBS_BUNDLE)');
   await src.connect();
   await dst.connect();
+  const { rows: [schema] } = await src.query('select max(version) as version from public.schema_migrations_log');
+  schemaVersion = schema.version;
   await seed(src);
   bridge = await startBridge(path.join(HERE, 'pgrest-worker.mjs'), {
     bundle: BUNDLE, serviceKey: SERVICE_KEY, anonKey: 'anon-test-key', supabaseUrl: 'https://rest.invalid', jobSecret: JOB_SECRET, maxRows: 1000,
@@ -181,7 +184,7 @@ test('collect the packages the job wrote into the fake Drive (folder for A, zip 
   execFileSync('zip', ['-qr', zipPath, path.basename(packages['RT-B'])], { cwd: path.dirname(packages['RT-B']) });
   packages.zipB = zipPath;
   const m = JSON.parse(fs.readFileSync(path.join(packages['RT-A'], 'manifest.json'), 'utf8'));
-  assert.equal(m.schema_version, '0022');
+  assert.equal(m.schema_version, schemaVersion);
   assert.equal(m.tables.item.parts.length, 3);
   // PII stays encrypted, exactly as the database stores it (hex of the ciphertext); the restore needs no key
   const pegawai = zlib.gunzipSync(fs.readFileSync(path.join(packages['RT-A'], m.tables.pegawai.parts[0].file))).toString('utf8');
@@ -199,7 +202,7 @@ test('restore refuses a database whose schema version differs (exit 3, nothing w
   fs.writeFileSync(mp, JSON.stringify(man));
   const r = restoreCli(['--package', copy, '--database-url-env', 'RESTORE_DATABASE_URL']);
   assert.equal(r.code, 3, r.err);
-  assert.match(r.err, /Versi skema berbeda: paket RT-B = 0021, database = 0022/);
+  assert.ok(r.err.includes(`Versi skema berbeda: paket RT-B = 0021, database = ${schemaVersion}`), r.err);
   assert.equal((await counts(dst, [UNIT.A, UNIT.B])).units, 0);
   const forced = restoreCli(['--package', copy, '--database-url-env', 'RESTORE_DATABASE_URL', '--force-schema', '--dry-run']);
   assert.equal(forced.code, 0, forced.err);
