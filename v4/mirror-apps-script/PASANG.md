@@ -21,6 +21,7 @@ Proyek Apps Script **kedua** (terpisah dari gerbang Drive) yang setiap malam: (1
 ## 3. Alamat aplikasi dan pemicu malam
 1. Di editor, buka fungsi `aturAlamatAplikasi`, ganti teks `https://GANTI-DENGAN-ALAMAT-APLIKASI.pages.dev` dengan alamat aplikasi Anda (wajib `https`, tanpa jalur), simpan, **Jalankan** (atau tambahkan properti skrip `BASE_URL` di Setelan proyek).
 2. Setelah `JOB_SECRET` tersedia pada deployment staging, jalankan **`runNow`** sekali untuk mencoba. Bila pekerjaan melebihi batas 6 menit Apps Script, ia berhenti dan **melanjutkan sendiri** 1 menit kemudian (unit banyak = beberapa putaran; tidak perlu diapa-apakan). `statusMirror` menampilkan posisinya.
+   Jika log berisi `Drive: cari folder utama ditolak (HTTP 404)`, pastikan `Code.gs` menggunakan pencarian folder utama tanpa ID induk. Kirim hanya baris galatnya; jangan kirim tangkapan layar Properti skrip.
 3. Setelah cermin dan paket pertama diverifikasi, jalankan **`installNightlyTrigger`**. Aman diulang: hanya satu pemicu harian, antara pukul 01:00 dan 02:00 WIB.
 
 ## 4. Di mana hasilnya

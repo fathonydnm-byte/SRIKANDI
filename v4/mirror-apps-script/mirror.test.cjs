@@ -732,6 +732,35 @@ test('no request ever leaves for a host other than the app and the Drive API; Dr
   assert.ok(w.fetchLog.filter((f) => f.url.includes('/api/jobs/export')).every((f) => !f.headers || !f.headers.Authorization), 'the app never receives the Drive token');
 });
 
+test('root lookup on a fresh install and after cache loss reuses only the mirror folder', () => {
+  const w = setup({ items: 5 });
+  const name = 'CENTRAL FILE V4';
+  const otherId = JSON.parse(w.drive.handle('post', 'https://www.googleapis.com/drive/v3/files', {
+    payload: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder', appProperties: { cfApp: 'gateway' } }),
+  }).text).id;
+  assert.equal(w.call('runNow'), 'DONE');
+  const root = w.drive.byName(name).find((f) => f.appProperties.cfApp === 'cermin');
+  assert.ok(root);
+  assert.equal(w.drive.children(otherId).length, 0);
+
+  w.props.delete('DRIVE_FOLDERS');
+  assert.equal(w.call('runNow'), 'DONE');
+  assert.deepEqual(w.drive.byName(name).map((f) => f.id).sort(), [otherId, root.id].sort());
+});
+
+test('Drive errors report the operation and safe reason without leaking the provider message', () => {
+  const w = setup({ items: 5 });
+  const handle = w.drive.handle;
+  w.drive.handle = (method, url, params) => {
+    if (new URL(url).searchParams.get('q')?.includes('CENTRAL FILE V4')) {
+      return { code: 404, text: JSON.stringify({ error: { message: 'private Drive ID', errors: [{ reason: 'notFound' }] } }) };
+    }
+    return handle(method, url, params);
+  };
+  assert.throws(() => w.call('runNow'), /unit gagal/);
+  assert.equal(runsOf(w, 'MIRROR', UNIT_A)[0].error, 'Drive: cari folder utama ditolak (HTTP 404 notFound)');
+});
+
 test('Drive listing pagination (pageToken) is followed', () => {
   const w = setup({ items: 5 });
   w.drive.pageSize = 2;

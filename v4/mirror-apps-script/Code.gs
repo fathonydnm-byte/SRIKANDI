@@ -519,6 +519,7 @@ function fetchPage_(unitId, table, after) {
 // ===========================================================================
 function driveRequest_(method, url, options) {
   options = options || {};
+  var operation = options.operation || 'permintaan';
   var lastError = null;
   for (var attempt = 1; attempt <= API_ATTEMPTS; attempt++) {
     var params = {
@@ -530,7 +531,7 @@ function driveRequest_(method, url, options) {
     try {
       res = UrlFetchApp.fetch(url, params);
     } catch (e) {
-      lastError = new Error('Drive: jaringan gagal');
+      lastError = new Error('Drive: ' + operation + ' gagal (jaringan)');
       Utilities.sleep(1000 * attempt);
       continue;
     }
@@ -541,22 +542,29 @@ function driveRequest_(method, url, options) {
     }
     if (code === 404 && options.allow404) return null;
     if (code === 429 || code >= 500 || (code === 403 && /rateLimit|userRateLimit/i.test(res.getContentText()))) {
-      lastError = new Error('Drive: HTTP ' + code);
+      lastError = new Error('Drive: ' + operation + ' gagal (HTTP ' + code + ')');
       Utilities.sleep(1000 * attempt);
       continue;
     }
-    throw new Error('Drive: ditolak (HTTP ' + code + ')');
+    // Jangan menyalin pesan mentah Google: bisa memuat ID atau nama file.
+    var reason = '';
+    try {
+      var err = JSON.parse(res.getContentText()).error;
+      var tag = err && err.errors && err.errors[0] && err.errors[0].reason;
+      if (['notFound', 'appNotAuthorizedToFile', 'insufficientFilePermissions', 'accessNotConfigured', 'storageQuotaExceeded'].indexOf(tag) >= 0) reason = ' ' + tag;
+    } catch (ignored) { /* Respons non-JSON juga dapat terjadi. */ }
+    throw new Error('Drive: ' + operation + ' ditolak (HTTP ' + code + reason + ')');
   }
   throw lastError || new Error('Drive: gagal');
 }
 
-function driveList_(q, fields) {
+function driveList_(q, fields, operation) {
   var out = [];
   var token = '';
   do {
     var url = DRIVE_API + '/files?q=' + encodeURIComponent(q) + '&pageSize=1000&fields=' + encodeURIComponent('nextPageToken,files(' + fields + ')') +
       (token ? '&pageToken=' + encodeURIComponent(token) : '');
-    var r = driveRequest_('get', url);
+    var r = driveRequest_('get', url, { operation: operation || 'daftar berkas' });
     (r.files || []).forEach(function (f) { out.push(f); });
     token = r.nextPageToken || '';
   } while (token);
@@ -564,27 +572,29 @@ function driveList_(q, fields) {
 }
 
 function driveGet_(id, fields) {
-  return driveRequest_('get', DRIVE_API + '/files/' + encodeURIComponent(id) + '?fields=' + encodeURIComponent(fields), { allow404: true });
+  return driveRequest_('get', DRIVE_API + '/files/' + encodeURIComponent(id) + '?fields=' + encodeURIComponent(fields), { allow404: true, operation: 'baca metadata' });
 }
 
 function driveCreate_(name, parentId, mime, appProps) {
   var meta = { name: name, mimeType: mime };
   if (parentId) meta.parents = [parentId];
   if (appProps) meta.appProperties = appProps;
-  return driveRequest_('post', DRIVE_API + '/files?fields=id,name', { json: meta }).id;
+  return driveRequest_('post', DRIVE_API + '/files?fields=id,name', { json: meta, operation: mime === FOLDER_MIME ? 'buat folder' : mime === SHEET_MIME ? 'buat spreadsheet' : 'buat berkas' }).id;
 }
 
 function driveRename_(id, name) {
-  driveRequest_('patch', DRIVE_API + '/files/' + encodeURIComponent(id) + '?fields=id', { json: { name: name } });
+  driveRequest_('patch', DRIVE_API + '/files/' + encodeURIComponent(id) + '?fields=id', { json: { name: name }, operation: 'ubah nama' });
 }
 
 function driveTrash_(id) {
-  driveRequest_('patch', DRIVE_API + '/files/' + encodeURIComponent(id) + '?fields=id', { json: { trashed: true } });
+  driveRequest_('patch', DRIVE_API + '/files/' + encodeURIComponent(id) + '?fields=id', { json: { trashed: true }, operation: 'pindah ke sampah' });
 }
 
 function driveFindChild_(parentId, name, mime) {
-  var q = "'" + escapeQ_(parentId) + "' in parents and name = '" + escapeQ_(name) + "' and trashed = false" + (mime ? " and mimeType = '" + mime + "'" : '');
-  var files = driveList_(q, 'id,name,appProperties');
+  var q = "name = '" + escapeQ_(name) + "' and trashed = false" + (mime ? " and mimeType = '" + mime + "'" : '');
+  // Tanpa induk berarti cari folder utama milik proyek; null bukan ID Drive.
+  q += parentId ? " and '" + escapeQ_(parentId) + "' in parents" : " and appProperties has { key='cfApp' and value='cermin' }";
+  var files = driveList_(q, 'id,name,appProperties', parentId ? 'cari berkas dalam folder' : 'cari folder utama');
   return files.length ? files[0] : null;
 }
 
@@ -592,8 +602,8 @@ function driveFindChild_(parentId, name, mime) {
 function driveUpload_(parentId, name, bytes, mime, appProps) {
   var existing = driveFindChild_(parentId, name, null);
   var id = existing ? existing.id : driveCreate_(name, parentId, mime, appProps);
-  driveRequest_('patch', DRIVE_UPLOAD + '/files/' + encodeURIComponent(id) + '?uploadType=media&fields=id', { bytes: bytes, contentType: mime });
-  if (existing && appProps) driveRequest_('patch', DRIVE_API + '/files/' + encodeURIComponent(id) + '?fields=id', { json: { appProperties: appProps } });
+  driveRequest_('patch', DRIVE_UPLOAD + '/files/' + encodeURIComponent(id) + '?uploadType=media&fields=id', { bytes: bytes, contentType: mime, operation: 'unggah isi berkas' });
+  if (existing && appProps) driveRequest_('patch', DRIVE_API + '/files/' + encodeURIComponent(id) + '?fields=id', { json: { appProperties: appProps }, operation: 'perbarui metadata' });
   return id;
 }
 
@@ -1169,7 +1179,7 @@ function randomSecret_() {
 
 function driveCheck_() {
   // cakupan drive.file: mendaftar file buatan proyek ini (kosong pada awalnya) membuktikan token Drive berlaku
-  driveRequest_('get', DRIVE_API + '/files?pageSize=1&fields=files(id)');
+  driveRequest_('get', DRIVE_API + '/files?pageSize=1&fields=files(id)', { operation: 'uji akses Drive' });
 }
 
 /**

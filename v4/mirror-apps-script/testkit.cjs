@@ -89,6 +89,8 @@ function makeDrive(world) {
     let m;
     if (method === 'get' && p === '/drive/v3/files') {
       const q = u.searchParams.get('q') || '';
+      // A missing parent is not a folder ID and must not be sent to Drive.
+      if (/'(?:null|undefined|)' in parents/.test(q)) return reply(404, { error: { errors: [{ reason: 'notFound' }] } });
       const fields = u.searchParams.get('fields') || '';
       const size = api.pageSize || Number(u.searchParams.get('pageSize') || 100);
       const all = [...files.values()].filter((f) => !f.foreign && matchQ(f, q));
