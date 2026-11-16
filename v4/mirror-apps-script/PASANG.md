@@ -33,6 +33,8 @@ Di Drive akun instansi, folder **CENTRAL FILE V4** (dibuat proyek ini; bisa ada 
 Di aplikasi, menu **Keamanan & Audit → Cadangan & Cermin** (Admin Pusat: semua unit; Admin Unit: unitnya). Spanduk kuning = tidak ada yang berhasil >36 jam atau belum pernah jalan; merah = percobaan terakhir gagal. Bila Apps Script gagal, Google juga mengirim email kegagalan ke pemilik proyek.
 
 ## 6. Latihan restore (restore drill)
+Pilihan pertama untuk uji paket asli: [latihan lokal dengan database sementara](../tools/restore-backup/README.md). Panduan berikut berlaku bila memakai database uji terpisah yang sudah disiapkan.
+
 Backup baru terbukti bila bisa dipulihkan. **Admin Pusat bersama pengembang**, minimal tiap tiga bulan dan sebelum cutover, di proyek Supabase/Postgres **baru dan kosong** (bukan produksi):
 1. Terapkan semua migrasi ke database kosong itu.
 2. Unduh folder paket `<tanggal>` dari Drive (atau zip-kan).

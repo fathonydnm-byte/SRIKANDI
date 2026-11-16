@@ -200,6 +200,17 @@ test('collect the packages the job wrote into the fake Drive (folder for A, zip 
   for (const t of RESTORE_TABLES) assert.ok(sourceDump[t].rows > 0, `seed covers ${t}`);
 });
 
+test('rehearsal runs dry-run and commit using a separate database even when an external target is configured', async () => {
+  const prior = await canonicalDump(dst, [UNIT.A, UNIT.B]);
+  const r = spawnSync('bash', [path.join(HERE, '..', 'rehearse.sh'), packages['RT-A'], packages.zipB, packages._PLATFORM], {
+    env: { ...process.env, RESTORE_DATABASE_URL: dbUrl(DST_DB) }, encoding: 'utf8', timeout: 120000,
+  });
+  assert.equal(r.status, 0, r.error?.message || r.stderr || r.stdout);
+  assert.match(r.stdout, /ROLLBACK[\s\S]*Restore selesai \(COMMIT\)/);
+  assert.match(r.stdout, /Latihan pemulihan lulus/);
+  assert.deepEqual(await canonicalDump(dst, [UNIT.A, UNIT.B]), prior);
+});
+
 test('restore refuses a database whose schema version differs (exit 3, nothing written), unless --force-schema', async () => {
   const copy = path.join(OUT, 'schema-copy');
   copyDir(packages['RT-B'], copy);
