@@ -8,7 +8,7 @@
  *               + manifest.json (versi skema, jumlah baris, sha256 tiap berkas, inventaris file Drive).
  *   Sekaligus menjaga proyek Supabase gratis tetap aktif (tiap malam ada permintaan ke database).
  *
- * Batas keamanan (appsscript.json): spreadsheets, drive.file, script.external_request, script.scriptapp. SAJA.
+ * Batas keamanan (appsscript.json): drive.file, script.external_request, script.scriptapp. SAJA.
  *   - drive.file: hanya file/folder yang DIBUAT proyek ini yang terlihat/bisa diubah/dihapus. Arsip PDF lama tak tersentuh.
  *   - Tidak ada doGet/doPost: proyek ini tidak bisa dipanggil dari luar. Ia hanya MEMANGGIL aplikasi (POST bertanda tangan).
  *   - Tidak mencetak token apa pun.
@@ -24,7 +24,7 @@
 
 var JOB_VERSION = 'CFJOB1';
 var BACKUP_FORMAT = 'CFBACKUP1';
-var SCRIPT_VERSION = 'cermin-apps-script/1.0.0';
+var SCRIPT_VERSION = 'cermin-apps-script/1.1.0';
 var P_SECRET = 'JOB_SECRET';
 var P_BASE = 'BASE_URL';
 var P_STATE = 'JOB_STATE';
@@ -625,11 +625,12 @@ function ensureSpreadsheet_(code, folderId) {
   var name = 'CERMIN CENTRAL FILE – ' + code;
   var map = getJson_(P_SHEETS) || {};
   if (map[code]) {
-    var meta = driveGet_(map[code], 'id,trashed');
-    if (meta && !meta.trashed) return map[code];
+    var meta = driveGet_(map[code], 'id,trashed,mimeType,appProperties');
+    if (meta && !meta.trashed && meta.mimeType === SHEET_MIME && meta.appProperties && meta.appProperties.cfApp === 'cermin') return map[code];
   }
   var found = driveFindChild_(folderId, name, SHEET_MIME);
-  var id = found ? found.id : driveCreate_(name, folderId, SHEET_MIME, { cfApp: 'cermin' });
+  var own = found && found.appProperties && found.appProperties.cfApp === 'cermin';
+  var id = own ? found.id : driveCreate_(name, folderId, SHEET_MIME, { cfApp: 'cermin' });
   map[code] = id;
   setJson_(P_SHEETS, map);
   return id;
@@ -638,37 +639,119 @@ function ensureSpreadsheet_(code, folderId) {
 // ===========================================================================
 // SHEETS
 // ===========================================================================
-function ensureSize_(sheet, rows, cols) {
-  var maxRows = sheet.getMaxRows();
-  if (maxRows < rows) sheet.insertRowsAfter(maxRows, rows - maxRows);
-  var maxCols = sheet.getMaxColumns();
-  if (maxCols < cols) sheet.insertColumnsAfter(maxCols, cols - maxCols);
-}
+// OAuth is explicitly limited to drive.file in the manifest. Never fall back to SpreadsheetApp.
+var sheetWriteTimes_ = [];
+var sheetPublishedPrefix_ = 'Cermin hanya-baca: diganti otomatis setiap malam; perubahan tidak masuk ke aplikasi. ';
 
-function removeSheetIfExists_(ss, name) {
-  var s = ss.getSheetByName(name);
-  if (s) {
-    if (ss.getSheets().length === 1) ss.insertSheet('~sementara');
-    ss.deleteSheet(s);
+function sheetWrite_(operation) {
+  // Keep a little headroom below the Sheets per-user write quota within one execution.
+  var now = Date.now();
+  sheetWriteTimes_ = sheetWriteTimes_.filter(function (t) { return now - t < 61000; });
+  if (sheetWriteTimes_.length >= 50) {
+    Utilities.sleep(61000 - (now - sheetWriteTimes_[0]));
+    now = Date.now();
+    sheetWriteTimes_ = sheetWriteTimes_.filter(function (t) { return now - t < 61000; });
   }
+  sheetWriteTimes_.push(now);
+  return operation();
 }
 
-function writeBlock_(sheet, startRow, values) {
+function sheetBook_(id) {
+  var x = Sheets.Spreadsheets.get(id, { fields: 'sheets(properties(sheetId,title,index,hidden,gridProperties),protectedRanges(description))' });
+  return { id: id, tabs: (x.sheets || []).map(function (s) {
+    var p = s.properties;
+    return { id: p.sheetId, name: p.title, rows: p.gridProperties.rowCount, cols: p.gridProperties.columnCount,
+      markers: (s.protectedRanges || []).map(function (r) { return r.description; }) };
+  }) };
+}
+
+function findTab_(book, name) {
+  return book.tabs.find(function (tab) { return tab.name === name; }) || null;
+}
+
+function sheetBatch_(book, requests) {
+  if (!requests.length) return {};
+  return sheetWrite_(function () {
+    return Sheets.Spreadsheets.batchUpdate({ requests: requests }, book.id);
+  });
+}
+
+function addTab_(book, title, hidden) {
+  var out = sheetBatch_(book, [{ addSheet: { properties: { title: title, hidden: !!hidden,
+    gridProperties: { rowCount: 100, columnCount: 12 } } } }]);
+  var p = out.replies[0].addSheet.properties;
+  var tab = { id: p.sheetId, name: p.title, rows: p.gridProperties.rowCount, cols: p.gridProperties.columnCount, markers: [] };
+  book.tabs.push(tab);
+  return tab;
+}
+
+function removeTabs_(book, tabs) {
+  if (!tabs.length) return;
+  // Only the project's own workbook is in scope. Keep one visible anchor if all tabs are about to be replaced.
+  if (tabs.length === book.tabs.length) addTab_(book, '~sementara', false);
+  sheetBatch_(book, tabs.map(function (tab) { return { deleteSheet: { sheetId: tab.id } }; }));
+  book.tabs = book.tabs.filter(function (tab) { return tabs.indexOf(tab) === -1; });
+}
+
+function updateTab_(id, props, fields) {
+  props.sheetId = id;
+  return { updateSheetProperties: { properties: props, fields: fields } };
+}
+
+function sheetColumn_(n) {
+  var s = '';
+  while (n > 0) { n--; s = String.fromCharCode(65 + n % 26) + s; n = Math.floor(n / 26); }
+  return s;
+}
+
+function cells_(tab, a, b) {
+  return "'" + tab.name.replace(/'/g, "''") + "'!" + a + ':' + b;
+}
+
+function writeBlock_(book, tab, startRow, values) {
   if (!values.length) return;
   var cols = values[0].length;
-  ensureSize_(sheet, startRow + values.length - 1, cols);
-  sheet.getRange(startRow, 1, values.length, cols).setValues(values);
+  var last = startRow + values.length - 1;
+  if (last > tab.rows || cols > tab.cols) {
+    var size = { rowCount: Math.max(last, tab.rows), columnCount: Math.max(cols, tab.cols) };
+    sheetBatch_(book, [updateTab_(tab.id, { gridProperties: size }, 'gridProperties.rowCount,gridProperties.columnCount')]);
+    tab.rows = size.rowCount;
+    tab.cols = size.columnCount;
+  }
+  var range = cells_(tab, 'A' + startRow, sheetColumn_(cols) + last);
+  sheetWrite_(function () {
+    return Sheets.Spreadsheets.Values.update({ values: values }, book.id, range, { valueInputOption: 'RAW' });
+  });
 }
 
-function readColumns_(sheet, headerRow, names, firstDataRow, count) {
+function sheetValues_(book, range) {
+  return Sheets.Spreadsheets.Values.get(book.id, range, { valueRenderOption: 'UNFORMATTED_VALUE' }).values || [];
+}
+
+function readColumns_(book, tab, headerRow, names, firstDataRow, count) {
   var out = {};
-  var lastCol = sheet.getLastColumn ? sheet.getLastColumn() : sheet.getMaxColumns();
-  var header = sheet.getRange(headerRow, 1, 1, lastCol).getValues()[0];
+  var header = sheetValues_(book, cells_(tab, 'A' + headerRow, sheetColumn_(tab.cols) + headerRow))[0] || [];
+  var ranges = [];
+  var present = [];
   names.forEach(function (n) {
+    out[n] = [];
     var idx = header.indexOf(n);
-    out[n] = idx < 0 || count < 1 ? [] : sheet.getRange(firstDataRow, idx + 1, count, 1).getValues().map(function (r) { return r[0]; });
+    if (idx < 0 || count < 1) return;
+    var col = sheetColumn_(idx + 1);
+    ranges.push(cells_(tab, col + firstDataRow, col + (firstDataRow + count - 1)));
+    present.push(n);
   });
+  if (ranges.length) {
+    var result = Sheets.Spreadsheets.Values.batchGet(book.id, { ranges: ranges, valueRenderOption: 'UNFORMATTED_VALUE' });
+    (result.valueRanges || []).forEach(function (v, i) {
+      out[present[i]] = (v.values || []).map(function (row) { return row.length ? row[0] : ''; });
+    });
+  }
   return out;
+}
+
+function finishTab_(tab, description) {
+  return { addProtectedRange: { protectedRange: { range: { sheetId: tab.id }, warningOnly: true, description: description } } };
 }
 
 function columnsToObjects_(cols, count) {
@@ -725,13 +808,8 @@ function stepUnitBegin_(state) {
   u.pkg = driveCreate_('_tmp-' + state.day, folders.backup, FOLDER_MIME, { cfBackup: '1', day: state.day, unit: unit.code });
   if (u.mirror) {
     u.ssId = ensureSpreadsheet_(unit.code, folders.cermin);
-    var ss = SpreadsheetApp.openById(u.ssId);
-    ss.getSheets().forEach(function (s) {
-      if (s.getName().indexOf(TMP_PREFIX) === 0) {
-        if (ss.getSheets().length === 1) ss.insertSheet('~sementara');
-        ss.deleteSheet(s);
-      }
-    });
+    var book = sheetBook_(u.ssId);
+    removeTabs_(book, book.tabs.filter(function (tab) { return tab.name.indexOf(TMP_PREFIX) === 0; }));
   }
   state.step = 'TABLE';
 }
@@ -741,9 +819,9 @@ function resetTableOutputs_(state, unit, table) {
   // buang bagian paket tabel ini dari percobaan sebelumnya
   driveList_("'" + escapeQ_(u.pkg) + "' in parents and trashed = false and appProperties has { key='table' and value='" + escapeQ_(table) + "' }", 'id').forEach(function (f) { driveTrash_(f.id); });
   if (u.mirror) {
-    var ss = SpreadsheetApp.openById(u.ssId);
-    var tmp = ss.getSheetByName(TMP_PREFIX + sheetNameFor_(table));
-    if (tmp) { if (ss.getSheets().length === 1) ss.insertSheet('~sementara'); ss.deleteSheet(tmp); }
+    var book = sheetBook_(u.ssId);
+    var tmp = findTab_(book, TMP_PREFIX + sheetNameFor_(table));
+    if (tmp) removeTabs_(book, [tmp]);
   }
   u.after = null; u.total = null; u.written = 0; u.part = 0;
 }
@@ -765,17 +843,15 @@ function stepTable_(state) {
   if (rows.length) {
     var columns = mirrorColumns_(table, rows);
     if (u.mirror) {
-      var ss = SpreadsheetApp.openById(u.ssId);
+      var book = sheetBook_(u.ssId);
       var tmpName = TMP_PREFIX + sheetNameFor_(table);
-      var sheet = ss.getSheetByName(tmpName);
-      if (!sheet) {
-        sheet = ss.insertSheet(tmpName);
-        sheet.hideSheet();
-        writeBlock_(sheet, 1, [columns.map(function (c) { return c.header; })]);
-      }
+      var sheet = findTab_(book, tmpName) || addTab_(book, tmpName, true);
+      // A replay of the first page also rewrites the header if execution stopped just after creating the tab.
+      var values = rowsToValues_(columns, rows);
+      if (u.written === 0) values.unshift(columns.map(function (c) { return c.header; }));
       u.cells += rows.length * columns.length;
       if (u.cells > SHEET_CELL_CAP) throw new Error('Batas ukuran Google Sheets hampir tercapai (' + table + '); cermin tidak dapat dilanjutkan.');
-      writeBlock_(sheet, u.written + 2, rowsToValues_(columns, rows));
+      writeBlock_(book, sheet, u.written === 0 ? 1 : u.written + 2, values);
     }
     // paket backup: bagian NDJSON.gz (isi lengkap, termasuk kolom terenkripsi apa adanya)
     var name = partName_(table, u.part + 1);
@@ -804,8 +880,13 @@ function stepTable_(state) {
     return;
   }
   if (u.mirror && u.written > 0) {
-    var tmp = SpreadsheetApp.openById(u.ssId).getSheetByName(TMP_PREFIX + sheetNameFor_(table));
-    if (!tmp || tmp.getLastRow() - 1 !== u.written) throw new Error('Cermin ' + table + ' tidak sesuai jumlah baris yang ditulis.');
+    var verifyBook = sheetBook_(u.ssId);
+    var tmp = findTab_(verifyBook, TMP_PREFIX + sheetNameFor_(table));
+    var lastRow = u.written + 1;
+    if (!tmp || tmp.rows < lastRow || sheetValues_(verifyBook, cells_(tmp, 'A' + lastRow,
+      sheetColumn_(tmp.cols) + Math.min(tmp.rows, lastRow + 1))).length !== 1) {
+      throw new Error('Cermin ' + table + ' tidak sesuai jumlah baris yang ditulis.');
+    }
   }
   u.rows[table] = u.written;
   u.ti += 1;
@@ -816,25 +897,27 @@ function stepTable_(state) {
 function stepReports_(state) {
   var unit = currentUnit_(state);
   var u = state.u;
-  var ss = SpreadsheetApp.openById(u.ssId);
-  var bSheet = ss.getSheetByName(TMP_PREFIX + sheetNameFor_('berkas'));
-  var iSheet = ss.getSheetByName(TMP_PREFIX + sheetNameFor_('item'));
+  var ss = sheetBook_(u.ssId);
+  var bSheet = findTab_(ss, TMP_PREFIX + sheetNameFor_('berkas'));
+  var iSheet = findTab_(ss, TMP_PREFIX + sheetNameFor_('item'));
   var nB = u.rows.berkas || 0;
   var nI = u.rows.item || 0;
-  var berkasObjs = bSheet && nB ? columnsToObjects_(readColumns_(bSheet, 1, ['BERKAS_ID', 'NO_BERKAS_DEFINITIF', 'STATUS_PEMINDAHAN', 'IS_DELETED', 'JUDUL_BERKAS', 'KODE_KLASIFIKASI_SNAPSHOT', 'KURUN_WAKTU', 'STATUS_RETENSI', 'NO_FILLING_KABINET', 'NO_LACI', 'BATAS_AKTIF', 'KLASIFIKASI_KEAMANAN_AKSES'], 2, nB), nB) : [];
-  var itemObjs = iSheet && nI ? columnsToObjects_(readColumns_(iSheet, 1, ['ITEM_ID', 'BERKAS_ID', 'NO_ITEM_DEFINITIF', 'NO_BERKAS_SNAPSHOT', 'NO_SURAT_DISPLAY', 'KODE_KLASIFIKASI_SNAPSHOT', 'URAIAN_LENGKAP', 'TAHUN_KURUN_WAKTU', 'JUMLAH_HALAMAN', 'TANGGAL_NASKAH', 'TINGKAT_PERKEMBANGAN', 'KLASIFIKASI_KEAMANAN_AKSES', 'DRIVE_FILE_URL', 'IS_DELETED'], 2, nI), nI) : [];
+  var berkasObjs = bSheet && nB ? columnsToObjects_(readColumns_(ss, bSheet, 1, ['BERKAS_ID', 'NO_BERKAS_DEFINITIF', 'STATUS_PEMINDAHAN', 'IS_DELETED', 'JUDUL_BERKAS', 'KODE_KLASIFIKASI_SNAPSHOT', 'KURUN_WAKTU', 'STATUS_RETENSI', 'NO_FILLING_KABINET', 'NO_LACI', 'BATAS_AKTIF', 'KLASIFIKASI_KEAMANAN_AKSES'], 2, nB), nB) : [];
+  var itemObjs = iSheet && nI ? columnsToObjects_(readColumns_(ss, iSheet, 1, ['ITEM_ID', 'BERKAS_ID', 'NO_ITEM_DEFINITIF', 'NO_BERKAS_SNAPSHOT', 'NO_SURAT_DISPLAY', 'KODE_KLASIFIKASI_SNAPSHOT', 'URAIAN_LENGKAP', 'TAHUN_KURUN_WAKTU', 'JUMLAH_HALAMAN', 'TANGGAL_NASKAH', 'TINGKAT_PERKEMBANGAN', 'KLASIFIKASI_KEAMANAN_AKSES', 'DRIVE_FILE_URL', 'IS_DELETED'], 2, nI), nI) : [];
   var rep = buildReports_(berkasObjs, itemObjs);
   var title = function (name) { return [['DAFTAR ' + name + ' – ' + unit.name + ' (' + unit.code + ')'], ['Dibuat otomatis ' + jakartaIso_(new Date(Date.now())) + '. HANYA-BACA: perubahan di sini tidak masuk ke aplikasi.'], ['']]; };
   [[REPORT_BERKAS_SHEET, 'BERKAS', REPORT_BERKAS_HEADERS, rep.berkasRows], [REPORT_ITEM_SHEET, 'ISI BERKAS', REPORT_ITEM_HEADERS, rep.itemRows]].forEach(function (spec) {
     var tmpName = TMP_PREFIX + spec[0];
-    var old = ss.getSheetByName(tmpName);
-    if (old) ss.deleteSheet(old);
-    var sh = ss.insertSheet(tmpName);
-    sh.hideSheet();
+    var old = findTab_(ss, tmpName);
+    if (old) removeTabs_(ss, [old]);
+    var sh = addTab_(ss, tmpName, true);
     var width = spec[2].length;
     var head = title(spec[1]).map(function (r) { return r.concat(new Array(width - 1).fill('')); });
-    writeBlock_(sh, 1, head.concat([spec[2]]));
-    writeBlock_(sh, REPORT_HEADER_ROW + 1, spec[3].map(function (r) { return r.map(safeCell_); }));
+    writeBlock_(ss, sh, 1, head.concat([spec[2]]));
+    // Keep report writes bounded in the same way as source-table pages.
+    for (var off = 0; off < spec[3].length; off += PAGE_LIMIT) {
+      writeBlock_(ss, sh, REPORT_HEADER_ROW + 1 + off, spec[3].slice(off, off + PAGE_LIMIT).map(function (r) { return r.map(safeCell_); }));
+    }
   });
   u.rep = { berkas: rep.berkasRows.length, item: rep.itemRows.length };
   state.step = 'SWAP';
@@ -843,39 +926,44 @@ function stepReports_(state) {
 function stepSwap_(state) {
   var unit = currentUnit_(state);
   var u = state.u;
-  var ss = SpreadsheetApp.openById(u.ssId);
+  var ss = sheetBook_(u.ssId);
   var order = [REPORT_BERKAS_SHEET, REPORT_ITEM_SHEET].concat(unitTables_(state, unit).map(sheetNameFor_));
-  // Setiap tab diganti satu per satu dan kemajuan disimpan (u.si): bila terputus, dilanjutkan tanpa menimpa tab yang sudah baru.
+  // The marker distinguishes a published tab from an old copy if the execution stopped before saving state.
+  var marker = sheetPublishedPrefix_ + u.runMirror;
   for (var i = u.si || 0; i < order.length; i++) {
     var name = order[i];
-    var tmp = ss.getSheetByName(TMP_PREFIX + name);
-    if (!tmp) {
-      tmp = ss.insertSheet(TMP_PREFIX + name); // tabel kosong: tab berisi catatan saja
-      writeBlock_(tmp, 1, [['(kosong)']]);
+    var tmp = findTab_(ss, TMP_PREFIX + name);
+    var cur = findTab_(ss, name);
+    if (!tmp && cur && cur.markers.indexOf(marker) !== -1) {
+      u.si = i + 1;
+      saveState_(state);
+      continue;
     }
-    var cur = ss.getSheetByName(name);
-    if (cur) cur.setName(OLD_PREFIX + name);
-    tmp.setName(name);
-    tmp.showSheet();
-    tmp.setFrozenRows(i < 2 ? REPORT_HEADER_ROW : 1);
-    tmp.setTabColor('#9AA0A6');
-    var prot = tmp.protect();
-    prot.setWarningOnly(true);
-    prot.setDescription('Cermin hanya-baca: diganti otomatis setiap malam; perubahan tidak masuk ke aplikasi.');
+    if (!tmp) {
+      tmp = addTab_(ss, TMP_PREFIX + name, true);
+      writeBlock_(ss, tmp, 1, [['(kosong)']]);
+    }
+    var requests = [updateTab_(tmp.id, { hidden: false }, 'hidden')];
+    if (cur) requests.push({ deleteSheet: { sheetId: cur.id } });
+    requests.push(updateTab_(tmp.id, { title: name, gridProperties: { frozenRowCount: i < 2 ? REPORT_HEADER_ROW : 1 },
+      tabColorStyle: { rgbColor: { red: 0.604, green: 0.627, blue: 0.651 } } }, 'title,gridProperties.frozenRowCount,tabColorStyle'));
+    requests.push(finishTab_(tmp, marker));
+    // Publish a tab atomically; no window with the previous tab renamed or removed alone.
+    sheetBatch_(ss, requests);
+    if (cur) ss.tabs.splice(ss.tabs.indexOf(cur), 1);
+    tmp.name = name;
+    tmp.markers.push(marker);
     u.si = i + 1;
     saveState_(state);
   }
   writeInfo_(state, ss);
-  // sisa tab lama ("~lama~"), tab sementara, dan sheet bawaan kosong dibersihkan
-  ss.getSheets().forEach(function (s) {
-    var n = s.getName();
-    if (/^(Sheet|Lembar)\s?\d+$/i.test(n) || n.indexOf(TMP_PREFIX) === 0) ss.deleteSheet(s);
-  });
-  order.concat([INFO_SHEET]).forEach(function (n, idx) {
-    var sh = ss.getSheetByName(n);
-    if (sh) { ss.setActiveSheet(sh); ss.moveActiveSheet(idx + 1); }
-  });
-  SpreadsheetApp.flush();
+  removeTabs_(ss, ss.tabs.filter(function (tab) {
+    return /^(Sheet|Lembar)\s?\d+$/i.test(tab.name) || tab.name === '~sementara' ||
+      tab.name.indexOf(TMP_PREFIX) === 0 || tab.name.indexOf(OLD_PREFIX) === 0;
+  }));
+  sheetBatch_(ss, order.concat([INFO_SHEET]).map(function (n, idx) {
+    return updateTab_(findTab_(ss, n).id, { index: idx }, 'index');
+  }));
   var stats = { tables: u.rows, reports: u.rep || {}, total_rows: sumRows_(u.rows) };
   apiJson_('RUN_FINISH', { run_id: u.runMirror, status: 'SUCCESS', stats: stats, mirror_url: sheetUrl_(u.ssId), mirror_file_id: u.ssId });
   u.mirrorDone = true;
@@ -891,8 +979,9 @@ function sumRows_(rows) {
 function writeInfo_(state, ss) {
   var unit = currentUnit_(state);
   var u = state.u;
-  removeSheetIfExists_(ss, INFO_SHEET);
-  var sh = ss.insertSheet(INFO_SHEET);
+  var old = findTab_(ss, INFO_SHEET);
+  if (old) removeTabs_(ss, [old]);
+  var sh = addTab_(ss, INFO_SHEET, false);
   var rows = [
     ['CERMIN CENTRAL FILE – ' + unit.code, ''],
     ['HANYA-BACA', 'Perubahan di sini tidak masuk ke aplikasi. Isi diganti seluruhnya setiap malam.'],
@@ -907,10 +996,9 @@ function writeInfo_(state, ss) {
   unitTables_(state, unit).forEach(function (t) { rows.push([sheetNameFor_(t), u.rows[t] || 0]); });
   rows.push([REPORT_BERKAS_SHEET, (u.rep && u.rep.berkas) || 0]);
   rows.push([REPORT_ITEM_SHEET, (u.rep && u.rep.item) || 0]);
-  writeBlock_(sh, 1, rows.map(function (r) { return [safeCell_(r[0]), safeCell_(r[1])]; }));
-  sh.setTabColor('#9AA0A6');
-  var p = sh.protect();
-  p.setWarningOnly(true);
+  writeBlock_(ss, sh, 1, rows.map(function (r) { return [safeCell_(r[0]), safeCell_(r[1])]; }));
+  sheetBatch_(ss, [updateTab_(sh.id, { tabColorStyle: { rgbColor: { red: 0.604, green: 0.627, blue: 0.651 } } },
+    'tabColorStyle'), finishTab_(sh, sheetPublishedPrefix_.trim())]);
 }
 
 function stepManifest_(state) {
@@ -1023,6 +1111,7 @@ function runJob_(options) {
     return 'LOCKED';
   }
   try {
+    sheetWriteTimes_ = [];
     deleteContinuationTriggers_();
     var state = loadState_();
     if (state && Date.now() - state.startedAt > STATE_STALE_MS) {

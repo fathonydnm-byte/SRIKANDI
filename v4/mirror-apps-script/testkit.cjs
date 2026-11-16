@@ -1,5 +1,5 @@
 // Test kit for Code.gs: loads the script in a vm context with fake Apps Script services
-// (Utilities, PropertiesService, LockService, ScriptApp, UrlFetchApp, SpreadsheetApp, Drive REST behind UrlFetchApp)
+// (Utilities, PropertiesService, LockService, ScriptApp, UrlFetchApp, Sheets advanced service, Drive REST behind UrlFetchApp)
 // and a controllable clock. Used by mirror.test.cjs and by v4/tools/restore-backup/test (round trip).
 //
 // Fidelity notes (what is FAKED, so tests do not over-claim):
@@ -136,11 +136,12 @@ function makeDrive(world) {
 // ---------------------------------------------------------------------------
 function makeSheetsBook(world) {
   const books = new Map();
-  const book = { books, formulaCells: 0, deletedSheets: [], hooks: {} };
+  const book = { books, formulaCells: 0, deletedSheets: [], hooks: {}, writes: [] };
+  let tabSeq = 0;
 
   function newSheet(ss, name) {
     if (ss.sheets.some((s) => s.name === name)) throw new Error(`A sheet with the name "${name}" already exists. Please enter another name.`);
-    const sh = { name, hidden: false, maxRows: 1000, maxCols: 26, cells: new Map(), protections: [], frozen: 0, tabColor: null };
+    const sh = { id: ++tabSeq, name, hidden: false, maxRows: 1000, maxCols: 26, cells: new Map(), protections: [], frozen: 0, tabColor: null };
     ss.sheets.push(sh);
     return sh;
   }
@@ -177,14 +178,14 @@ function makeSheetsBook(world) {
       getRange(r, c, nr = 1, nc = 1) {
         if (r < 1 || c < 1 || r + nr - 1 > sh.maxRows || c + nc - 1 > sh.maxCols) throw new Error('The coordinates of the range are outside the dimensions of the sheet.');
         return {
-          setValues(values) {
+          setValues(values, raw) {
             if (values.length !== nr || values.some((row) => row.length !== nc)) throw new Error('The number of rows or columns in the data does not match the number in the range.');
             values.forEach((row, i) => row.forEach((v, j) => {
               let val = v;
               if (typeof val === 'string') {
                 if (val.length > 50000) throw new Error('Your input contains more than the maximum of 50000 characters in a single cell.');
-                if (val.startsWith('=')) book.formulaCells++;
-                if (/^\d{4}-\d{2}-\d{2}$/.test(val)) val = new Date(`${val}T00:00:00Z`); // Sheets parses typed dates
+                if (!raw && val.startsWith('=')) book.formulaCells++;
+                if (!raw && /^\d{4}-\d{2}-\d{2}$/.test(val)) val = new Date(`${val}T00:00:00Z`); // Sheets parses typed dates
               }
               const key = `${r + i},${c + j}`;
               if (val === '' || val === null || val === undefined) sh.cells.delete(key); else sh.cells.set(key, val);
@@ -202,33 +203,117 @@ function makeSheetsBook(world) {
     return api;
   }
 
-  book.SpreadsheetApp = {
-    openById(id) {
-      const ss = books.get(id);
-      if (!ss) throw new Error(`Unexpected error while getting the method or property openById on object SpreadsheetApp.`);
-      const apis = new Map();
-      const wrap = (sh) => { if (!apis.has(sh)) apis.set(sh, sheetApi(ss, sh)); return apis.get(sh); };
-      const rawOf = (api) => ss.sheets.find((s) => wrap(s) === api);
-      return {
-        getId: () => id,
-        getUrl: () => `https://docs.google.com/spreadsheets/d/${id}/edit`,
-        getSheets: () => ss.sheets.map(wrap),
-        getSheetByName: (n) => { const s = ss.sheets.find((x) => x.name === n); return s ? wrap(s) : null; },
-        insertSheet(n) { return wrap(newSheet(ss, n)); },
-        deleteSheet(api) {
-          const raw = rawOf(api);
-          if (!raw) throw new Error('sheet not in this spreadsheet');
-          if (!raw.hidden && visible(ss).length === 1) throw new Error("You can't delete the last visible sheet.");
-          if (ss.sheets.length === 1) throw new Error("You can't delete the last sheet.");
-          ss.sheets.splice(ss.sheets.indexOf(raw), 1);
-          book.deletedSheets.push(raw.name);
-        },
-        setActiveSheet(api) { ss.active = rawOf(api); },
-        moveActiveSheet(pos) { const raw = ss.active; ss.sheets.splice(ss.sheets.indexOf(raw), 1); ss.sheets.splice(pos - 1, 0, raw); },
-      };
+  function getBook(id) {
+    const ss = books.get(id);
+    if (!ss) throw new Error('Spreadsheet not found in drive.file scope');
+    return ss;
+  }
+
+  function properties(ss, sh) {
+    return { sheetId: sh.id, title: sh.name, index: ss.sheets.indexOf(sh), hidden: sh.hidden,
+      gridProperties: { rowCount: sh.maxRows, columnCount: sh.maxCols, frozenRowCount: sh.frozen } };
+  }
+
+  function resolveRange(ss, range) {
+    const m = /^'((?:[^']|'')+)'!([A-Z]+)(\d+):([A-Z]+)(\d+)$/.exec(range);
+    if (!m) throw new Error('Invalid A1 range: ' + range);
+    const sh = ss.sheets.find((s) => s.name === m[1].replace(/''/g, "'"));
+    if (!sh) throw new Error('Missing tab in A1 range');
+    const col = (az) => [...az].reduce((n, v) => n * 26 + (v.charCodeAt(0) - 64), 0);
+    return sheetApi(ss, sh).getRange(Number(m[3]), col(m[2]), Number(m[5]) - Number(m[3]) + 1, col(m[4]) - col(m[2]) + 1);
+  }
+
+  function valueRange(id, range) {
+    const values = resolveRange(getBook(id), range).getValues().map((row) => {
+      while (row.length && row[row.length - 1] === '') row.pop();
+      return row;
+    });
+    while (values.length && !values[values.length - 1].length) values.pop();
+    return values.length ? { range, values } : { range };
+  }
+
+  book.Sheets = { Spreadsheets: {
+    get(id) {
+      const ss = getBook(id);
+      return { sheets: ss.sheets.map((sh) => ({
+        properties: properties(ss, sh), protectedRanges: sh.protections.map((p) => ({ ...p })),
+      })) };
     },
-    flush() {},
-  };
+    batchUpdate(body, id) {
+      const ss = getBook(id);
+      // Inject a crash before the atomic request applies, not between its operations.
+      for (const req of body.requests) {
+        const p = req.updateSheetProperties?.properties;
+        if (p?.title && book.hooks.beforeSetName) book.hooks.beforeSetName(ss.sheets.find((sh) => sh.id === p.sheetId)?.name, p.title);
+      }
+      const lookup = (sheetId) => {
+        const sh = ss.sheets.find((s) => s.id === sheetId);
+        if (!sh) throw new Error('Unknown sheetId');
+        return sh;
+      };
+      const replies = body.requests.map((req) => {
+        if (req.addSheet) {
+          const p = req.addSheet.properties;
+          const sh = newSheet(ss, p.title);
+          sh.hidden = p.hidden ?? false;
+          sh.maxRows = p.gridProperties?.rowCount ?? sh.maxRows;
+          sh.maxCols = p.gridProperties?.columnCount ?? sh.maxCols;
+          return { addSheet: { properties: properties(ss, sh) } };
+        }
+        if (req.deleteSheet) {
+          const sh = lookup(req.deleteSheet.sheetId);
+          if (!sh.hidden && visible(ss).length === 1) throw new Error("You can't delete the last visible sheet.");
+          ss.sheets.splice(ss.sheets.indexOf(sh), 1);
+          book.deletedSheets.push(sh.name);
+          return {};
+        }
+        if (req.updateSheetProperties) {
+          const { properties: p, fields } = req.updateSheetProperties;
+          const sh = lookup(p.sheetId);
+          for (const field of fields.split(',')) {
+            if (field === 'title') {
+              if (ss.sheets.some((x) => x !== sh && x.name === p.title)) throw new Error('Duplicate tab name');
+              sh.name = p.title;
+            } else if (field === 'hidden') {
+              if (p.hidden && visible(ss).length === 1 && !sh.hidden) throw new Error('You cannot hide the only visible sheet.');
+              sh.hidden = p.hidden;
+            } else if (field === 'gridProperties.rowCount') sh.maxRows = p.gridProperties.rowCount;
+            else if (field === 'gridProperties.columnCount') sh.maxCols = p.gridProperties.columnCount;
+            else if (field === 'gridProperties.frozenRowCount') sh.frozen = p.gridProperties.frozenRowCount;
+            else if (field === 'tabColorStyle') sh.tabColor = p.tabColorStyle;
+            else if (field === 'index') {
+              ss.sheets.splice(ss.sheets.indexOf(sh), 1);
+              ss.sheets.splice(p.index, 0, sh);
+            } else throw new Error('Unexpected property mask: ' + field);
+          }
+          return {};
+        }
+        if (req.addProtectedRange) {
+          const { range, warningOnly, description } = req.addProtectedRange.protectedRange;
+          lookup(range.sheetId).protections.push({ warningOnly, description });
+          return {};
+        }
+        throw new Error('Unsupported Sheets batch request: ' + JSON.stringify(req));
+      });
+      if (book.hooks.afterBatch) book.hooks.afterBatch(body, ss);
+      return { replies };
+    },
+    Values: {
+      get(id, range, opts) {
+        if (opts.valueRenderOption !== 'UNFORMATTED_VALUE') throw new Error('Expected unformatted reads');
+        return valueRange(id, range);
+      },
+      batchGet(id, opts) {
+        if (opts.valueRenderOption !== 'UNFORMATTED_VALUE') throw new Error('Expected unformatted reads');
+        return { valueRanges: opts.ranges.map((range) => valueRange(id, range)) };
+      },
+      update(body, id, range, opts) {
+        book.writes.push({ id, range, option: opts.valueInputOption });
+        resolveRange(getBook(id), range).setValues(body.values, opts.valueInputOption === 'RAW');
+        return {};
+      },
+    },
+  } };
 
   /** Test accessor: visible tabs with 2D values. */
   book.tabs = (id) => (books.get(id)?.sheets ?? []).map((s) => s.name);
@@ -325,7 +410,7 @@ function createWorld(options = {}) {
     Utilities,
     UrlFetchApp,
     ScriptApp,
-    SpreadsheetApp: world.sheetsBook.SpreadsheetApp,
+    Sheets: world.sheetsBook.Sheets,
     PropertiesService: { getScriptProperties: () => ({
       getProperty: (k) => (world.props.has(k) ? world.props.get(k) : null),
       setProperty: (k, v) => { world.props.set(k, String(v)); },

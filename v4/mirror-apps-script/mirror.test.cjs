@@ -257,16 +257,17 @@ test('state size guard and error sanitising keep secrets/URLs out', () => {
 // ===========================================================================
 // manifest / source hygiene
 // ===========================================================================
-test('manifest: scopes are exactly the four allowed, no web app; the source exposes no entry point', () => {
+test('manifest: only per-file access via Sheets v4, no web app or broad built-in service', () => {
   const m = JSON.parse(fs.readFileSync(path.join(__dirname, 'appsscript.json'), 'utf8'));
   assert.deepEqual(m.oauthScopes, [
-    'https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive.file',
+    'https://www.googleapis.com/auth/drive.file',
     'https://www.googleapis.com/auth/script.external_request', 'https://www.googleapis.com/auth/script.scriptapp',
   ]);
   assert.ok(!('webapp' in m), 'no web app block');
   assert.equal(m.timeZone, 'Asia/Jakarta');
   assert.ok(!/\bdoGet\b|\bdoPost\b/.test(SOURCE.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')), 'no doGet/doPost');
-  assert.ok(!/DriveApp|MailApp|GmailApp|DocumentApp|ContentService|HtmlService/.test(SOURCE.replace(/\/\*[\s\S]*?\*\//g, '')), 'only the services the scopes cover');
+  assert.deepEqual(m.dependencies.enabledAdvancedServices, [{ userSymbol: 'Sheets', serviceId: 'sheets', version: 'v4' }]);
+  assert.ok(!/SpreadsheetApp|DriveApp|MailApp|GmailApp|DocumentApp|ContentService|HtmlService/.test(SOURCE.replace(/\/\*[\s\S]*?\*\//g, '')), 'only the services the scopes cover');
   assert.ok(!/\.setSharing|addEditor|addViewer|setPermission/.test(SOURCE), 'never changes sharing');
   assert.ok(!/drive\/v3\/(permissions|about)|files\/[^'"]*\/(copy|export)|\/emptyTrash/.test(SOURCE), 'no permission/copy/export/emptyTrash');
 });
@@ -354,6 +355,8 @@ test('full night: mirror + backup for every unit, counts match, nothing half-wri
     assert.equal(raw.protections[0].warningOnly, true, t);
   }
   assert.equal(w.sheetsBook.formulaCells, 0, 'no cell is ever interpreted as a formula');
+  assert.ok(w.sheetsBook.writes.length > 0 && w.sheetsBook.writes.every((write) => write.option === 'RAW'));
+  assert.throws(() => w.call('sheetBook_', 'spreadsheet-outside-the-project'), /drive.file scope/);
   const items = w.sheetsBook.read(ss[0].id, 'DB_ITEM');
   assert.equal(items.length, 2301);
   assert.equal(items[0][0], 'ITEM_ID');
@@ -571,6 +574,25 @@ test('heavy phases (reports / swap / manifest) are not started with less than tw
   // the continuation starts with a fresh budget and finishes
   assert.equal(w.call('continueMirror'), 'DONE');
   assert.equal(w.triggers.length, 0);
+});
+
+test('after Sheets publishes a tab but execution stops before saving, replay keeps it intact', () => {
+  const w = setup({ items: 20 });
+  const ctx = w.ctx;
+  const state = ctx.freshState_(w.clock.now);
+  while (state.step !== 'SWAP') { ctx.stepOnce_(state); ctx.saveState_(state); }
+  const id = state.u.ssId;
+  w.sheetsBook.hooks.afterBatch = (body) => {
+    if (body.requests.some((r) => r.updateSheetProperties?.properties.title === 'DAFTAR BERKAS')) throw new Error('stopped after commit');
+  };
+  assert.throws(() => ctx.stepSwap_(state), /stopped after commit/);
+  w.sheetsBook.hooks.afterBatch = null;
+  const firstTab = w.sheetsBook.raw(id, 'DAFTAR BERKAS');
+  assert.ok(firstTab);
+  assert.equal(w.call('continueMirror'), 'DONE');
+  assert.equal(w.sheetsBook.raw(id, 'DAFTAR BERKAS').id, firstTab.id);
+  assert.equal(w.sheetsBook.raw(id, 'DAFTAR BERKAS').protections.length, 1);
+  assert.equal(w.sheetsBook.read(id, 'DAFTAR BERKAS')[4][0], 1);
 });
 
 test('swap interrupted halfway (execution killed) resumes without overwriting finished tabs with placeholders', () => {

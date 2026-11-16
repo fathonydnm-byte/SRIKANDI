@@ -4,12 +4,13 @@ Proyek Apps Script **kedua** (terpisah dari gerbang Drive) yang setiap malam: (1
 
 > **Jangan pernah** menempel `JOB_SECRET` di chat, email, atau repo. Salin langsung dari Apps Script ke Cloudflare.
 
-**Terus terang soal keamanan data:** cermin dan paket backup **tidak dienkripsi** di lapisan ini. Keduanya berada di Drive akun instansi pribadi yang sama dengan seluruh PDF arsip. Kolom data pribadi (NIP/NIK, kontak) di dalam paket tetap terenkripsi seperti di database; cermin spreadsheet tidak memuatnya sama sekali. Siapa pun yang punya akses ke akun instansi dapat membaca cermin.
+**Keamanan data:** paket menggunakan perlindungan bawaan Google Drive akun instansi, tanpa enkripsi tambahan dari aplikasi. Kolom data pribadi (NIP/NIK, kontak) di dalam paket tetap terenkripsi seperti di database; cermin spreadsheet tidak memuatnya sama sekali. Siapa pun yang punya akses ke akun instansi dapat membaca cermin.
 
 ## 1. Buat proyek kedua
 1. Masuk sebagai akun instansi `bag.umum@uinsa.ac.id`. Buka <https://script.google.com> → **Proyek baru**. Namai `Central File – Cermin & Backup`.
 2. Hapus isi `Code.gs`, tempel seluruh isi [`Code.gs`](Code.gs). Simpan.
-3. ⚙️ **Setelan proyek** → centang **Tampilkan file manifes "appsscript.json"**. Ganti isinya dengan [`appsscript.json`](appsscript.json). Simpan. (Izin yang diminta hanya: spreadsheet, file buatan proyek ini di Drive, panggilan keluar, pemicu. Proyek ini tidak bisa membaca arsip PDF lama dan **tidak punya** aplikasi web.)
+3. ⚙️ **Setelan proyek** → centang **Tampilkan file manifes "appsscript.json"**. Ganti isinya dengan [`appsscript.json`](appsscript.json). Simpan. (Manifes memasang layanan lanjutan **Google Sheets API v4** dan meminta `drive.file`, panggilan keluar, serta pemicu. Jangan tambahkan izin umum `spreadsheets` atau `drive`. Proyek hanya mencari spreadsheet cermin bertanda miliknya dan **tidak punya** aplikasi web.)
+4. Bila memakai proyek Google Cloud standar, aktifkan **Google Sheets API** di proyek tersebut sebelum uji. Pada proyek bawaan Apps Script, penambahan layanan lanjutan mengaktifkan API terkait. Bila akun sebelumnya sudah memberi izin cakupan lama pada proyek cermin, hapus pemberian izin proyek **cermin** itu dan beri izin ulang setelah kedua file diperbarui.
 
 ## 2. Buat secret dan beri izin
 1. Pilih fungsi **`setupMirror`** → **Jalankan** → **Tinjau izin** → akun instansi → **Lanjutan** → **Buka … (tidak aman)** → **Izinkan**.
@@ -18,8 +19,8 @@ Proyek Apps Script **kedua** (terpisah dari gerbang Drive) yang setiap malam: (1
 
 ## 3. Alamat aplikasi dan pemicu malam
 1. Di editor, buka fungsi `aturAlamatAplikasi`, ganti teks `https://GANTI-DENGAN-ALAMAT-APLIKASI.pages.dev` dengan alamat aplikasi Anda (wajib `https`, tanpa jalur), simpan, **Jalankan** (atau tambahkan properti skrip `BASE_URL` di Setelan proyek).
-2. Jalankan **`installNightlyTrigger`**. Aman diulang: hanya satu pemicu harian, antara pukul 01:00 dan 02:00 WIB.
-3. Jalankan **`runNow`** sekali untuk mencoba. Bila pekerjaan melebihi batas 6 menit Apps Script, ia berhenti dan **melanjutkan sendiri** 1 menit kemudian (unit banyak = beberapa putaran; tidak perlu diapa-apakan). `statusMirror` menampilkan posisinya.
+2. Setelah `JOB_SECRET` tersedia pada deployment staging, jalankan **`runNow`** sekali untuk mencoba. Bila pekerjaan melebihi batas 6 menit Apps Script, ia berhenti dan **melanjutkan sendiri** 1 menit kemudian (unit banyak = beberapa putaran; tidak perlu diapa-apakan). `statusMirror` menampilkan posisinya.
+3. Setelah cermin dan paket pertama diverifikasi, jalankan **`installNightlyTrigger`**. Aman diulang: hanya satu pemicu harian, antara pukul 01:00 dan 02:00 WIB.
 
 ## 4. Di mana hasilnya
 Di Drive akun instansi, folder **CENTRAL FILE V4** (dibuat proyek ini; bisa ada dua folder bernama sama karena gerbang Drive membuat folder sendiri — proyek ini hanya memakai miliknya):
