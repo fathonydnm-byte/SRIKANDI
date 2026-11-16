@@ -266,7 +266,10 @@ test('manifest: only per-file access via Sheets v4, no web app or broad built-in
   assert.ok(!('webapp' in m), 'no web app block');
   assert.equal(m.timeZone, 'Asia/Jakarta');
   assert.ok(!/\bdoGet\b|\bdoPost\b/.test(SOURCE.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')), 'no doGet/doPost');
-  assert.deepEqual(m.dependencies.enabledAdvancedServices, [{ userSymbol: 'Sheets', serviceId: 'sheets', version: 'v4' }]);
+  assert.deepEqual(m.dependencies.enabledAdvancedServices, [
+    { userSymbol: 'Sheets', serviceId: 'sheets', version: 'v4' },
+    { userSymbol: 'Drive', serviceId: 'drive', version: 'v3' },
+  ]);
   assert.ok(!/SpreadsheetApp|DriveApp|MailApp|GmailApp|DocumentApp|ContentService|HtmlService/.test(SOURCE.replace(/\/\*[\s\S]*?\*\//g, '')), 'only the services the scopes cover');
   assert.ok(!/\.setSharing|addEditor|addViewer|setPermission/.test(SOURCE), 'never changes sharing');
   assert.ok(!/drive\/v3\/(permissions|about)|files\/[^'"]*\/(copy|export)|\/emptyTrash/.test(SOURCE), 'no permission/copy/export/emptyTrash');

@@ -9,13 +9,14 @@ Proyek Apps Script **kedua** (terpisah dari gerbang Drive) yang setiap malam: (1
 ## 1. Buat proyek kedua
 1. Masuk sebagai akun instansi `bag.umum@uinsa.ac.id`. Buka <https://script.google.com> → **Proyek baru**. Namai `Central File – Cermin & Backup`.
 2. Hapus isi `Code.gs`, tempel seluruh isi [`Code.gs`](Code.gs). Simpan.
-3. ⚙️ **Setelan proyek** → centang **Tampilkan file manifes "appsscript.json"**. Ganti isinya dengan [`appsscript.json`](appsscript.json). Simpan. (Manifes memasang layanan lanjutan **Google Sheets API v4** dan meminta `drive.file`, panggilan keluar, serta pemicu. Jangan tambahkan izin umum `spreadsheets` atau `drive`. Proyek hanya mencari spreadsheet cermin bertanda miliknya dan **tidak punya** aplikasi web.)
-4. Bila memakai proyek Google Cloud standar, aktifkan **Google Sheets API** di proyek tersebut sebelum uji. Pada proyek bawaan Apps Script, penambahan layanan lanjutan mengaktifkan API terkait. Bila akun sebelumnya sudah memberi izin cakupan lama pada proyek cermin, hapus pemberian izin proyek **cermin** itu dan beri izin ulang setelah kedua file diperbarui.
+3. ⚙️ **Setelan proyek** → centang **Tampilkan file manifes "appsscript.json"**. Ganti isinya dengan [`appsscript.json`](appsscript.json). Simpan. (Manifes memasang layanan lanjutan **Google Sheets API v4** dan **Google Drive API v3** dan meminta `drive.file`, panggilan keluar, serta pemicu. Jangan tambahkan izin umum `spreadsheets` atau `drive`. Proyek hanya mencari spreadsheet cermin bertanda miliknya dan **tidak punya** aplikasi web.)
+4. Bila memakai proyek Google Cloud standar, aktifkan **Google Sheets API** dan **Google Drive API** di proyek tersebut sebelum uji. Pada proyek bawaan Apps Script, penambahan layanan lanjutan mengaktifkan API terkait. Bila akun sebelumnya sudah memberi izin cakupan lama pada proyek cermin, hapus pemberian izin proyek **cermin** itu dan beri izin ulang setelah kedua file diperbarui.
 
 ## 2. Buat secret dan beri izin
 1. Pilih fungsi **`setupMirror`** → **Jalankan** → **Tinjau izin** → akun instansi → **Lanjutan** → **Buka … (tidak aman)** → **Izinkan**.
 2. Buka **Log eksekusi**: ada baris `JOB_SECRET baru …: <96 karakter>`. Salin 96 karakter itu.
-3. Cloudflare → Workers & Pages → proyek aplikasi → **Settings → Variables and Secrets** → **Add**: nama `JOB_SECRET`, tipe **Secret**, tempel nilainya (Production, dan Preview bila dipakai). Pastikan `SUPABASE_SERVICE_ROLE_KEY` juga sudah ada sebagai Secret. **Deploy ulang** agar terbaca.
+3. Pastikan tes akses Drive berhasil. Jika masih `HTTP 403` dan layanan **Drive API v3** belum terlihat di panel **Services**, tambahkan layanan itu, simpan, lalu jalankan kembali `setupMirror`. Secret yang sudah tersimpan tidak diganti.
+4. Cloudflare → Workers & Pages → proyek aplikasi → **Settings → Variables and Secrets** → **Add**: nama `JOB_SECRET`, tipe **Secret**, tempel nilainya (Production, dan Preview bila dipakai). Pastikan `SUPABASE_SERVICE_ROLE_KEY` juga sudah ada sebagai Secret. **Deploy ulang** agar terbaca.
 
 ## 3. Alamat aplikasi dan pemicu malam
 1. Di editor, buka fungsi `aturAlamatAplikasi`, ganti teks `https://GANTI-DENGAN-ALAMAT-APLIKASI.pages.dev` dengan alamat aplikasi Anda (wajib `https`, tanpa jalur), simpan, **Jalankan** (atau tambahkan properti skrip `BASE_URL` di Setelan proyek).
