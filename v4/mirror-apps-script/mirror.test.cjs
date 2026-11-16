@@ -564,8 +564,8 @@ test('crash between "part uploaded" and "state saved": the replayed page overwri
 });
 
 test('heavy phases (reports / swap / manifest) are not started with less than two minutes left', () => {
-  // every API call costs 1 s of fake time; the first REPORTS phase is reached after more than 30 s with less than 120 s of a 150 s budget left
-  const w = setup({ items: 20, worldOpts: { fetchFault: (url, _p, world) => { if (url.endsWith('/api/jobs/export')) world.clock.now += 1000; return null; } } });
+  // Make export calls slow enough that the first REPORTS phase is reached with less than 120 s left.
+  const w = setup({ items: 20, worldOpts: { fetchFault: (url, _p, world) => { if (url.endsWith('/api/jobs/export')) world.clock.now += 2000; return null; } } });
   const outcome = w.ctx.runJob_({ budgetMs: 150000 });
   assert.equal(outcome, 'CONTINUE');
   const st = JSON.parse(w.props.get('JOB_STATE'));

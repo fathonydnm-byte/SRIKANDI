@@ -639,7 +639,7 @@ function ensureSpreadsheet_(code, folderId) {
 // ===========================================================================
 // SHEETS
 // ===========================================================================
-// OAuth is explicitly limited to drive.file in the manifest. Never fall back to SpreadsheetApp.
+// OAuth is explicitly limited to drive.file in the manifest.
 var sheetWriteTimes_ = [];
 var sheetPublishedPrefix_ = 'Cermin hanya-baca: diganti otomatis setiap malam; perubahan tidak masuk ke aplikasi. ';
 
@@ -880,7 +880,7 @@ function stepTable_(state) {
     return;
   }
   if (u.mirror && u.written > 0) {
-    var verifyBook = sheetBook_(u.ssId);
+    var verifyBook = book || sheetBook_(u.ssId);
     var tmp = findTab_(verifyBook, TMP_PREFIX + sheetNameFor_(table));
     var lastRow = u.written + 1;
     if (!tmp || tmp.rows < lastRow || sheetValues_(verifyBook, cells_(tmp, 'A' + lastRow,

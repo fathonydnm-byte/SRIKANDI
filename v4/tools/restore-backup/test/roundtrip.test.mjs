@@ -116,8 +116,15 @@ test('the allow-list of the REAL server module equals the restore tool list and 
 });
 
 test('the nightly job (real Code.gs + real jobsExport.ts + real Postgres) runs to completion', async () => {
-  assert.equal(world.call('runNow'), 'DONE');
-  assert.equal(world.triggers.length, 0, 'finished within one execution (no continuation)');
+  let outcome = world.call('runNow');
+  for (let i = 0; outcome === 'CONTINUE' && i < 10; i++) {
+    assert.equal(world.triggers.length, 1, 'one bounded continuation for unfinished work');
+    assert.equal(world.triggers[0].handler, 'continueMirror');
+    world.clock.now += world.triggers[0].afterMs;
+    outcome = world.call('continueMirror');
+  }
+  assert.equal(outcome, 'DONE');
+  assert.equal(world.triggers.length, 0, 'no continuation after all units finish');
   const { rows: runs } = await src.query('select kind, unit_id, status, error, stats from public.backup_runs order by started_at');
   assert.equal(runs.length, 5, 'MIRROR+BACKUP for two units, BACKUP for the cross-unit pseudo unit');
   assert.deepEqual(runs.map((r) => r.status), Array(5).fill('SUCCESS'), JSON.stringify(runs.map((r) => r.error)));
