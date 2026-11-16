@@ -6,10 +6,6 @@ name: v4 deploy (staging)
 # Hanya dijalankan manual setelah review, supaya commit WIP tidak ikut tayang di staging.
 on:
   workflow_dispatch:
-  # One-time S3 staging release, after schema 0022 is recorded.
-  push:
-    branches: [release/v4-s3-backup-staging-20261117]
-    paths: [.github/workflows/v4-deploy.yml]
 
 concurrency:
   group: v4-deploy
