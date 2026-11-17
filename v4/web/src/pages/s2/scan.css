@@ -1,0 +1,13 @@
+.scan-dialog { width: min(94vw, 42rem); max-height: min(90dvh, 52rem); padding: 1rem; border: 1px solid var(--line); border-radius: var(--radius-md); color: var(--ink); }
+.scan-dialog::backdrop { background: #05291dcc; }
+.scan-dialog p, .scan-dialog h2 { margin: 0; }
+.scan-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.scan-picker { position: relative; }
+.scan-picker input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.scan-picker:focus-within { outline: 2px solid var(--navy); outline-offset: 2px; }
+.scan-picker[aria-disabled='true'] { opacity: .55; pointer-events: none; }
+.scan-pages { padding: 0; margin: 0; display: grid; gap: .5rem; }
+.scan-pages li { display: grid; grid-template-columns: 5rem minmax(0,1fr); gap: .6rem; align-items: center; border-top: 1px solid var(--line); padding-top: .5rem; }
+.scan-photo { display: grid; place-items: center; width: 5rem; height: 5rem; background: var(--bg); overflow: hidden; }
+.scan-photo img { width: 100%; height: 100%; object-fit: contain; }
+.scan-page-actions { gap: .35rem; }
