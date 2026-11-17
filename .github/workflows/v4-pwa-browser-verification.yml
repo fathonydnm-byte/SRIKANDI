@@ -1,0 +1,33 @@
+name: Verify v4 PWA rollout with Chromium
+on:
+  push:
+    branches: [test/v4-stale-dashboard-browser]
+permissions:
+  contents: read
+jobs:
+  rollout:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --no-audit --no-fund
+        working-directory: v4/web
+      - run: |
+          cp vite.config.ts "$RUNNER_TEMP/cf-next-vite.ts"
+          git show ff0034b44e6eae5105397aa45f0edd5cf29000ec:v4/web/vite.config.ts > vite.config.ts
+          npm run build
+          mv dist ../dist-cache-baseline
+          mv "$RUNNER_TEMP/cf-next-vite.ts" vite.config.ts
+          npm run build
+        working-directory: v4/web
+      - run: |
+          npm install --prefix "$RUNNER_TEMP/cf-pwa-check" --no-audit --no-fund playwright@1.62.1
+          export CF_PLAYWRIGHT_MODULE="$RUNNER_TEMP/cf-pwa-check/node_modules/playwright/index.mjs"
+          export CF_CHROME_BIN="$(command -v google-chrome || command -v chromium)"
+          export CF_PWA_WORKDIR="$PWD/v4"
+          node v4/web/scripts/verify-pwa-rollout.mjs
