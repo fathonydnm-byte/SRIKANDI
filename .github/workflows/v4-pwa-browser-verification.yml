@@ -20,9 +20,11 @@ jobs:
       - run: |
           cp vite.config.ts "$RUNNER_TEMP/cf-next-vite.ts"
           git show ff0034b44e6eae5105397aa45f0edd5cf29000ec:v4/web/vite.config.ts > vite.config.ts
+          sed -i 's|<head>|<head><meta name="release-test" content="dashboard-old">|' index.html
           npm run build
           mv dist ../dist-cache-baseline
           mv "$RUNNER_TEMP/cf-next-vite.ts" vite.config.ts
+          sed -i "s/dashboard-old/dashboard-fixed/" index.html
           npm run build
         working-directory: v4/web
       - run: |

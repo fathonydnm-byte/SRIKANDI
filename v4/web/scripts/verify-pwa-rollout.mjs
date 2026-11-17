@@ -14,7 +14,9 @@ const server = createServer(async (req, res) => {
     const dir=join(workdir,revision<=1?'dist-cache-baseline':'web/dist');
     const f=extname(p)?p.slice(1):'index.html';
     let body=await readFile(join(dir,f));
-    if (f==='index.html') body=Buffer.from(body.toString().replace(/<head[^>]*>/i,s=>s+'<meta name="release-test" content="'+marker[revision]+'">'));
+    if (f==='index.html' && (revision===1 || revision===3)) {
+      body=Buffer.from(body.toString().replace(/(<meta name="release-test" content=")[^"]+(")/, (_, start, end) => start+marker[revision]+end));
+    }
     if (f==='sw.js'&&revision===1) body=Buffer.concat([body,Buffer.from('\n// new deployment using old worker configuration\n')]);
     res.writeHead(200,{'Content-Type':types[extname(f)]??'application/octet-stream','Cache-Control':'no-store'});
     res.end(body);
