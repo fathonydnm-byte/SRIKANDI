@@ -345,7 +345,7 @@ In Sprint 3 it reads `berkas.status_peminjaman` / `item.status_peminjaman` (≠ 
    - Only the v4 folder, whose name `<no>_<judul>` would otherwise be stale, gets a `RENAME_FOLDER` task. See question 3.
 8. **Replacement allowed on an item without a PDF**, as in 3.x Edit. For this case `ITEM_PDF` (Alih Media) remains the normal path.
 9. **Release of receipt lines** clears only lines whose `item_id_definitif` is the cancelled item, or empty. This is defensive against a line already re-filed elsewhere; 3.x matched by `PENERIMAAN_ITEM_ID` only.
-10. **Renumber history timestamps.** `app.renumber_unit` is re-created in 0019 unchanged except that the batch id and `riwayat_nomor.created_at` / `dikonfirmasi_at` use `clock_timestamp()` instead of `now()`.
+10. **Renumber history timestamps.** `app.renumber_unit` is re-created in 0019 unchanged except that the batch id and `riwayat_nomor.created_at` / `dikonfirmasi_at` use `clock_timestamp()` instead of `now()`. Migration 0023 sets the affected flag in the same keyed update as the new number so the hosted API's safe-update guard stays enabled.
     - With `now()` (transaction start), an operation that waited for the unit lock wrote history that sorted *before* the operation it waited for.
     - The S3 concurrency test caught this ("latest history row = current number" failed).
 11. **No report rebuild step.** 3.x called `rebuildReports_()` after every edit or cancel. v4 reports are computed from the tables, so there is nothing to refresh and no `REPORT_WARNING`.

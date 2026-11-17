@@ -257,16 +257,20 @@ test('state size guard and error sanitising keep secrets/URLs out', () => {
 // ===========================================================================
 // manifest / source hygiene
 // ===========================================================================
-test('manifest: scopes are exactly the four allowed, no web app; the source exposes no entry point', () => {
+test('manifest: only per-file access via Sheets v4, no web app or broad built-in service', () => {
   const m = JSON.parse(fs.readFileSync(path.join(__dirname, 'appsscript.json'), 'utf8'));
   assert.deepEqual(m.oauthScopes, [
-    'https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive.file',
+    'https://www.googleapis.com/auth/drive.file',
     'https://www.googleapis.com/auth/script.external_request', 'https://www.googleapis.com/auth/script.scriptapp',
   ]);
   assert.ok(!('webapp' in m), 'no web app block');
   assert.equal(m.timeZone, 'Asia/Jakarta');
   assert.ok(!/\bdoGet\b|\bdoPost\b/.test(SOURCE.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')), 'no doGet/doPost');
-  assert.ok(!/DriveApp|MailApp|GmailApp|DocumentApp|ContentService|HtmlService/.test(SOURCE.replace(/\/\*[\s\S]*?\*\//g, '')), 'only the services the scopes cover');
+  assert.deepEqual(m.dependencies.enabledAdvancedServices, [
+    { userSymbol: 'Sheets', serviceId: 'sheets', version: 'v4' },
+    { userSymbol: 'Drive', serviceId: 'drive', version: 'v3' },
+  ]);
+  assert.ok(!/SpreadsheetApp|DriveApp|MailApp|GmailApp|DocumentApp|ContentService|HtmlService/.test(SOURCE.replace(/\/\*[\s\S]*?\*\//g, '')), 'only the services the scopes cover');
   assert.ok(!/\.setSharing|addEditor|addViewer|setPermission/.test(SOURCE), 'never changes sharing');
   assert.ok(!/drive\/v3\/(permissions|about)|files\/[^'"]*\/(copy|export)|\/emptyTrash/.test(SOURCE), 'no permission/copy/export/emptyTrash');
 });
@@ -354,6 +358,8 @@ test('full night: mirror + backup for every unit, counts match, nothing half-wri
     assert.equal(raw.protections[0].warningOnly, true, t);
   }
   assert.equal(w.sheetsBook.formulaCells, 0, 'no cell is ever interpreted as a formula');
+  assert.ok(w.sheetsBook.writes.length > 0 && w.sheetsBook.writes.every((write) => write.option === 'RAW'));
+  assert.throws(() => w.call('sheetBook_', 'spreadsheet-outside-the-project'), /drive.file scope/);
   const items = w.sheetsBook.read(ss[0].id, 'DB_ITEM');
   assert.equal(items.length, 2301);
   assert.equal(items[0][0], 'ITEM_ID');
@@ -561,16 +567,41 @@ test('crash between "part uploaded" and "state saved": the replayed page overwri
 });
 
 test('heavy phases (reports / swap / manifest) are not started with less than two minutes left', () => {
-  // every API call costs 1 s of fake time; the first REPORTS phase is reached after more than 30 s with less than 120 s of a 150 s budget left
-  const w = setup({ items: 20, worldOpts: { fetchFault: (url, _p, world) => { if (url.endsWith('/api/jobs/export')) world.clock.now += 1000; return null; } } });
+  // Make export calls slow enough that the first REPORTS phase is reached with less than 120 s left.
+  const w = setup({ items: 20, worldOpts: { fetchFault: (url, _p, world) => { if (url.endsWith('/api/jobs/export')) world.clock.now += 2000; return null; } } });
   const outcome = w.ctx.runJob_({ budgetMs: 150000 });
   assert.equal(outcome, 'CONTINUE');
   const st = JSON.parse(w.props.get('JOB_STATE'));
   assert.equal(st.step, 'REPORTS', 'paused BEFORE the heavy phase');
   assert.equal(w.triggers.length, 1);
-  // the continuation starts with a fresh budget and finishes
-  assert.equal(w.call('continueMirror'), 'DONE');
+  // Each continuation has a fresh budget; the rest of the units may need more than one.
+  let resumed = 'CONTINUE';
+  for (let i = 0; resumed === 'CONTINUE' && i < 10; i++) {
+    assert.equal(w.triggers.length, 1);
+    w.clock.now += w.triggers[0].afterMs;
+    resumed = w.call('continueMirror');
+  }
+  assert.equal(resumed, 'DONE');
   assert.equal(w.triggers.length, 0);
+});
+
+test('after Sheets publishes a tab but execution stops before saving, replay keeps it intact', () => {
+  const w = setup({ items: 20 });
+  const ctx = w.ctx;
+  const state = ctx.freshState_(w.clock.now);
+  while (state.step !== 'SWAP') { ctx.stepOnce_(state); ctx.saveState_(state); }
+  const id = state.u.ssId;
+  w.sheetsBook.hooks.afterBatch = (body) => {
+    if (body.requests.some((r) => r.updateSheetProperties?.properties.title === 'DAFTAR BERKAS')) throw new Error('stopped after commit');
+  };
+  assert.throws(() => ctx.stepSwap_(state), /stopped after commit/);
+  w.sheetsBook.hooks.afterBatch = null;
+  const firstTab = w.sheetsBook.raw(id, 'DAFTAR BERKAS');
+  assert.ok(firstTab);
+  assert.equal(w.call('continueMirror'), 'DONE');
+  assert.equal(w.sheetsBook.raw(id, 'DAFTAR BERKAS').id, firstTab.id);
+  assert.equal(w.sheetsBook.raw(id, 'DAFTAR BERKAS').protections.length, 1);
+  assert.equal(w.sheetsBook.read(id, 'DAFTAR BERKAS')[4][0], 1);
 });
 
 test('swap interrupted halfway (execution killed) resumes without overwriting finished tabs with placeholders', () => {
@@ -699,6 +730,35 @@ test('no request ever leaves for a host other than the app and the Drive API; Dr
   for (const f of w.fetchLog) assert.ok(f.url.startsWith('https://app.example.pages.dev/api/jobs/export') || f.url.startsWith('https://www.googleapis.com/'), f.url);
   assert.ok(w.fetchLog.filter((f) => f.url.includes('googleapis')).every((f) => f.headers.Authorization === 'Bearer ya29.FAKE_OAUTH'));
   assert.ok(w.fetchLog.filter((f) => f.url.includes('/api/jobs/export')).every((f) => !f.headers || !f.headers.Authorization), 'the app never receives the Drive token');
+});
+
+test('root lookup on a fresh install and after cache loss reuses only the mirror folder', () => {
+  const w = setup({ items: 5 });
+  const name = 'CENTRAL FILE V4';
+  const otherId = JSON.parse(w.drive.handle('post', 'https://www.googleapis.com/drive/v3/files', {
+    payload: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder', appProperties: { cfApp: 'gateway' } }),
+  }).text).id;
+  assert.equal(w.call('runNow'), 'DONE');
+  const root = w.drive.byName(name).find((f) => f.appProperties.cfApp === 'cermin');
+  assert.ok(root);
+  assert.equal(w.drive.children(otherId).length, 0);
+
+  w.props.delete('DRIVE_FOLDERS');
+  assert.equal(w.call('runNow'), 'DONE');
+  assert.deepEqual(w.drive.byName(name).map((f) => f.id).sort(), [otherId, root.id].sort());
+});
+
+test('Drive errors report the operation and safe reason without leaking the provider message', () => {
+  const w = setup({ items: 5 });
+  const handle = w.drive.handle;
+  w.drive.handle = (method, url, params) => {
+    if (new URL(url).searchParams.get('q')?.includes('CENTRAL FILE V4')) {
+      return { code: 404, text: JSON.stringify({ error: { message: 'private Drive ID', errors: [{ reason: 'notFound' }] } }) };
+    }
+    return handle(method, url, params);
+  };
+  assert.throws(() => w.call('runNow'), /unit gagal/);
+  assert.equal(runsOf(w, 'MIRROR', UNIT_A)[0].error, 'Drive: cari folder utama ditolak (HTTP 404 notFound)');
 });
 
 test('Drive listing pagination (pageToken) is followed', () => {

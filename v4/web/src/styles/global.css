@@ -2106,6 +2106,13 @@ a.stat-card:focus-visible {
 .form-actions-bar .btn-primary {
   min-width: 180px;
 }
+.registration-actions > .alert {
+  flex: 1 0 100%;
+  margin: 0;
+}
+.registration-section {
+  scroll-margin-top: calc(var(--topbar-h) + 12px);
+}
 .save-stage {
   flex: 1 1 200px;
   display: inline-flex;

@@ -113,7 +113,7 @@ Angka tes adalah hasil yang dijalankan ulang orchestrator, kecuali disebut lain.
 | S1 Baca + impor | Importer spreadsheet lama, Pencarian Arsip, detail item/berkas, dashboard setara 3.x, unduhan PDF aman lewat gerbang | Selesai, tayang; pemilik sudah membuka PDF dari HP |
 | S2 Registrasi | Penerimaan + tanda terima + cetak, antrean, pemberkasan, input manual, penomoran definitif, Alih Media, jembatan unggah | Selesai, tayang; unggah ke Drive asli **belum dikonfirmasi** |
 | S3 bagian 1 | Master Log, Cetak Lidah Folder, Perubahan, Koreksi & Pembatalan, Karantina, Kelola Pengguna | Selesai, tayang; beberapa alur belum diuji pemilik (§6) |
-| S3 bagian 2 | Cermin spreadsheet, backup harian, alat pemulihan, halaman "Cadangan & Cermin" | **Kode selesai dan semua tes lulus, tetapi BELUM dipasang**: migrasi 0022 belum di staging, web belum di-deploy, proyek Apps Script cermin belum dibuat (§7) |
+| S3 bagian 2 | Cermin spreadsheet, backup harian, alat pemulihan, halaman "Cadangan & Cermin" | **Staging: eksekusi manual dan pemulihan paket asli lulus**; jadwal otomatis menunggu verifikasi (§7) |
 | S4 Peminjaman | Pinjam/kembali multi-berkas, Out Indicator A5, Berita Acara Google Docs | Belum mulai |
 | S5 Retensi + RC | Monitoring, usul pemindahan, tiga dokumen, outbox, polling keputusan | Belum mulai |
 | S6 Scan + isi | Scan kamera, OCR, Cari Isi Berkas, Cek JRA | Belum mulai |
@@ -177,31 +177,17 @@ Cara memasang perubahan:
 | CI di GitHub | Belum diperiksa |
 | Batas paket gratis Supabase/Cloudflare | Dari sumber sekunder; belum dicek di halaman resmi |
 | Cermin spreadsheet dan backup | Kode lulus tes lokal dengan Google tiruan; belum pernah dipasang atau berjalan nyata |
-| Pemulihan dari backup | Terbukti secara lokal; belum pernah dari paket nyata |
+| Pemulihan dari backup | Paket asli staging berhasil dipulihkan di PostgreSQL 16 sementara (§7) |
 
 ## 7. Pekerjaan berikutnya
 
-### S3 bagian 2 — cermin spreadsheet dan backup (kode selesai, belum dipasang)
+### S3 bagian 2 — cermin spreadsheet dan backup (staging, diperbarui 17 November 2026)
 
-Isi: proyek Apps Script kedua (`v4/mirror-apps-script`) di akun `bag.umum`, berjalan tiap malam, mengambil data lewat `POST /api/jobs/export` (bertanda tangan `JOB_SECRET`), menulis satu spreadsheet cermin per unit (nama tab dan kolom seperti spreadsheet lama, termasuk DAFTAR BERKAS dan DAFTAR ISI BERKAS) dan satu paket backup harian di `CENTRAL FILE V4/<kode unit>/BACKUP/`. Migrasi 0022 (`backup_runs`, `job_nonces`), alat `v4/tools/restore-backup`, halaman "Cadangan & Cermin" (`/cadangan`). Pekerjaan malam ini sekaligus mencegah proyek Supabase dijeda.
+Migrasi `0022_s3_backup` sudah terpasang di staging bersama `0023`. [Deploy ulang staging](https://github.com/fathonydnm-byte/SRIKANDI/actions/runs/43967112812/job/133675130315) mengaktifkan konfigurasi terbaru. Proyek Apps Script terpisah **Central File – Cermin & Backup** memakai Sheets API v4 dan Drive API v3 dengan cakupan `drive.file`. Ia menulis hasilnya di Drive akun instansi dan melaporkan status ke halaman **Cadangan & Cermin** (`/cadangan`).
 
-Yang sudah dibuktikan secara lokal: uji bolak-balik ekspor → paket → pulihkan ke database kosong menghasilkan 17 tabel yang sama persis; paket rusak ditolak tanpa menyentuh database; permintaan ulang (replay) dan parameter yang diubah setelah ditandatangani ditolak. Google Drive/Sheets dan PostgREST dalam uji itu tiruan.
-
-Langkah pemasangan yang tersisa, berurutan:
-
-1. Pasang `0022_s3_backup.sql` ke Supabase staging.
-2. Jalankan workflow `v4 deploy (staging)`.
-3. Pemilik membuat proyek Apps Script kedua mengikuti `v4/mirror-apps-script/PASANG.md`: tempel `Code.gs` dan `appsscript.json`, jalankan `setupMirror`, salin `JOB_SECRET` ke Cloudflare Pages sebagai tipe Secret, atur alamat aplikasi, `installNightlyTrigger`, lalu `runNow`.
-4. Deploy ulang supaya `JOB_SECRET` terpakai, lalu periksa halaman "Cadangan & Cermin" dan spreadsheet cermin di Drive.
-5. Lakukan satu latihan pemulihan dari paket nyata ke database kosong.
-
-Hal yang perlu diketahui sebelum memasang:
-
-- Izin `spreadsheets` pada proyek cermin mencakup semua Google Sheets yang bisa dibuka akun `bag.umum`, termasuk spreadsheet produksi lama. Kodenya hanya membuka spreadsheet yang dibuatnya sendiri, tetapi izinnya lebih lebar dari itu. Alternatif yang lebih sempit: menulis lewat Sheets REST API dengan izin `drive.file` saja (belum dikerjakan).
-- Akan ada dua folder bernama `CENTRAL FILE V4` di Drive: satu milik gerbang (unggahan), satu milik proyek cermin. Masing-masing proyek hanya bisa melihat folder buatannya sendiri.
-- Akun login dan profil pengguna tidak ikut dalam paket backup; setelah bencana, admin membuat ulang akun.
-- Paket backup tidak dienkripsi tersendiri; kolom data pribadi di dalamnya tetap terenkripsi.
-- Belum pernah berjalan terhadap Google, Supabase, atau Cloudflare asli; batas kuota Apps Script (6 menit per eksekusi, 10 juta sel per spreadsheet) hanya diperhitungkan, belum diuji.
+- **Eksekusi manual lulus (17 November 2026 WIB):** cermin dan backup `BAGUM` berhasil dengan 1.772 baris. Backup audit lintas unit `_PLATFORM` berhasil (0 baris).
+- **Pemulihan kedua paket asli lulus:** di PostgreSQL 16 lokal sementara melalui Ubuntu WSL, jumlah baris cocok dan pemeriksaan relasi, nomor unik, serta counter tanda terima lulus. Lihat [panduan pemulihan](../v4/tools/restore-backup/README.md). Paket menyertakan metadata dan inventaris Drive. Akun login dan isi PDF tidak disalin oleh paket.
+- **Verifikasi operasional tersisa:** pemilik menjalankan `installNightlyTrigger` di proyek cermin, lalu memeriksa satu eksekusi otomatis di halaman Cadangan & Cermin. Fungsi memastikan hanya ada satu pemicu `nightlyMirror`, pukul 01.00–02.00 WIB. [Panduan pemasangan](../v4/mirror-apps-script/PASANG.md).
 
 ### S4 — Peminjaman
 

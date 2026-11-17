@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useId, useMemo, useRef, useState, type FormEvent, type Ref } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { Alert } from '../../components/Alert';
@@ -125,9 +125,10 @@ function QueueList({ data, selected, setSelected, filed }: { data: FilingOptions
   );
 }
 
-function BerkasSection({ opts, mode, setMode, berkasId, setBerkasId, nb, setNb, errors, extraBerkas }: {
+function BerkasSection({ opts, mode, setMode, berkasId, setBerkasId, nb, setNb, errors, extraBerkas, sectionRef }: {
   opts: RegistrationOptions; mode: 'EXISTING' | 'NEW'; setMode(m: 'EXISTING' | 'NEW'): void; berkasId: string; setBerkasId(id: string): void;
   nb: NewBerkas; setNb(n: NewBerkas): void; errors: Record<string, string>; extraBerkas: BerkasOption[];
+  sectionRef: Ref<HTMLElement>;
 }) {
   const id = useId();
   const [filter, setFilter] = useState('');
@@ -139,7 +140,7 @@ function BerkasSection({ opts, mode, setMode, berkasId, setBerkasId, nb, setNb, 
   const set = <K extends keyof NewBerkas>(k: K, v: NewBerkas[K]) => setNb({ ...nb, [k]: v });
   const fe = (k: string) => (errors[k] ? <small className="field-error">{errors[k]}</small> : null);
   return (
-    <section aria-labelledby={`${id}-h`}>
+    <section ref={sectionRef} className="registration-section" tabIndex={-1} aria-labelledby={`${id}-h`}>
       <h3 id={`${id}-h`} className="subsection-title">Pilih Berkas Induk</h3>
       <p className="muted small">Metadata berkas cukup diisi sekali. Setelah menyimpan, Anda dapat langsung memasukkan item berikutnya.</p>
       <div className="mode-switch" role="group" aria-label="Mode berkas">
@@ -156,7 +157,7 @@ function BerkasSection({ opts, mode, setMode, berkasId, setBerkasId, nb, setNb, 
           </div>
           <div className={`field${errors.berkas ? ' field-invalid' : ''}`}>
             <label htmlFor={`${id}-b`}>Berkas induk *</label>
-            <select id={`${id}-b`} value={berkasId} onChange={(e) => setBerkasId(e.target.value)}>
+            <select id={`${id}-b`} aria-invalid={errors.berkas ? true : undefined} value={berkasId} onChange={(e) => setBerkasId(e.target.value)}>
               <option value="">Pilih berkas induk</option>
               {berkas.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
             </select>
@@ -251,6 +252,8 @@ export function RegistrationPage() {
   const [error, setError] = useState<UserMessage | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState<SavedLine[]>([]);
+  const queueSection = useRef<HTMLElement>(null);
+  const berkasSection = useRef<HTMLElement>(null);
   const firstItemField = useRef<HTMLInputElement>(null);
   const ids = { a: useId() };
 
@@ -258,7 +261,7 @@ export function RegistrationPage() {
     return (<><PageHeader title="Registrasi Berkas Baru" subtitle="Input berkas dan item dalam satu layar." /><NeedsUnit /></>);
   }
 
-  function target(): BerkasTarget | null {
+  function target(): { value: BerkasTarget | null; issues: Record<string, string> } {
     const e: Record<string, string> = {};
     if (mode === 'EXISTING') {
       if (!berkasId) e.berkas = 'Pilih berkas induk.';
@@ -277,10 +280,9 @@ export function RegistrationPage() {
       if (!/^\d+$/.test(item.page_count) || Number(item.page_count) < 1) e.page_count = 'Jumlah halaman minimal 1.';
       if (pdf && pdf.size > ITEM_PDF_MAX) e.pdf = 'PDF harus kurang dari 100 MB.';
     }
-    setErrors(e);
-    if (Object.keys(e).length) return null;
-    if (mode === 'EXISTING') return { mode: 'EXISTING', berkas_id: berkasId };
-    return {
+    if (Object.keys(e).length) return { value: null, issues: e };
+    if (mode === 'EXISTING') return { value: { mode: 'EXISTING', berkas_id: berkasId }, issues: e };
+    const value: BerkasTarget = {
       mode: 'NEW', title: nb.title.trim(), classification_id: nb.classification_id!, active_retention_value: Number(nb.active_retention_value),
       active_retention_unit: nb.active_retention_unit, inactive_retention_value: Number(nb.inactive_retention_value), inactive_retention_unit: nb.inactive_retention_unit,
       final_disposition: nb.final_disposition,
@@ -289,6 +291,7 @@ export function RegistrationPage() {
       ...(nb.notes.trim() ? { notes: nb.notes.trim() } : {}),
       ...categoryFlags(regLoad.kind === 'ok' ? regLoad.data.archive_categories : undefined, nb.categories),
     };
+    return { value, issues: e };
   }
 
   /** Setelah item pertama, berkas baru dikunci sebagai "berkas yang ada" (3.x). */
@@ -302,10 +305,22 @@ export function RegistrationPage() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (stage === 'saving') return;
-    const t = target();
+    const { value: t, issues } = target();
+    setErrors(issues);
     if (!t) {
       setStage('error');
-      setError({ title: 'Data belum lengkap.', action: 'Periksa kolom yang ditandai merah.' });
+      setStageMsg(undefined);
+      if (source === 'RECEIPT') {
+        setError({
+          title: 'Item belum diberkaskan.',
+          action: issues.queue ?? (issues.berkas ? 'Pilih berkas induk atau buat berkas baru.' : 'Lengkapi bagian berkas baru yang ditandai merah.'),
+        });
+        const section = issues.queue ? queueSection.current : berkasSection.current;
+        section?.focus({ preventScroll: true });
+        section?.scrollIntoView?.({ block: 'start' });
+      } else {
+        setError({ title: 'Data belum lengkap.', action: 'Periksa kolom yang ditandai merah.' });
+      }
       return;
     }
     setStage('saving');
@@ -373,11 +388,11 @@ export function RegistrationPage() {
         <p className="muted detail-loading" role="status">Memuat data registrasi…</p>
       ) : (
         <form className="card registration-form" onSubmit={submit} noValidate>
-          <section>
+          <section ref={queueSection} className="registration-section" tabIndex={-1} aria-labelledby={`${ids.a}-sources`}>
             <div className="section-heading">
               <div>
-                <h2 className="section-title">Sumber Registrasi Item</h2>
-                <p className="muted small">Pilih item yang sudah diregistrasi saat penerimaan, atau gunakan input manual untuk arsip lama.</p>
+                <h2 id={`${ids.a}-sources`} className="section-title">Sumber Registrasi Item</h2>
+                <p className="muted small">Untuk pemberkasan, pilih item dari penerimaan, lalu tentukan berkas induknya. Gunakan Input Manual untuk arsip lama.</p>
               </div>
               {source === 'RECEIPT' ? <button type="button" className="btn btn-secondary btn-sm" onClick={queueRetry}>Segarkan Antrean</button> : null}
             </div>
@@ -397,7 +412,7 @@ export function RegistrationPage() {
             {fe('queue')}
           </section>
 
-          <BerkasSection opts={regLoad.data} mode={mode} setMode={setMode} berkasId={berkasId} setBerkasId={setBerkasId} nb={nb} setNb={setNb} errors={errors} extraBerkas={extraBerkas} />
+          <BerkasSection opts={regLoad.data} mode={mode} setMode={setMode} berkasId={berkasId} setBerkasId={setBerkasId} nb={nb} setNb={setNb} errors={errors} extraBerkas={extraBerkas} sectionRef={berkasSection} />
 
           {source === 'MANUAL' ? (
             <section aria-labelledby={`${ids.a}-h`}>
@@ -426,9 +441,8 @@ export function RegistrationPage() {
             </section>
           ) : null}
 
-          {error ? <Alert tone="error" message={error} /> : null}
-          <div className="form-actions-bar">
-            <SaveStage stage={stage} message={stageMsg} />
+          <div className="form-actions-bar registration-actions">
+            {error ? <Alert tone="error" message={error} /> : <SaveStage stage={stage} message={stageMsg} />}
             <button type="submit" className="btn btn-primary" disabled={stage === 'saving'}>
               {stage === 'saving' ? 'Menyimpan…' : source === 'RECEIPT' ? 'Berkaskan Item Terpilih' : 'Simpan Item'}
             </button>

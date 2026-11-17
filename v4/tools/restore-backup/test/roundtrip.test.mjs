@@ -39,6 +39,7 @@ let bridge;
 let world;
 let packages; // code -> dir
 let sourceDump;
+let schemaVersion;
 
 function restoreCli(args, envExtra = {}) {
   const r = spawnSync(process.execPath, [RESTORE, ...args], {
@@ -83,6 +84,8 @@ before(async () => {
   assert.ok(SRC_DB && DST_DB && BUNDLE, 'run through test.sh (PGDATABASE, CF_RESTORE_DB, CF_JOBS_BUNDLE)');
   await src.connect();
   await dst.connect();
+  const { rows: [schema] } = await src.query('select max(version) as version from public.schema_migrations_log');
+  schemaVersion = schema.version;
   await seed(src);
   bridge = await startBridge(path.join(HERE, 'pgrest-worker.mjs'), {
     bundle: BUNDLE, serviceKey: SERVICE_KEY, anonKey: 'anon-test-key', supabaseUrl: 'https://rest.invalid', jobSecret: JOB_SECRET, maxRows: 1000,
@@ -113,8 +116,15 @@ test('the allow-list of the REAL server module equals the restore tool list and 
 });
 
 test('the nightly job (real Code.gs + real jobsExport.ts + real Postgres) runs to completion', async () => {
-  assert.equal(world.call('runNow'), 'DONE');
-  assert.equal(world.triggers.length, 0, 'finished within one execution (no continuation)');
+  let outcome = world.call('runNow');
+  for (let i = 0; outcome === 'CONTINUE' && i < 10; i++) {
+    assert.equal(world.triggers.length, 1, 'one bounded continuation for unfinished work');
+    assert.equal(world.triggers[0].handler, 'continueMirror');
+    world.clock.now += world.triggers[0].afterMs;
+    outcome = world.call('continueMirror');
+  }
+  assert.equal(outcome, 'DONE');
+  assert.equal(world.triggers.length, 0, 'no continuation after all units finish');
   const { rows: runs } = await src.query('select kind, unit_id, status, error, stats from public.backup_runs order by started_at');
   assert.equal(runs.length, 5, 'MIRROR+BACKUP for two units, BACKUP for the cross-unit pseudo unit');
   assert.deepEqual(runs.map((r) => r.status), Array(5).fill('SUCCESS'), JSON.stringify(runs.map((r) => r.error)));
@@ -181,13 +191,24 @@ test('collect the packages the job wrote into the fake Drive (folder for A, zip 
   execFileSync('zip', ['-qr', zipPath, path.basename(packages['RT-B'])], { cwd: path.dirname(packages['RT-B']) });
   packages.zipB = zipPath;
   const m = JSON.parse(fs.readFileSync(path.join(packages['RT-A'], 'manifest.json'), 'utf8'));
-  assert.equal(m.schema_version, '0022');
+  assert.equal(m.schema_version, schemaVersion);
   assert.equal(m.tables.item.parts.length, 3);
   // PII stays encrypted, exactly as the database stores it (hex of the ciphertext); the restore needs no key
   const pegawai = zlib.gunzipSync(fs.readFileSync(path.join(packages['RT-A'], m.tables.pegawai.parts[0].file))).toString('utf8');
   assert.match(pegawai, /"nip_nik_enc":"\\\\x00ff10aa5b7c"/);
   sourceDump = await canonicalDump(src, [UNIT.A, UNIT.B]);
   for (const t of RESTORE_TABLES) assert.ok(sourceDump[t].rows > 0, `seed covers ${t}`);
+});
+
+test('rehearsal runs dry-run and commit using a separate database even when an external target is configured', async () => {
+  const prior = await canonicalDump(dst, [UNIT.A, UNIT.B]);
+  const r = spawnSync('bash', [path.join(HERE, '..', 'rehearse.sh'), packages['RT-A'], packages.zipB, packages._PLATFORM], {
+    env: { ...process.env, RESTORE_DATABASE_URL: dbUrl(DST_DB) }, encoding: 'utf8', timeout: 120000,
+  });
+  assert.equal(r.status, 0, r.error?.message || r.stderr || r.stdout);
+  assert.match(r.stdout, /ROLLBACK[\s\S]*Restore selesai \(COMMIT\)/);
+  assert.match(r.stdout, /Latihan pemulihan lulus/);
+  assert.deepEqual(await canonicalDump(dst, [UNIT.A, UNIT.B]), prior);
 });
 
 test('restore refuses a database whose schema version differs (exit 3, nothing written), unless --force-schema', async () => {
@@ -199,7 +220,7 @@ test('restore refuses a database whose schema version differs (exit 3, nothing w
   fs.writeFileSync(mp, JSON.stringify(man));
   const r = restoreCli(['--package', copy, '--database-url-env', 'RESTORE_DATABASE_URL']);
   assert.equal(r.code, 3, r.err);
-  assert.match(r.err, /Versi skema berbeda: paket RT-B = 0021, database = 0022/);
+  assert.ok(r.err.includes(`Versi skema berbeda: paket RT-B = 0021, database = ${schemaVersion}`), r.err);
   assert.equal((await counts(dst, [UNIT.A, UNIT.B])).units, 0);
   const forced = restoreCli(['--package', copy, '--database-url-env', 'RESTORE_DATABASE_URL', '--force-schema', '--dry-run']);
   assert.equal(forced.code, 0, forced.err);

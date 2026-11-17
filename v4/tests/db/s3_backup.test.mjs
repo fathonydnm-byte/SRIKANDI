@@ -231,9 +231,8 @@ test('service_role can read every table the export API may serve (and nothing un
   for (const t of tables) {
     await asService(pool, (c) => c.query(`select * from public.${t} limit 1`));
   }
-  await asService(pool, (c) => c.query('select version from public.schema_migrations_log order by version desc limit 1'));
-  const [{ v }] = await owner(pool, 'select max(version) v from public.schema_migrations_log');
-  assert.equal(v, '0022');
+  const versions = await asService(pool, (c) => c.query("select version from public.schema_migrations_log where version = '0022'"));
+  assert.equal(versions.rowCount, 1, 'the backup migration is recorded for the export service');
 });
 
 test('every public table is classified: exported by the backup, or deliberately excluded', async () => {
