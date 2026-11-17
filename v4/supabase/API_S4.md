@@ -27,4 +27,11 @@ chat, atau JS klien. CI memakai nilai lokal fiktif. Nilai ciphertext ikut paket 
 Impor dan rekonsiliasi transaksi serta log cetak dari 3.x (pertahankan ID dan status lama); bukti persetujuan
 opsional via pengunggah Drive; log cetak Out Indicator; dan Berita Acara Google Docs per transaksi
 dengan template dan izin file. Uji akses gateway Docs secara terpisah dan pertahankan kontrol unit.
-Uji staging awal memakai transaksi fiktif v4. Pinjaman lama tetap terkunci di v4 sampai riwayatnya diimpor dan statusnya direkonsiliasi; pengembalian pinjaman lama dicatat di aplikasi lama. Jangan pakai tahap uji ini untuk cutover.
+## Rekonsiliasi staging BAGUM (17 November 2026 WIB)
+
+Satu transaksi aktif lama dari tab PEMINJAMAN (tiga objek berkas lengkap, nomor 11, 17 dan 24)
+dipindahkan dengan ID grup dan ID objek asli. Jumlah baris, unit, ID berkas, nomor dan penanda
+pinjam dicocokkan sebelum menulis; tidak ada status pinjam yang diubah saat impor.
+Aksi pengembalian diuji dengan savepoint dan dibatalkan, sehingga transaksi tetap aktif.
+Tidak menyalin kolom NIP/NIK dan WhatsApp, serta belum memindahkan transaksi lama yang sudah selesai.
+Pengembalian transaksi yang terdaftar dapat dicatat di v4; staging belum menjadi pengganti produksi.

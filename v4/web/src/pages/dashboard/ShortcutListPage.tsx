@@ -71,9 +71,11 @@ export function ShortcutListPage() {
       {def.kind === 'DIPINJAM' ? (
         <Alert tone="info">
           <span>
-            Dihitung per berkas dari status pinjam berkas dan item. Rincian peminjam, tanggal kembali, dan Out Indicator tersedia setelah modul
-            Peminjaman Arsip hadir (Sprint 4).
+            Dihitung per berkas dari status pinjam berkas dan item. Satu transaksi di Pelacakan Peminjaman dapat mencakup beberapa berkas.
           </span>
+          {can(profile.role, 'peminjaman.kelola') && (
+            <> <Link to="/peminjaman">Buka Pelacakan Peminjaman untuk mencatat pengembalian.</Link></>
+          )}
         </Alert>
       ) : null}
       {load.kind === 'loading' ? (

@@ -86,7 +86,7 @@ function LoansScreen({ unitId }: { unitId: string | null }) {
         </button>
         <Link className="btn btn-secondary" to={`/dashboard/dipinjam${unitId ? `?unit=${encodeURIComponent(unitId)}` : ''}`}>Lihat berkas berstatus dipinjam</Link>
       </div>
-      <Alert tone="info">Daftar transaksi ini berisi peminjaman yang dicatat di v4. Untuk pinjaman lama yang belum diimpor, buka daftar berkas berstatus dipinjam dan catat pengembaliannya di aplikasi lama.</Alert>
+      <Alert tone="info">Daftar ini mencakup pinjaman yang dicatat di v4 dan pinjaman lama yang sudah dipindahkan. Jika berkas berstatus dipinjam tetapi transaksinya belum terlihat, laporkan ke admin agar riwayatnya dicocokkan.</Alert>
       {adding && <BorrowForm unitId={unitId} onSaved={() => saved('Peminjaman tersimpan.')} />}
       {returning && <ReturnForm key={returning.id} unitId={unitId} loan={returning} onCancel={() => setReturning(null)}
         onSaved={() => saved('Seluruh arsip dalam transaksi sudah dikembalikan.')} />}

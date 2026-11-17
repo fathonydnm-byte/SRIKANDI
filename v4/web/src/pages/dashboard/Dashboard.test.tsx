@@ -161,11 +161,12 @@ describe('daftar kartu pintas', () => {
     expect(await screen.findByText('Tidak ada berkas yang masa aktifnya akan habis dalam 0–7 hari.')).toBeInTheDocument();
   });
 
-  it('Sedang Dipinjam: menjelaskan dasar hitungan sampai Sprint 4', async () => {
+  it('Sedang Dipinjam: membedakan hitungan berkas dari hitungan transaksi', async () => {
     const data = [row({ status_peminjaman: 'DIPINJAM', item_dipinjam: 2, status_code: 'ACTIVE', status_label: 'AKTIF' })];
     renderApp('/dashboard/dipinjam', setup('PIMPINAN', { dashboard_shortcut: () => ({ data, error: null }) }).fake.client);
     expect(await screen.findByText(/Dihitung per berkas dari status pinjam berkas dan item/)).toBeInTheDocument();
     expect(await screen.findByText('Berkas dipinjam · 2 item dipinjam')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Buka Pelacakan Peminjaman/ })).not.toBeInTheDocument();
   });
 
   it('Habis Aktif menampilkan berapa hari lewat dan nomor usul', async () => {
