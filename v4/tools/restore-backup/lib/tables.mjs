@@ -5,7 +5,7 @@
 export const RESTORE_TABLES = [
   'units', 'unit_settings', 'counters', 'klasifikasi', 'jenis_naskah', 'pegawai', 'berkas', 'item', 'penerimaan',
   'penerimaan_item', 'riwayat_nomor', 'penerimaan_cetak_log', 'folder_label_log', 'karantina', 'pembatalan_arsip',
-  'drive_tasks', 'audit_log',
+  'drive_tasks', 'loan_groups', 'loan_objects', 'audit_log',
 ];
 /** Which column ties a row to its unit. audit_log may have NULL (cross-unit rows, package "_PLATFORM"). */
 export const UNIT_COLUMN = (table) => (table === 'units' ? 'id' : 'unit_id');

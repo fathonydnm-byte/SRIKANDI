@@ -60,11 +60,12 @@ export async function restorePackages(client, packages, { dryRun = false, forceS
   const summary = { schema: dbSchema, tables: {}, checks: [], committed: false, units: [] };
   await client.query('begin');
   try {
+    const tables = RESTORE_TABLES.filter((t) => dbSchema >= '0024' || (t !== 'loan_groups' && t !== 'loan_objects'));
     const metas = {};
-    for (const t of RESTORE_TABLES) metas[t] = await tableMeta(client, t);
+    for (const t of tables) metas[t] = await tableMeta(client, t);
     for (const { manifest } of packages) summary.units.push(manifest.unit);
     // load order: table by table across all packages (units first), so "units" rows exist before anything references them
-    for (const table of RESTORE_TABLES) {
+    for (const table of tables) {
       const meta = metas[table];
       const known = new Set(meta.cols.map((c) => c.name));
       const sql = insertSql(client, table, meta);

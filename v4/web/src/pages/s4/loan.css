@@ -1,0 +1,33 @@
+.loan-section { padding: 1rem; }
+.loan-field { display: grid; gap: .3rem; min-width: 0; }
+.loan-field :is(input, select, textarea) {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.5rem;
+  border: 1px solid var(--border, #aeb8b1);
+  border-radius: .35rem;
+  padding: .4rem .6rem;
+  font: inherit;
+  color: inherit;
+  background: var(--surface, white);
+}
+.loan-fields {
+  border: 0; margin: 0; padding: 0; min-inline-size: 0;
+  display: grid; gap: .75rem; grid-template-columns: repeat(auto-fit,minmax(min(100%, 13rem),1fr));
+}
+.loan-actions { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem; }
+.loan-actions [aria-pressed="true"] { outline: 2px solid currentColor; outline-offset: -2px; }
+.loan-record { border: 1px solid var(--border, #b8c0ba); padding: .75rem; border-radius: .5rem; overflow-wrap: anywhere; }
+.loan-record h3, .loan-record p { margin: 0 0 .4rem; }
+.loan-record .loan-actions { margin-top: .55rem; }
+.loan-item { text-align: start; white-space: normal; overflow-wrap: anywhere; }
+.loan-print { display: none; }
+@page loan-indicator { size: A5 portrait; margin: 12mm; }
+@media print {
+  .loan-print { display: block; }
+  body:has(.loan-print) main > :not(.loan-print) { display: none !important; }
+  .loan-print-page { page: loan-indicator; break-after: page; overflow-wrap: anywhere; color: black; }
+  .loan-print-compact { columns: 4; font-size: 9pt; }
+  .loan-print-page { font-size: 10pt; }
+  .loan-print-page:last-child { break-after: auto; }
+}

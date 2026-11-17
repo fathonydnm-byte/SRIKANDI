@@ -70,6 +70,8 @@ export const EXPORT_TABLES = {
   karantina: { key: ['id'], unitColumn: 'unit_id' },
   pembatalan_arsip: { key: ['id'], unitColumn: 'unit_id' },
   drive_tasks: { key: ['id'], unitColumn: 'unit_id' },
+  loan_groups: { key: ['id'], unitColumn: 'unit_id' },
+  loan_objects: { key: ['id'], unitColumn: 'unit_id' },
   audit_log: { key: ['id'], unitColumn: 'unit_id', allowGlobal: true },
 } as const satisfies Record<string, ExportTable>;
 export type ExportTableName = keyof typeof EXPORT_TABLES;
@@ -322,14 +324,15 @@ async function listUnits(env: FileEnv, key: string, fetchFn: FetchFn): Promise<R
   const schemaVersion = versions[0]?.version;
   if (!Array.isArray(units) || typeof schemaVersion !== 'string') return upstream();
   const tables: Record<string, { key: readonly string[] }> = {};
-  for (const t of TABLE_NAMES) tables[t] = { key: EXPORT_TABLES[t].key };
+  const available = TABLE_NAMES.filter((t) => schemaVersion >= '0024' || (t !== 'loan_groups' && t !== 'loan_objects'));
+  for (const t of available) tables[t] = { key: EXPORT_TABLES[t].key };
   return json({
     ok: true,
     schema_version: schemaVersion,
     max_page_limit: MAX_PAGE_LIMIT,
     tables,
     units: [
-      ...units.map((u) => ({ id: u.id, code: u.code, name: u.name, active: u.active, tables: TABLE_NAMES, backup_only: false })),
+      ...units.map((u) => ({ id: u.id, code: u.code, name: u.name, active: u.active, tables: available, backup_only: false })),
       { id: GLOBAL_UNIT, code: '_PLATFORM', name: 'Lintas unit (audit tanpa unit)', active: true, tables: GLOBAL_TABLES, backup_only: true },
     ],
   });
