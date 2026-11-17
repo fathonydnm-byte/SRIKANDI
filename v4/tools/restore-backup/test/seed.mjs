@@ -89,6 +89,10 @@ export async function seed(client) {
     values ($1,'PIN-RT','Nama Contoh','Jabatan','Unit',decode('00abcd','hex'),'Petugas','Arsiparis','Tujuan',current_date,current_date,'BAIK',1,current_date)`, [UNIT.A]);
   await q(`insert into public.loan_objects (unit_id,id,loan_id,berkas_id,berkas_no,berkas_title,location,page_count)
     values ($1,'PO-RT','PIN-RT','BRK-A-1',1,'Berkas 1','Laci A',1)`, [UNIT.A]);
+  await q(`insert into public.transfer_drafts (unit_id,id,draft_number,title,berkas_count,item_count,snapshot)
+    values ($1,'USP-RT','DRAF-2026-0001','Usul uji',1,1,'[{"berkas_id":"BRK-A-1","item_count":1}]')`, [UNIT.A]);
+  await q(`insert into public.transfer_draft_items (unit_id,id,draft_id,berkas_id,item_id,snapshot)
+    values ($1,'USPI-RT','USP-RT','BRK-A-1','ITM-A-00003','{"title":"Item snapshot","pages":2}')`, [UNIT.A]);
   // counters: TRM numbers are in use up to 12 (A) and 2 (B); BRK counter is not used by the app but must still round-trip
   await q(`insert into public.counters (unit_id, scope, year, last_value) values ($1, 'TRM', 2026, 12), ($1, 'TRM', 2025, 77), ($2, 'TRM', 2026, 2), ($1, 'ZZ_EXTRA', 0, 9000000000)`, [UNIT.A, UNIT.B]);
 }

@@ -227,7 +227,7 @@ test('backup_status: ADMIN_UNIT sees only its unit; ADMIN_PUSAT without a filter
 
 test('service_role can read every table the export API may serve (and nothing under auth)', async () => {
   const tables = ['units', 'unit_settings', 'counters', 'klasifikasi', 'jenis_naskah', 'pegawai', 'berkas', 'item', 'penerimaan',
-    'penerimaan_item', 'riwayat_nomor', 'penerimaan_cetak_log', 'folder_label_log', 'karantina', 'pembatalan_arsip', 'drive_tasks', 'loan_groups', 'loan_objects', 'audit_log'];
+    'penerimaan_item', 'riwayat_nomor', 'penerimaan_cetak_log', 'folder_label_log', 'karantina', 'pembatalan_arsip', 'drive_tasks', 'loan_groups', 'loan_objects', 'transfer_drafts', 'transfer_draft_items', 'audit_log'];
   for (const t of tables) {
     await asService(pool, (c) => c.query(`select * from public.${t} limit 1`));
   }
@@ -239,7 +239,7 @@ test('every public table is classified: exported by the backup, or deliberately 
   // Keep in step with v4/web/server/jobsExport.ts (EXPORT_TABLES) and v4/tools/restore-backup. A new table must be
   // added to one of the two lists on purpose: a forgotten table would silently be missing from every backup.
   const exported = ['units', 'unit_settings', 'counters', 'klasifikasi', 'jenis_naskah', 'pegawai', 'berkas', 'item', 'penerimaan',
-    'penerimaan_item', 'riwayat_nomor', 'penerimaan_cetak_log', 'folder_label_log', 'karantina', 'pembatalan_arsip', 'drive_tasks', 'loan_groups', 'loan_objects', 'audit_log'];
+    'penerimaan_item', 'riwayat_nomor', 'penerimaan_cetak_log', 'folder_label_log', 'karantina', 'pembatalan_arsip', 'drive_tasks', 'loan_groups', 'loan_objects', 'transfer_drafts', 'transfer_draft_items', 'audit_log'];
   const excluded = [
     'profiles',              // tied to auth.users; accounts are re-created by an admin after a disaster
     'idempotency_keys',      // request replay cache, no business data

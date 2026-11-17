@@ -74,6 +74,7 @@ const CODE_ACTIONS: Record<string, string> = {
   ITEM_NOT_READY: 'Lengkapi metadata item di Penerimaan Naskah terlebih dahulu.',
   BATCH_LIMIT: 'Pilih paling banyak 100 item per penyimpanan.',
   CLASSIFICATION_INVALID: 'Pilih kode klasifikasi lain.',
+  TRANSFER_INELIGIBLE: 'Muat ulang daftar dan sesuaikan pilihan berkas.',
   BERKAS_TRANSFERRED: 'Pilih berkas lain yang belum dipindahkan.',
   NO_CHANGES: 'Ubah minimal satu isian atau pilih PDF pengganti.',
   OBJECT_BORROWED: 'Tunggu sampai arsip dikembalikan, lalu coba lagi.',
@@ -104,7 +105,7 @@ function transient(error: { code?: string; message?: string; status?: number; na
   return msg.includes('failed to fetch') || msg.includes('networkerror') || msg.includes('fetch failed') || (error.status ?? 0) >= 502 || error.code === '57014';
 }
 
-/** Operasi baca lewat RPC Postgres (SECURITY INVOKER; RLS berlaku). */
+/** Operasi baca lewat RPC Postgres; cakupan unit diberlakukan oleh RLS atau otorisasi RPC. */
 export async function callRead<T>(client: SupabaseClient, fn: string, args: Record<string, unknown> = {}): Promise<T> {
   const { data, error } = await client.rpc(fn, args);
   if (error) throw rpcFailure(error);
