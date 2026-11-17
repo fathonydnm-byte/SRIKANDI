@@ -29,7 +29,7 @@ function Copy({ p, label, compact }: { p: ReceiptPrint; label: string; compact: 
     <section className={`rp-copy${compact ? ' compact' : ''}${p.status === 'DIBATALKAN' ? ' is-cancelled' : ''}`} aria-label={`Salinan ${label}`}>
       {p.status === 'DIBATALKAN' ? <div className="rp-watermark" aria-hidden="true">DIBATALKAN</div> : null}
       <header className="rp-head">
-        <span className="rp-logo"><BrandMark size={compact ? 34 : 44} /></span>
+        <span className="rp-logo"><BrandMark size={compact ? 38 : 52} /></span>
         <div className="rp-title">
           <strong>TANDA TERIMA PENYERAHAN ARSIP</strong>
           <span>{compact ? 'UIN SUNAN AMPEL SURABAYA' : 'UNIVERSITAS ISLAM NEGERI SUNAN AMPEL SURABAYA'}</span>

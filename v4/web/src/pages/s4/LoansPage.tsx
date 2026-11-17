@@ -1,6 +1,7 @@
 import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth, useProfile } from '../../auth/AuthContext';
+import { BrandMark } from '../../components/BrandMark';
 import { Alert } from '../../components/Alert';
 import { PageHeader } from '../../components/PageHeader';
 import { newRequestId } from '../../lib/api';
@@ -339,8 +340,13 @@ function OutIndicator({ loan }: { loan: Loan }) {
     const b = objects[0]!;
     const compact = objects.length > 12;
     return <section className="loan-print-page" key={b.berkas_id}>
-      <h1>OUT INDICATOR</h1>
-      <p>Central File · UIN Sunan Ampel Surabaya</p>
+      <header className="loan-print-heading">
+        <BrandMark size={48} />
+        <div>
+          <h1>OUT INDICATOR</h1>
+          <p>Central File · UIN Sunan Ampel Surabaya</p>
+        </div>
+      </header>
       <p>Lembar berkas {index + 1} dari {groups.size}</p>
       <h2>Berkas {b.berkas_no} — {b.berkas_title}</h2>
       <p><strong>Lokasi asal:</strong> {b.location}</p>

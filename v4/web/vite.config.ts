@@ -16,7 +16,6 @@ export default defineConfig({
       strategies: 'injectManifest',
       srcDir: 'src',
       filename: 'sw.ts',
-      includeAssets: ['icon.svg'],
       manifest: {
         name: 'Central File UINSA',
         short_name: 'Central File',
@@ -28,13 +27,14 @@ export default defineConfig({
         background_color: '#F8FAFC',
         theme_color: '#0B4D2C',
         icons: [
-          { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
-          { src: 'icon-maskable.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
+          { src: 'uinsa-icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: 'uinsa-icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: 'uinsa-icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
       injectManifest: {
         // Aset dan shell saja; tidak pernah menyimpan respons Supabase atau Pages Functions.
-        globPatterns: ['**/*.{js,css,html,svg,webmanifest}'],
+        globPatterns: ['**/*.{js,css,html,png,svg,webmanifest}'],
       },
     }),
   ],
