@@ -29,7 +29,7 @@ before(async () => {
   fx = await createS2Fixture(pool);
   for (let n = 1; n <= 5; n++) {
     await owner(pool, `insert into public.berkas (unit_id,id,no_berkas_definitif,judul_berkas,status_berkas,no_folder)
-      values ($1,$2,$3,$2,'AKTIF',$3::text)`, [n === 5 ? fx.unit.B : fx.unit.A, b(n), n]);
+      values ($1,$2,$3::integer,$2,'AKTIF',($3::integer)::text)`, [n === 5 ? fx.unit.B : fx.unit.A, b(n), n]);
     for (const m of [1, 2]) await owner(pool, `insert into public.item (unit_id,id,berkas_id,no_item_definitif,uraian_lengkap,jumlah_halaman)
       values ($1,$2,$3,$4,$2,2)`, [n === 5 ? fx.unit.B : fx.unit.A, i(n,m), b(n), m]);
   }
