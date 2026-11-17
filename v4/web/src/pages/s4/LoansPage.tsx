@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth, useProfile } from '../../auth/AuthContext';
 import { Alert } from '../../components/Alert';
 import { PageHeader } from '../../components/PageHeader';
@@ -49,7 +49,6 @@ export function LoansPage() {
 
 function LoansScreen({ unitId }: { unitId: string | null }) {
   const { client } = useAuth();
-  const [params] = useSearchParams();
   const [status, setStatus] = useState<'ACTIVE' | 'RETURNED'>('ACTIVE');
   const [offset, setOffset] = useState(0);
   const [list, reload] = useLoad(`loans:${status}:${offset}`, () => loanApi.list(client, unitId, status, offset));
@@ -85,8 +84,9 @@ function LoansScreen({ unitId }: { unitId: string | null }) {
         <button type="button" className="btn btn-primary" onClick={() => { setAdding((v) => !v); setReturning(null); setResult(''); }}>
           {adding ? 'Tutup formulir' : 'Catat Peminjaman'}
         </button>
-        {params.get('aktif') && <Link className="btn btn-secondary" to={`/dashboard/dipinjam${unitId ? `?unit=${encodeURIComponent(unitId)}` : ''}`}>Lihat berkas berstatus dipinjam</Link>}
+        <Link className="btn btn-secondary" to={`/dashboard/dipinjam${unitId ? `?unit=${encodeURIComponent(unitId)}` : ''}`}>Lihat berkas berstatus dipinjam</Link>
       </div>
+      <Alert tone="info">Daftar transaksi ini berisi peminjaman yang dicatat di v4. Untuk pinjaman lama yang belum diimpor, buka daftar berkas berstatus dipinjam dan catat pengembaliannya di aplikasi lama.</Alert>
       {adding && <BorrowForm unitId={unitId} onSaved={() => saved('Peminjaman tersimpan.')} />}
       {returning && <ReturnForm key={returning.id} unitId={unitId} loan={returning} onCancel={() => setReturning(null)}
         onSaved={() => saved('Seluruh arsip dalam transaksi sudah dikembalikan.')} />}

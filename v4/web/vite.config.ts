@@ -13,6 +13,9 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'script-defer',
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       includeAssets: ['icon.svg'],
       manifest: {
         name: 'Central File UINSA',
@@ -29,12 +32,9 @@ export default defineConfig({
           { src: 'icon-maskable.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
         ],
       },
-      workbox: {
-        // Hanya app shell. Aplikasi online penuh: tidak ada cache data/API.
+      injectManifest: {
+        // Aset dan shell saja; tidak pernah menyimpan respons Supabase atau Pages Functions.
         globPatterns: ['**/*.{js,css,html,svg,webmanifest}'],
-        navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api\//],
-        runtimeCaching: [],
       },
     }),
   ],

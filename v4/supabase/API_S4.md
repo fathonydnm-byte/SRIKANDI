@@ -27,4 +27,4 @@ chat, atau JS klien. CI memakai nilai lokal fiktif. Nilai ciphertext ikut paket 
 Impor dan rekonsiliasi transaksi serta log cetak dari 3.x (pertahankan ID dan status lama); bukti persetujuan
 opsional via pengunggah Drive; log cetak Out Indicator; dan Berita Acara Google Docs per transaksi
 dengan template dan izin file. Uji akses gateway Docs secara terpisah dan pertahankan kontrol unit.
-Jangan deploy inti ini sendiri ke staging sebelum migrasi dan alur data lama direview.
+Uji staging awal memakai transaksi fiktif v4. Pinjaman lama tetap terkunci di v4 sampai riwayatnya diimpor dan statusnya direkonsiliasi; pengembalian pinjaman lama dicatat di aplikasi lama. Jangan pakai tahap uji ini untuk cutover.
