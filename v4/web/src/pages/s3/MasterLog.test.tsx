@@ -271,11 +271,12 @@ describe('Master Log Perubahan', () => {
   it('isi log tidak pernah dirender sebagai HTML', async () => {
     const evil = '<img src=x onerror="alert(1)"><b>tebal</b>';
     const { fake } = setup('ADMIN_UNIT', () => page([row({ summary: evil, reason: evil, actor_name: evil, object_id: evil, before_data: { k: evil }, after_data: { k: `${evil}2` } })]));
-    const { container } = renderApp('/master-log', fake.client);
+    renderApp('/master-log', fake.client);
     await screen.findByText(evil, { selector: '.ml-summary' });
     await userEvent.setup().click(screen.getByRole('button', { name: /Rincian UPDATE/ }));
-    expect(container.querySelector('img')).toBeNull();
-    expect(document.body.querySelector('img, b')).toBeNull();
-    expect(within(screen.getByRole('dialog')).getAllByText(evil, { exact: false }).length).toBeGreaterThan(0);
+    const dialog = screen.getByRole('dialog');
+    expect(screen.getByRole('main').querySelector('img, b')).toBeNull();
+    expect(dialog.querySelector('img, b')).toBeNull();
+    expect(within(dialog).getAllByText(evil, { exact: false }).length).toBeGreaterThan(0);
   });
 });

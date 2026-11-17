@@ -27,6 +27,9 @@
   .loan-print { display: block; }
   body:has(.loan-print) main > :not(.loan-print) { display: none !important; }
   .loan-print-page { page: loan-indicator; break-after: page; overflow-wrap: anywhere; color: black; }
+  .loan-print-heading { display: flex; align-items: center; gap: 3mm; }
+  .loan-print-heading img { flex: none; }
+  .loan-print-heading :is(h1, p) { margin: 0; }
   .loan-print-compact { columns: 4; font-size: 9pt; }
   .loan-print-page { font-size: 10pt; }
   .loan-print-page:last-child { break-after: auto; }

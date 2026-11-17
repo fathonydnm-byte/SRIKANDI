@@ -54,11 +54,11 @@ describe('Cadangan & Cermin: tampilan', () => {
 
   it('gagal: spanduk merah menyebut unit, galat tampil sebagai teks (bukan HTML), percobaan terakhir gagal terlihat', async () => {
     const failed = kind({ last_done: { id: 'r2', status: 'FAILED', started_at: '2026-11-14T18:00:00Z', finished_at: '2026-11-14T18:01:00Z', error: 'Jumlah baris tidak cocok untuk item <img src=x onerror=alert(1)>' }, warning: 'FAILED' });
-    const { container } = renderApp('/cadangan', setup('ADMIN_PUSAT', { backup_status: () => ok(status([unit('BAU', { mirror: failed }), unit('LPM')])) }).client);
+    renderApp('/cadangan', setup('ADMIN_PUSAT', { backup_status: () => ok(status([unit('BAU', { mirror: failed }), unit('LPM')])) }).client);
     expect(await screen.findByText(/Cadangan atau cermin terakhir gagal untuk: BAU\./)).toBeInTheDocument();
     expect(screen.getByRole('alert')).toBeInTheDocument();
     expect(screen.getByText(/Jumlah baris tidak cocok untuk item <img src=x onerror=alert\(1\)>/)).toBeInTheDocument();
-    expect(container.querySelector('img')).toBeNull();
+    expect(screen.getByRole('main').querySelector('img')).toBeNull();
     expect(screen.getByText('Gagal')).toBeInTheDocument();
     expect(screen.getByText(/Percobaan terakhir gagal/)).toBeInTheDocument();
   });

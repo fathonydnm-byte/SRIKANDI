@@ -1,5 +1,5 @@
 import { useMemo, type CSSProperties } from 'react';
-import logoUrl from '../../assets/uinsa-logo.jpg';
+import logoUrl from '../../assets/uinsa-logo.png';
 import { layoutLabel, LABEL_H_MM, LABEL_W_MM, placeLabels, slotName, type LabelData, type LabelLayout } from './labelLayout';
 import './labels.css';
 

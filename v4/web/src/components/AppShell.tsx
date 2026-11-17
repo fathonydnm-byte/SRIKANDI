@@ -265,7 +265,7 @@ export function AppShell() {
           {forced ? (
             <span className="topbar-brand">
               <span className="brand-mark small">
-                <BrandMark size={22} />
+                <BrandMark size={24} />
               </span>
               <span className="topbar-brand-text">
                 <strong>Central File</strong>
@@ -275,7 +275,7 @@ export function AppShell() {
           ) : (
             <Link to="/dashboard" className="topbar-brand" aria-label="Central File — ke Dashboard">
               <span className="brand-mark small">
-                <BrandMark size={22} />
+                <BrandMark size={24} />
               </span>
               <span className="topbar-brand-text">
                 <strong>Central File</strong>
