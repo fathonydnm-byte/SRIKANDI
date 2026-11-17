@@ -77,6 +77,8 @@ export function ShortcutListPage() {
             <> <Link to="/peminjaman">Buka Pelacakan Peminjaman untuk mencatat pengembalian.</Link></>
           )}
         </Alert>
+      ) : can(profile.role, 'retensi.kelola') ? (
+        <p><Link className="btn btn-secondary" to={`/retensi?filter=${def.kind === 'H7' ? 'h7' : 'habis'}`}>Kelola di Penyusutan Arsip</Link></p>
       ) : null}
       {load.kind === 'loading' ? (
         <p className="muted detail-loading" role="status">

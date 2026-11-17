@@ -60,7 +60,11 @@ export async function restorePackages(client, packages, { dryRun = false, forceS
   const summary = { schema: dbSchema, tables: {}, checks: [], committed: false, units: [] };
   await client.query('begin');
   try {
-    const tables = RESTORE_TABLES.filter((t) => dbSchema >= '0024' || (t !== 'loan_groups' && t !== 'loan_objects'));
+    const tables = RESTORE_TABLES.filter((t) => {
+      if (t === 'transfer_drafts' || t === 'transfer_draft_items') return dbSchema >= '0026';
+      if (t === 'loan_groups' || t === 'loan_objects') return dbSchema >= '0024';
+      return true;
+    });
     const metas = {};
     for (const t of tables) metas[t] = await tableMeta(client, t);
     for (const { manifest } of packages) summary.units.push(manifest.unit);

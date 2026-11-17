@@ -72,6 +72,8 @@ export const EXPORT_TABLES = {
   drive_tasks: { key: ['id'], unitColumn: 'unit_id' },
   loan_groups: { key: ['id'], unitColumn: 'unit_id' },
   loan_objects: { key: ['id'], unitColumn: 'unit_id' },
+  transfer_drafts: { key: ['id'], unitColumn: 'unit_id' },
+  transfer_draft_items: { key: ['id'], unitColumn: 'unit_id' },
   audit_log: { key: ['id'], unitColumn: 'unit_id', allowGlobal: true },
 } as const satisfies Record<string, ExportTable>;
 export type ExportTableName = keyof typeof EXPORT_TABLES;
@@ -324,7 +326,11 @@ async function listUnits(env: FileEnv, key: string, fetchFn: FetchFn): Promise<R
   const schemaVersion = versions[0]?.version;
   if (!Array.isArray(units) || typeof schemaVersion !== 'string') return upstream();
   const tables: Record<string, { key: readonly string[] }> = {};
-  const available = TABLE_NAMES.filter((t) => schemaVersion >= '0024' || (t !== 'loan_groups' && t !== 'loan_objects'));
+  const available = TABLE_NAMES.filter((t) => {
+    if (t === 'transfer_drafts' || t === 'transfer_draft_items') return schemaVersion >= '0026';
+    if (t === 'loan_groups' || t === 'loan_objects') return schemaVersion >= '0024';
+    return true;
+  });
   for (const t of available) tables[t] = { key: EXPORT_TABLES[t].key };
   return json({
     ok: true,
@@ -356,7 +362,10 @@ async function tablePage(env: FileEnv, key: string, fetchFn: FetchFn, p: Extract
   const def: ExportTable = EXPORT_TABLES[p.table];
   const scope = p.unitId === GLOBAL_UNIT ? `${def.unitColumn}=is.null` : `${def.unitColumn}=eq.${p.unitId}`;
   const order = def.key.map((k) => `${k}.asc`).join(',');
-  const query = ['select=*', scope, `order=${order}`, `limit=${p.limit}`, ...keysetQuery(p.table, p.after)].join('&');
+  // A draft can include frozen metadata of up to 200 folders. Keep these pages
+  // smaller; the existing mirror advances by cursor and the returned total.
+  const limit = p.table === 'transfer_drafts' ? Math.min(p.limit, 10) : p.limit;
+  const query = ['select=*', scope, `order=${order}`, `limit=${limit}`, ...keysetQuery(p.table, p.after)].join('&');
   // jumlah total hanya di halaman pertama (count=exact mahal untuk tabel besar)
   const headers = serviceHeaders(key, p.after === null ? { Prefer: 'count=exact' } : {});
   const res = await fetchFn(`${base(env)}/rest/v1/${p.table}?${query}`, { headers });
