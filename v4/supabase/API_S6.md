@@ -13,7 +13,8 @@ operator menekan **Upload Alih Media**.
 - Resolusi foto disesuaikan hingga 2.400 piksel pada sisi terpanjang dan
   disusun ke halaman A4. PDF berisi gambar; teks belum bisa dicari.
 - Tidak ada perubahan skema, gateway, atau jalur unggah. Modul pemindai
-  dan pembuat PDF dimuat ketika dipakai.
+  dan pembuat PDF dimuat ketika dipakai. Pemberitahuan lisensi dependensi
+  pemindai ikut disajikan di `/scan-licenses.txt`.
 - Deteksi tepi/koreksi perspektif, OCR, Cari Isi Berkas, dan Cek JRA
   masih tahap lanjutan. Uji kamera fisik dilakukan kemudian sesuai
   arahan pemilik; tes otomatis menguji input foto dan PDF sintetis.
