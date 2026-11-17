@@ -23,6 +23,7 @@ const EditPage = lazy(() => import('./pages/s3/EditPage').then((m) => ({ default
 const CancelPage = lazy(() => import('./pages/s3/CancelPage').then((m) => ({ default: m.CancelPage })));
 const BackupPage = lazy(() => import('./pages/s3/BackupPage').then((m) => ({ default: m.BackupPage })));
 const QuarantinePage = lazy(() => import('./pages/s3/QuarantinePage').then((m) => ({ default: m.QuarantinePage })));
+const LoansPage = lazy(() => import('./pages/s4/LoansPage').then((m) => ({ default: m.LoansPage })));
 const MediaPage = lazy(() => import('./pages/s2/MediaPage').then((m) => ({ default: m.MediaPage })));
 const ReceiptPrintPage = lazy(() => import('./pages/s2/ReceiptPrintPage').then((m) => ({ default: m.ReceiptPrintPage })));
 
@@ -48,6 +49,7 @@ const BUILT: Record<string, () => ReactElement> = {
   koreksi: () => <Lazy><CancelPage /></Lazy>,
   karantina: () => <Lazy><QuarantinePage /></Lazy>,
   cadangan: () => <Lazy><BackupPage /></Lazy>,
+  peminjaman: () => <Lazy><LoansPage /></Lazy>,
   pengguna: () => <Lazy><UsersPage /></Lazy>,
 };
 const CARI = MODULES.find((m) => m.id === 'cari')!;

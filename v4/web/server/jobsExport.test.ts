@@ -321,7 +321,10 @@ describe('LIST_UNITS', () => {
     expect(j.ok).toBe(true);
     expect(j.schema_version).toBe('0022');
     expect(j.tables.counters!.key).toEqual(['scope', 'year']);
-    expect(Object.keys(j.tables).sort()).toEqual(Object.keys(EXPORT_TABLES).sort());
+    expect(Object.keys(j.tables).sort()).toEqual(Object.keys(EXPORT_TABLES).filter((t) => !t.startsWith('loan_')).sort());
+    const migrated = world({ version: '0024' });
+    const withLoans = (await (await call(await post('LIST_UNITS'), migrated.fetchFn)).json()) as typeof j;
+    expect(Object.keys(withLoans.tables).sort()).toEqual(Object.keys(EXPORT_TABLES).sort());
     expect(j.units.map((u) => u.code)).toEqual(['BAU', 'LPM', '_PLATFORM']);
     expect(j.units[2]).toMatchObject({ id: 'GLOBAL', tables: ['audit_log'], backup_only: true });
     expect(j.units[0]!.tables).toContain('item');

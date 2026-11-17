@@ -84,6 +84,11 @@ export async function seed(client) {
   await q(`insert into public.audit_log (id, unit_id, action, summary, result) values ('LOG-B-1', $1, 'UPDATE', 'unit B', 'WARNING')`, [UNIT.B]);
   await q(`insert into public.audit_log (id, unit_id, occurred_at, action, module, summary, result) values
     ('LOG-G-1', null, '2026-07-01 00:00:00.5+00', 'USER_CREATE', 'PENGGUNA', 'akun dibuat (lintas unit)', 'SUCCESS'), ('LOG-G-2', null, '2026-07-02 00:00:00+00', 'USER_UPDATE', 'PENGGUNA', '-', 'FAILED')`);
+  await q(`insert into public.loan_groups (unit_id,id,borrower_name,borrower_position,borrower_unit,borrower_identity_enc,
+    officer_name,officer_position,purpose,borrowed_on,due_on,borrow_condition,page_count,returned_on)
+    values ($1,'PIN-RT','Nama Contoh','Jabatan','Unit',decode('00abcd','hex'),'Petugas','Arsiparis','Tujuan',current_date,current_date,'BAIK',1,current_date)`, [UNIT.A]);
+  await q(`insert into public.loan_objects (unit_id,id,loan_id,berkas_id,berkas_no,berkas_title,location,page_count)
+    values ($1,'PO-RT','PIN-RT','BRK-A-1',1,'Berkas 1','Laci A',1)`, [UNIT.A]);
   // counters: TRM numbers are in use up to 12 (A) and 2 (B); BRK counter is not used by the app but must still round-trip
   await q(`insert into public.counters (unit_id, scope, year, last_value) values ($1, 'TRM', 2026, 12), ($1, 'TRM', 2025, 77), ($2, 'TRM', 2026, 2), ($1, 'ZZ_EXTRA', 0, 9000000000)`, [UNIT.A, UNIT.B]);
 }

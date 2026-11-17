@@ -48,7 +48,7 @@ describe('Dashboard (paritas 3.x)', () => {
     for (const [label, value] of [['Total Berkas', '82'], ['Total Item', '2.045']]) {
       expect(screen.getByText(label!).closest('.stat-card')).toHaveTextContent(value!);
     }
-    expect(screen.getByRole('link', { name: /Sedang Dipinjam\s*3\s*Lihat rincian/ })).toHaveAttribute('href', '/dashboard/dipinjam');
+    expect(screen.getByRole('link', { name: /Sedang Dipinjam\s*3\s*Lihat rincian/ })).toHaveAttribute('href', '/peminjaman?aktif=1');
     expect(screen.getByRole('link', { name: /Retensi H-7\s*0\s*Lihat rincian/ })).toHaveAttribute('href', '/dashboard/retensi-h7');
     expect(screen.getByRole('link', { name: /Habis Aktif\s*1\s*Lihat rincian/ })).toHaveAttribute('href', '/dashboard/habis-aktif');
     expect(screen.getByRole('heading', { name: 'Input berkas dan item dalam satu layar' })).toBeInTheDocument();
@@ -60,6 +60,7 @@ describe('Dashboard (paritas 3.x)', () => {
     renderApp('/dashboard', setup('PIMPINAN').fake.client);
     await screen.findByText('2.045');
     expect(screen.queryByRole('link', { name: 'Mulai Input Arsip' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Sedang Dipinjam/ })).toHaveAttribute('href', '/dashboard/dipinjam');
   });
 
   it('Daftar Isi Berkas: baris, sub-baris lokasi, ringkasan, lencana; judul menuju detail berkas', async () => {

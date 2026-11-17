@@ -61,7 +61,7 @@ export function DashboardPage() {
             </span>
           </div>
           {SHORTCUTS.map((s) => (
-            <Link key={s.kind} to={`/dashboard/${s.slug}${unitQuery}`} className={`stat-card stat-link tone-${s.tone}`}>
+            <Link key={s.kind} to={s.kind === 'DIPINJAM' && can(profile.role, 'peminjaman.kelola') ? '/peminjaman?aktif=1' : `/dashboard/${s.slug}${unitQuery}`} className={`stat-card stat-link tone-${s.tone}`}>
               <span className="stat-icon" aria-hidden="true">{s.icon}</span>
               <span className="stat-text">
                 <span className="stat-label">{s.title}</span>

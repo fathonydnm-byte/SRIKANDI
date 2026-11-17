@@ -36,10 +36,10 @@ describe('penjaga rute', () => {
     expect(await screen.findByText('Anda tidak memiliki akses ke Pengaturan.')).toBeInTheDocument();
   });
 
-  it('PETUGAS dapat membuka placeholder Peminjaman dengan info sprint', async () => {
+  it('PETUGAS dapat membuka Peminjaman', async () => {
     renderApp('/peminjaman', signedIn('PETUGAS').client);
     expect(await screen.findByRole('heading', { name: 'Peminjaman Arsip' })).toBeInTheDocument();
-    expect(screen.getByText(/Sprint 4 — Peminjaman/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Catat Peminjaman' })).toBeInTheDocument();
   });
 
   it('PIMPINAN tidak dapat membuka layar registrasi (Penerimaan, Registrasi, Alih Media, Cetak)', async () => {

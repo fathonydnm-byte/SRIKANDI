@@ -187,7 +187,7 @@ Migrasi `0022_s3_backup` sudah terpasang di staging bersama `0023`. [Deploy ulan
 
 - **Eksekusi manual lulus (17 November 2026 WIB):** cermin dan backup `BAGUM` berhasil dengan 1.772 baris. Backup audit lintas unit `_PLATFORM` berhasil (0 baris).
 - **Pemulihan kedua paket asli lulus:** di PostgreSQL 16 lokal sementara melalui Ubuntu WSL, jumlah baris cocok dan pemeriksaan relasi, nomor unik, serta counter tanda terima lulus. Lihat [panduan pemulihan](../v4/tools/restore-backup/README.md). Paket menyertakan metadata dan inventaris Drive. Akun login dan isi PDF tidak disalin oleh paket.
-- **Verifikasi operasional tersisa:** pemilik menjalankan `installNightlyTrigger` di proyek cermin, lalu memeriksa satu eksekusi otomatis di halaman Cadangan & Cermin. Fungsi memastikan hanya ada satu pemicu `nightlyMirror`, pukul 01.00–02.00 WIB. [Panduan pemasangan](../v4/mirror-apps-script/PASANG.md).
+- **Pemicu terpasang:** log pemilik 17 November 2026 mencatat `installNightlyTrigger` berhasil. Verifikasi eksekusi otomatis pertama masih menunggu hasil pada halaman Cadangan & Cermin. Fungsi memastikan hanya ada satu pemicu `nightlyMirror`, pukul 01.00–02.00 WIB. [Panduan pemasangan](../v4/mirror-apps-script/PASANG.md).
 
 ### S4 — Peminjaman
 

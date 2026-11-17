@@ -4,7 +4,7 @@ Gunakan paket asli dari Google Drive di komputer instansi. Perintah di bawah mem
 
 ## Paket pertama di staging
 
-Log Apps Script 17 November 2026 WIB mencatat `BAGUM`: cermin dan backup berhasil (1.772 baris), serta `_PLATFORM`: backup berhasil (0 baris). Pemilik memulihkan kedua paket asli di PostgreSQL 16 lokal melalui Ubuntu WSL. Log berakhir dengan `Latihan pemulihan lulus`. Jumlah baris per tabel cocok; pemeriksaan relasi, keunikan nomor, dan counter tanda terima lulus. Database sementara dibersihkan. Aktivasi pemicu harian dan hasil malam pertama belum dikonfirmasi.
+Log Apps Script 17 November 2026 WIB mencatat `BAGUM`: cermin dan backup berhasil (1.772 baris), serta `_PLATFORM`: backup berhasil (0 baris). Pemilik memulihkan kedua paket asli di PostgreSQL 16 lokal melalui Ubuntu WSL. Log berakhir dengan `Latihan pemulihan lulus`. Jumlah baris per tabel cocok; pemeriksaan relasi, keunikan nomor, dan counter tanda terima lulus. Database sementara dibersihkan. Pemicu harian telah dipasang; hasil eksekusi otomatis pertama masih perlu diperiksa.
 
 1. Di Google Drive akun instansi, unduh **masing-masing folder tanggal** dari `CENTRAL FILE V4/BAGUM/BACKUP/` dan `CENTRAL FILE V4/_PLATFORM/BACKUP/`. Pilih tanggal yang sama. Jika dua ZIP bernama sama, beri nama lokal `BAGUM.zip` dan `PLATFORM.zip`. Jangan gabungkan keduanya menjadi satu ZIP. Masing-masing harus memuat `manifest.json`; backup platform dengan nol baris tetap sah.
 2. Gunakan Linux, atau Ubuntu di WSL pada Windows. Dari root repo, pada revisi yang berisi panduan ini, pastikan Node.js 22+, npm, Bash, dan biner PostgreSQL 16 terpasang. Biner PostgreSQL biasanya ada di `/usr/lib/postgresql/16/bin`; jika berbeda, atur `PG_BIN`.
