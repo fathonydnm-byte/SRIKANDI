@@ -107,3 +107,25 @@ test('optional identity and contact encrypted by server; omitted from the read R
     c.release();
   }
 });
+
+test('Out Indicator is logged once per attempt, with no proof of physical printing and no cross-unit access', async () => {
+  const { id } = await create([choice(4)]);
+  const args = { p_unit_id: fx.unit.A, p_request_id: randomUUID(), p_loan_id: id };
+  const open = (who, body = args) => rpc(pool, fx.user[who], 'loan_out_indicator_open', body);
+  const docHistory = (who, unit = fx.unit.A) => rpc(pool, fx.user[who], 'loan_document_history',
+    { p_unit_id: unit, p_loan_id: id, p_offset: 0 });
+  assert.deepEqual(await docHistory('adminA'), []);
+  await expectCode(open('petugasB'), 'FORBIDDEN_UNIT');
+  await expectCode(docHistory('pimpinanA'), 'FORBIDDEN_ROLE');
+  await expectCode(docHistory('petugasB', fx.unit.B), 'NOT_FOUND');
+  assert.equal((await open('adminA')).id, id);
+  assert.equal((await open('adminA')).replayed, true);
+  await expectCode(open('adminA', { ...args, p_loan_id: 'missing' }), 'IDEMPOTENCY_CONFLICT');
+  const logs = await docHistory('petugasA2');
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0].action, 'OUT_INDICATOR_OPEN');
+  assert.equal(logs[0].source_status, null);
+  assert.ok(logs[0].actor_name);
+  assert.equal('actor_email_snapshot' in logs[0], false);
+  await returnLoan(id);
+});
