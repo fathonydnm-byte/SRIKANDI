@@ -1,14 +1,16 @@
-import { useId, useState, type FormEvent } from 'react';
+import { lazy, Suspense, useId, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { Alert } from '../../components/Alert';
 import { PageHeader } from '../../components/PageHeader';
 import { formatDate, formatNumber } from '../../lib/format';
 import { runDriveTasks, s2 } from '../../lib/s2api';
-import { scanToPdf, SCANNER_AVAILABLE } from '../../lib/scan';
+
 import { percent, STAGE_LABELS, uploads, useUploads } from '../../lib/uploadStore';
 import { useLoad } from '../../lib/useLoad';
 import { NeedsUnit, PdfPicker, useGetToken, useWriteUnit } from './common';
+
+const ScanDialog = lazy(() => import('./ScanDialog').then((m) => ({ default: m.ScanDialog })));
 
 const ITEM_PDF_MAX = 104857599; // < 100 MB (API_S2 §4)
 
@@ -24,6 +26,7 @@ export function MediaPage() {
   const [chosenItem, setChosenItem] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [fileKey, setFileKey] = useState(0);
+  const [scanFor, setScanFor] = useState<{ unitId: string | null; itemId: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const jobs = useUploads();
@@ -60,18 +63,11 @@ export function MediaPage() {
     setNotice(`${label}: unggahan dimulai. Anda dapat memilih item berikutnya sambil menunggu.`);
     setChosenItem('');
     if (deepItem) setSp({}, { replace: true });
+    setScanFor(null);
     setFile(null);
     setFileKey((k) => k + 1);
   }
 
-  async function scan() {
-    try {
-      const r = await scanToPdf();
-      if (r) setFile(new File([r.pdf], r.fileName, { type: 'application/pdf' }));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Pemindai tidak tersedia.');
-    }
-  }
 
   return (
     <>
@@ -88,14 +84,14 @@ export function MediaPage() {
           <div className="form-grid-2">
             <div className="field">
               <label htmlFor={ids.b}>Berkas induk *</label>
-              <select id={ids.b} value={berkasId} disabled={!ready || !berkasList.length} onChange={(e) => { setChosenBerkas(e.target.value); setChosenItem(''); if (deepItem) setSp({}, { replace: true }); }}>
+              <select id={ids.b} value={berkasId} disabled={!ready || !berkasList.length} onChange={(e) => { setScanFor(null); setChosenBerkas(e.target.value); setChosenItem(''); if (deepItem) setSp({}, { replace: true }); }}>
                 <option value="">{load.kind === 'loading' ? 'Memuat daftar berkas…' : berkasList.length ? 'Pilih berkas induk' : 'Semua item sudah memiliki PDF'}</option>
                 {berkasList.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
               </select>
             </div>
             <div className="field">
               <label htmlFor={ids.i}>Item tanpa PDF *</label>
-              <select id={ids.i} value={itemId} disabled={!berkasId} onChange={(e) => setChosenItem(e.target.value)}>
+              <select id={ids.i} value={itemId} disabled={!berkasId} onChange={(e) => { setScanFor(null); setChosenItem(e.target.value); }}>
                 <option value="">{berkasId ? 'Pilih item' : 'Pilih berkas terlebih dahulu'}</option>
                 {items.map((it) => <option key={it.id} value={it.id}>{it.label}</option>)}
               </select>
@@ -118,8 +114,8 @@ export function MediaPage() {
           <PdfPicker key={fileKey} id={ids.f} label="PDF alih media *" file={file} onChange={setFile}
             hint="PDF harus kurang dari 100 MB. Upload dikirim bertahap dan dapat dilanjutkan bila koneksi terputus." />
           <div className="action-row">
-            <button type="button" className="btn btn-secondary" disabled={!SCANNER_AVAILABLE} onClick={() => void scan()}>
-              Pindai dengan kamera{SCANNER_AVAILABLE ? '' : ' (Sprint 6)'}
+            <button type="button" className="btn btn-secondary" disabled={!itemId || busyIds.has(itemId)} onClick={() => { setError(null); setScanFor({ unitId, itemId }); }}>
+              Pindai dengan kamera
             </button>
           </div>
           {error ? <Alert tone="error"><span>{error}</span></Alert> : null}
@@ -131,6 +127,15 @@ export function MediaPage() {
             <button type="submit" className="btn btn-primary" disabled={!ready}>Upload Alih Media</button>
           </div>
         </form>
+      )}
+      {scanFor?.itemId === itemId && scanFor.unitId === unitId && (
+        <Suspense fallback={<p role="status">Memuat pemindai…</p>}>
+          <ScanDialog onCancel={() => setScanFor(null)} onUse={(r) => {
+            setFile(new File([r.pdf], r.fileName, { type: 'application/pdf' }));
+            setNotice(`PDF pindaian siap: ${r.pageCount} halaman. Tekan Upload Alih Media untuk menyimpan.`);
+            setScanFor(null);
+          }} />
+        </Suspense>
       )}
     </>
   );

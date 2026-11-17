@@ -283,7 +283,7 @@ describe('Registrasi Berkas Baru', () => {
 });
 
 describe('Alih Media Arsip', () => {
-  it('pilih berkas → item tanpa PDF → unggah; titik sambung pemindai belum aktif', async () => {
+  it('pilih item, aktifkan pemindai, dan tetap dapat mengunggah PDF manual', async () => {
     const start = vi.spyOn(uploads, 'start').mockReturnValue('JOB');
     let release: () => void = () => {};
     const gate = new Promise<void>((r) => (release = r));
@@ -306,7 +306,7 @@ describe('Alih Media Arsip', () => {
     await user.selectOptions(itemSel, 'ITM-2');
     expect(screen.getByText('Belum ada PDF', { selector: 'span' })).toBeInTheDocument();
     expect(screen.getByText(/nama file: 1_2_Belum ada PDF\.pdf/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Pindai dengan kamera \(Sprint 6\)/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Pindai dengan kamera' })).toBeEnabled();
     await user.upload(screen.getByLabelText('PDF alih media *'), new File(['%PDF'], 'scan.pdf', { type: 'application/pdf' }));
     await user.click(screen.getByRole('button', { name: 'Upload Alih Media' }));
     expect(start).toHaveBeenCalledWith(expect.objectContaining({ purpose: 'ITEM_PDF', objectId: 'ITM-2' }), 'PDF Berkas 1 / Item 2', expect.any(Function));
