@@ -980,6 +980,8 @@ h1[tabindex='-1']:focus {
     max-width: 240px;
   }
   .content {
+    /* Match the legacy desktop layout: fill the column beside the sidebar. */
+    max-width: none;
     padding: 28px 32px 40px;
   }
   .page-header h1 {
@@ -2610,6 +2612,12 @@ a.stat-card:focus-visible {
 }
 
 @media (min-width: 1280px) {
+  .stat-grid {
+    gap: 14px;
+  }
+  .cta-card p {
+    max-width: 72ch;
+  }
   .stat-grid .stat-icon {
     display: grid;
     width: 36px;
