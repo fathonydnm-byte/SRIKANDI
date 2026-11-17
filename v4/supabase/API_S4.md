@@ -22,11 +22,41 @@ chat, atau JS klien. CI memakai nilai lokal fiktif. Nilai ciphertext ikut paket 
   ke transaksi tetap terlihat; sampai rekonsiliasi, penghitung memakai jumlah berkas untuk bagian lama itu.
 - Out Indicator dibuat dari snapshot transaksi; cetak atau simpan PDF dari browser, satu lembar A5 per berkas.
 
-## Pekerjaan sebelum rilis Sprint 4 lengkap
+## Riwayat dokumen dan impor pinjaman yang sudah selesai (0025)
 
-Impor dan rekonsiliasi transaksi serta log cetak dari 3.x (pertahankan ID dan status lama); bukti persetujuan
-opsional via pengunggah Drive; log cetak Out Indicator; dan Berita Acara Google Docs per transaksi
-dengan template dan izin file. Uji akses gateway Docs secara terpisah dan pertahankan kontrol unit.
+- Out Indicator v4 mencatat **disiapkan untuk cetak** ketika A5 siap. Browser tidak melaporkan
+  apakah operator mencetak, menyimpan PDF, atau membatalkan dialog. Aksi yang dikirim ulang
+  dengan ID permintaan sama mencatat satu peristiwa. Riwayat per transaksi dibatasi untuk petugas
+  dan admin yang berwenang di unit tersebut; log ikut backup sebagai bagian dari audit.
+- Impor mengambil transaksi berstatus **KEMBALI** dan dua tab riwayat dokumen dari satu ekspor
+  XLSX asli 3.x. Unit harus sudah ada dan `SETTINGS.INSTANCE_ID` harus cocok dengan unit v4.
+  ID transaksi/objek, tanggal, dan snapshot yang tersedia dipertahankan. Jika judul/nomor tidak
+  tersimpan, data berkas/item saat ini dipakai sebagai cadangan; kondisi pinjam kosong tetap kosong.
+  Tidak mengubah status arsip. Transaksi yang sudah terdaftar tidak ditimpa, termasuk pengembalian
+  yang baru dicatat di v4 meski ekspor lama masih menandainya aktif. Pinjaman aktif lain dilewati.
+- Log lama hanya menyimpan ID log, waktu, jenis, dan status sumber; tidak menyalin tautan,
+  isi dokumen, nomor identitas, kontak, atau alamat email. Log yang tidak bisa dikaitkan dilaporkan
+  dengan tab dan nomor baris; keberadaannya mencegah commit seluruh impor. Cocokkan dengan
+  arsip sumber sebelum melakukan koreksi, jangan membuat transaksi fiktif untuk meloloskannya.
+- Terapkan 0025 dan gunakan koneksi postgres staging melalui variabel lingkungan. Mulai dari
+  *root* repo. Simpan dan gunakan XLSX di lingkungan operator; jangan taruh file ekspor di repo.
+
+```sh
+npm ci --prefix v4/tools/import-legacy --no-audit --no-fund
+node v4/tools/import-legacy/import-loan-history.mjs --file "/path/ekspor.xlsx" --unit-code BAGUM
+```
+
+Perintah di atas memakai transaksi lengkap lalu **rollback**. Tinjau jumlah grup, log, pinjaman
+aktif yang dilewati, dan baris yang belum cocok. Setelah rekonsiliasi disetujui, jalankan ulang
+dengan `--apply`. Periksa tab **Sudah kembali**, **Riwayat Dokumen**, dan pastikan status pinjam
+tetap sama. Ulangi uji coba untuk memastikan tidak ada tambahan duplikat.
+
+## Pekerjaan Sprint 4 yang masih terbuka
+
+Bukti persetujuan opsional via pengunggah Drive, dan pembuatan Berita Acara Google Docs per
+transaksi dengan template dan izin file. Uji akses gateway Docs secara terpisah dan pertahankan
+kontrol unit.
+
 ## Rekonsiliasi staging BAGUM (17 November 2026 WIB)
 
 Satu transaksi aktif lama dari tab PEMINJAMAN (tiga objek berkas lengkap, nomor 11, 17 dan 24)

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth, useProfile } from '../../auth/AuthContext';
 import { Alert } from '../../components/Alert';
@@ -56,23 +56,39 @@ function LoansScreen({ unitId }: { unitId: string | null }) {
   const [adding, setAdding] = useState(false);
   const [returning, setReturning] = useState<Loan | null>(null);
   const [printing, setPrinting] = useState<Loan | null>(null);
+  const [printBusy, setPrintBusy] = useState<string | null>(null);
+  const [printError, setPrintError] = useState<Message | null>(null);
+  const [historyId, setHistoryId] = useState<string | null>(null);
+  const [printRevision, setPrintRevision] = useState(0);
+  const printLock = useRef(false);
+  const printAttempt = useAttempt();
 
-  useEffect(() => {
-    if (!printing) return;
-    const frame = window.requestAnimationFrame(() => window.print());
-    const done = () => setPrinting(null);
-    window.addEventListener('afterprint', done);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener('afterprint', done);
-    };
-  }, [printing]);
+  async function openOutIndicator(loan: Loan) {
+    if (printLock.current || printing) return;
+    printLock.current = true;
+    setPrintError(null);
+    setPrintBusy(loan.id);
+    try {
+      // Keep the same key when the request times out; a deliberate later print is a new event.
+      await loanApi.openOutIndicator(client, unitId, loan.id, printAttempt(loan.id));
+      printAttempt(null);
+      setPrintRevision((r) => r + 1);
+      setPrinting(loan);
+    } catch (err) {
+      setPrintError(errorMessage(err));
+    } finally {
+      printLock.current = false;
+      setPrintBusy(null);
+    }
+  }
 
   function saved(msg: string) {
     setResult(msg);
     setAdding(false);
     setReturning(null);
     setStatus('ACTIVE');
+    setHistoryId(null);
+    setPrinting(null);
     setOffset(0);
     reload();
   }
@@ -94,8 +110,9 @@ function LoansScreen({ unitId }: { unitId: string | null }) {
         <h2 className="section-title">Pelacakan Peminjaman</h2>
         <div className="loan-actions">
           {(['ACTIVE', 'RETURNED'] as const).map((s) => <button type="button" className="btn btn-secondary" aria-pressed={status === s}
-            key={s} onClick={() => { setStatus(s); setOffset(0); }}>{s === 'ACTIVE' ? 'Sedang dipinjam' : 'Sudah kembali'}</button>)}
+            key={s} disabled={!!printBusy} onClick={() => { setStatus(s); setOffset(0); setHistoryId(null); setPrinting(null); }}>{s === 'ACTIVE' ? 'Sedang dipinjam' : 'Sudah kembali'}</button>)}
         </div>
+        {printError && <Alert tone="error" message={printError} />}
         {list.kind === 'loading' && <p role="status">Memuat transaksi…</p>}
         {list.kind === 'error' && <><Alert tone="error" message={list.message} /><button type="button" className="btn btn-secondary" onClick={reload}>Muat ulang</button></>}
         {list.kind === 'ok' && <>
@@ -111,18 +128,64 @@ function LoansScreen({ unitId }: { unitId: string | null }) {
             </details>
             <div className="loan-actions">
               {!loan.returned_on && <button type="button" className="btn btn-primary" onClick={() => { setReturning(loan); setAdding(false); setResult(''); }}>Catat Pengembalian</button>}
-              <button type="button" className="btn btn-secondary" onClick={() => setPrinting(loan)}>Cetak Out Indicator A5</button>
+              <button type="button" className="btn btn-secondary" disabled={!!printBusy || !!printing} onClick={() => void openOutIndicator(loan)}>
+                {printBusy === loan.id ? 'Menyiapkan cetak…' : 'Cetak Out Indicator A5'}
+              </button>
+              <button type="button" className="btn btn-secondary" aria-expanded={historyId === loan.id}
+                onClick={() => setHistoryId(historyId === loan.id ? null : loan.id)}>
+                {historyId === loan.id ? 'Tutup Riwayat Dokumen' : 'Riwayat Dokumen'}
+              </button>
             </div>
+            {printing?.id === loan.id && <section className="stack" aria-label="Out Indicator siap dicetak">
+              <p role="status">Out Indicator A5 siap. Cetak atau simpan PDF dari dialog browser.</p>
+              <div className="loan-actions">
+                <button type="button" className="btn btn-primary" onClick={() => window.print()}>Buka Dialog Cetak</button>
+                <button type="button" className="btn btn-secondary" onClick={() => setPrinting(null)}>Tutup Cetak</button>
+              </div>
+            </section>}
+            {historyId === loan.id && <DocumentHistory unitId={unitId} loanId={loan.id} revision={printRevision} />}
           </article>)}
           <div className="loan-actions">
-            {offset > 0 && <button type="button" className="btn btn-secondary" onClick={() => setOffset((o) => o - 25)}>Sebelumnya</button>}
-            {list.data.length === 25 && <button type="button" className="btn btn-secondary" onClick={() => setOffset((o) => o + 25)}>Berikutnya</button>}
+            {offset > 0 && <button type="button" className="btn btn-secondary" disabled={!!printBusy} onClick={() => { setOffset((o) => o - 25); setPrinting(null); }}>Sebelumnya</button>}
+            {list.data.length === 25 && <button type="button" className="btn btn-secondary" disabled={!!printBusy} onClick={() => { setOffset((o) => o + 25); setPrinting(null); }}>Berikutnya</button>}
           </div>
         </>}
       </section>
     </div>
     {printing && <OutIndicator loan={printing} />}
   </>;
+}
+
+const documentTime = new Intl.DateTimeFormat('id-ID', {
+  dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Jakarta',
+});
+
+function DocumentHistory({ unitId, loanId, revision }: { unitId: string | null; loanId: string; revision: number }) {
+  const { client } = useAuth();
+  const [offset, setOffset] = useState(0);
+  const [history, reload] = useLoad(`loan-history:${loanId}:${offset}:${revision}`,
+    () => loanApi.documentHistory(client, unitId, loanId, offset));
+  return <section className="stack" aria-label="Riwayat dokumen peminjaman">
+    {history.kind === 'loading' && <p role="status">Memuat riwayat dokumen…</p>}
+    {history.kind === 'error' && <><Alert tone="error" message={history.message} />
+      <button className="btn btn-secondary" type="button" onClick={reload}>Muat ulang riwayat</button></>}
+    {history.kind === 'ok' && <>
+      {history.data.length === 0 && <p className="muted">Belum ada riwayat dokumen pada halaman ini.</p>}
+      <ul>{history.data.map((event) => {
+        const title = event.action === 'OUT_INDICATOR_OPEN' ? 'Out Indicator disiapkan untuk cetak'
+          : event.action === 'LEGACY_OUT_INDICATOR' ? 'Out Indicator (aplikasi lama)' : 'Berita Acara (aplikasi lama)';
+        const source = event.source_status === 'PDF_DIBUAT' ? 'PDF dibuat'
+          : event.source_status === 'DOCS_DIBUAT' ? 'Google Docs dibuat' : event.source_status === 'DICETAK' ? 'Tercatat dicetak' : '';
+        return <li key={event.id}>{title}{source && ` · ${source}`}
+          {' · '}<time dateTime={event.occurred_at}>{documentTime.format(new Date(event.occurred_at))} WIB</time>
+          {event.actor_name && ` · ${event.actor_name}`}</li>;
+      })}</ul>
+      <div className="loan-actions">
+        {offset > 0 && <button className="btn btn-secondary" type="button" onClick={() => setOffset((n) => n - 25)}>Riwayat sebelumnya</button>}
+        {history.data.length === 25 && <button className="btn btn-secondary" type="button" onClick={() => setOffset((n) => n + 25)}>Riwayat berikutnya</button>}
+      </div>
+    </>}
+  </section>;
 }
 
 function BorrowForm({ unitId, onSaved }: { unitId: string | null; onSaved: () => void }) {

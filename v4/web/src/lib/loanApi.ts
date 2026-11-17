@@ -29,14 +29,25 @@ export interface Loan {
   borrowed_on: string;
   due_on: string;
   returned_on: string | null;
-  borrow_condition: string;
+  borrow_condition: string | null;
   return_condition: string | null;
   notes: string | null;
   page_count: number;
   objects: LoanObject[];
 }
+export interface LoanDocumentEvent {
+  id: string;
+  action: 'OUT_INDICATOR_OPEN' | 'LEGACY_OUT_INDICATOR' | 'LEGACY_BERITA_ACARA';
+  occurred_at: string;
+  actor_name: string | null;
+  source_status: 'PDF_DIBUAT' | 'DOCS_DIBUAT' | 'DICETAK' | null;
+}
 export interface LoanChoice { berkas_id: string; item_ids: string[] }
 export const loanApi = {
+  openOutIndicator: (c: SupabaseClient, unit: string | null, loan: string, request: string) =>
+    callWrite<{ id: string }>(c, 'loan_out_indicator_open', { p_unit_id: unit, p_loan_id: loan }, request),
+  documentHistory: (c: SupabaseClient, unit: string | null, loan: string, offset: number) =>
+    callRead<LoanDocumentEvent[]>(c, 'loan_document_history', { p_unit_id: unit, p_loan_id: loan, p_offset: offset }),
   options: (c: SupabaseClient, unit: string | null, query: string, parent: string | null) =>
     callRead<LoanBerkas[]>(c, 'loan_options', { p_unit_id: unit, p_query: query, p_berkas_id: parent }),
   list: (c: SupabaseClient, unit: string | null, status: 'ACTIVE' | 'RETURNED', offset: number) =>
