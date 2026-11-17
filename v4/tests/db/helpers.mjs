@@ -15,7 +15,9 @@ export const ALL_PUBLIC_TABLES = [
   // Sprint 3 (edit / koreksi & pembatalan, 0018)
   'karantina', 'pembatalan_arsip',
   // Sprint 3 (cermin + backup, 0022)
-  'job_nonces', 'backup_runs', 'loan_groups', 'loan_objects'
+  'job_nonces', 'backup_runs',
+  // Sprint 4 (peminjaman) dan Sprint 5 (draf usul)
+  'loan_groups', 'loan_objects', 'transfer_drafts', 'transfer_draft_items'
 ];
 
 export function newPool(max = 10) {
