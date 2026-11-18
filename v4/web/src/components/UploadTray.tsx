@@ -23,7 +23,17 @@ function JobRow({ job }: { job: UploadJob }) {
           <strong>{job.error.title}</strong> {job.error.action}
         </p>
       ) : null}
+      {job.indexState === 'pending' && <p role="status">PDF tersimpan. Menyiapkan pencarian isi…</p>}
+      {job.indexState === 'ready' && <p role="status">Teks siap dicari di Cari Isi Berkas.</p>}
+      {job.indexState === 'failed' && <p className="upload-job-error" role="alert">
+        PDF tersimpan, tetapi indeks teks gagal disimpan.
+      </p>}
       <div className="upload-job-actions">
+        {job.indexState === 'failed' && (
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => uploads.retryIndex(job.id)}>
+            Coba lagi indeks teks
+          </button>
+        )}
         {active && !job.paused ? (
           <button type="button" className="btn btn-secondary btn-sm" onClick={() => uploads.pause(job.id)}>
             Jeda
@@ -44,7 +54,7 @@ function JobRow({ job }: { job: UploadJob }) {
             Coba lagi
           </button>
         ) : null}
-        {!active ? (
+        {!active && job.indexState !== 'pending' ? (
           <button type="button" className="btn btn-secondary btn-sm" onClick={() => uploads.dismiss(job.id)}>
             Tutup
           </button>
@@ -62,7 +72,7 @@ export function UploadTray() {
     uploads.configure(async () => (await client.auth.getSession()).data.session?.access_token ?? null);
   }, [client]);
   // Peringatan bila menutup tab saat masih mengunggah.
-  const busy = jobs.some((j) => !j.error && j.progress.stage !== 'selesai' && j.progress.stage !== 'dibatalkan');
+  const busy = jobs.some((j) => j.indexState === 'pending' || (!j.error && j.progress.stage !== 'selesai' && j.progress.stage !== 'dibatalkan'));
   useEffect(() => {
     if (!busy) return;
     const onUnload = (e: BeforeUnloadEvent) => {

@@ -323,24 +323,6 @@ test('3.30.6: items in berkas with a secondary classification (with or without t
   }
 });
 
-test('Sprint 6 hook: a content index built from the old PDF becomes STALE when the table exists', async () => {
-  const c = await pool.connect();
-  try {
-    await c.query('begin');
-    await c.query('create table public.content_documents (unit_id uuid, item_id text, source_pdf_id text, status text)');
-    await c.query(`insert into public.content_documents values ($1, 'ITM-x', 'old-pdf-0000001', 'READY'), ($1, 'ITM-x', 'new-pdf-0000001', 'READY')`, [fx.unit.A]);
-    const { rows: [r] } = await c.query(`select app.invalidate_file_derivatives($1, 'ITM-x', 'old-pdf-0000001', 'REQ') as j`, [fx.unit.A]);
-    assert.deepEqual([r.j.content_index, r.j.content_documents_stale], ['MARKED', 1]);
-    const { rows } = await c.query('select source_pdf_id, status from public.content_documents order by 1');
-    assert.deepEqual(rows.map((x) => [x.source_pdf_id, x.status]), [['new-pdf-0000001', 'READY'], ['old-pdf-0000001', 'STALE']]);
-  } finally {
-    await c.query('rollback');
-    c.release();
-  }
-  const { rows: [r] } = await pool.query(`select app.invalidate_file_derivatives($1, 'ITM-x', 'old-pdf-0000001', 'REQ') as j`, [fx.unit.A]);
-  assert.equal(r.j.content_index, 'NOT_INSTALLED');
-});
-
 test('berkas_update_title (3.27): guards, v4 folder rename task only, legacy folder untouched, idempotent, audited', async () => {
   const m = await manual(fx.user.petugasA, newBerkasTarget({ title: 'Judul lama' }));
   const call = (user, title, extra = {}) => rpc(pool, user, 'berkas_update_title', { p_request_id: extra.request_id || randomUUID(),

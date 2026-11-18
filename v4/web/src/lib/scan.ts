@@ -1,3 +1,4 @@
+import type { ScanContent } from './contentSearch';
 import { correctedSize, createRectifier, validCorners, type Corners } from './perspective';
 
 /** Scan files are created locally and enter the existing PDF upload flow. */
@@ -6,6 +7,7 @@ export interface ScanResult {
   fileName: string;
   pageCount: number;
   ocr?: number | 'lewati' | 'gagal'; // Number of pages with searchable text.
+  indexContent?: ScanContent;
 }
 export interface ScanPage {
   jpeg: Blob;

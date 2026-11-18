@@ -25,12 +25,13 @@ async function within<T>(signal: AbortSignal, ms: number, work: (deadline: Abort
 /** Text-only Tesseract PDF pages, in the same orientation and order as the visible photos. */
 export async function recognizeScan(
   pages: readonly ScanPage[], signal: AbortSignal, onProgress: (p: OcrProgress) => void,
-): Promise<(Uint8Array | null)[]> {
+): Promise<{ layers: (Uint8Array | null)[]; pages: (string | null)[] }> {
   let worker: Worker | undefined;
   let page = 0;
   let percent = 0;
   const session = AbortSignal.any([signal, AbortSignal.timeout(TOTAL_LIMIT)]);
   const layers: (Uint8Array | null)[] = [];
+  const texts: (string | null)[] = [];
   try {
     onProgress(null);
     worker = await within(session, INIT_LIMIT, async (deadline) => {
@@ -74,18 +75,19 @@ export async function recognizeScan(
       page = index + 1;
       percent = 0;
       onProgress({ page, total: pages.length, percent });
-      const layer = await within(session, PAGE_LIMIT, async (deadline) => {
+      const { layer, text } = await within(session, PAGE_LIMIT, async (deadline) => {
         const jpeg = await uprightScanPhoto(input);
         deadline.throwIfAborted();
         const { data } = await active.recognize(jpeg, { pdfTextOnly: true }, { text: true, pdf: true });
-        if (!data.text?.trim()) return null;
+        if (!data.text?.trim()) return { layer: null, text: null };
         if (!data.pdf?.length) throw new Error('Lapisan teks OCR tidak dapat dibuat.');
-        return Uint8Array.from(data.pdf);
+        return { layer: Uint8Array.from(data.pdf), text: data.text };
       });
       layers.push(layer);
+      texts.push(text);
       onProgress({ page, total: pages.length, percent: 100 });
     }
-    return layers;
+    return { layers, pages: texts };
   } finally {
     if (worker) await worker.terminate();
   }

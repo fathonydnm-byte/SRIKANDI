@@ -244,6 +244,7 @@ test('every public table is classified: exported by the backup, or deliberately 
     'profiles',              // tied to auth.users; accounts are re-created by an admin after a disaster
     'idempotency_keys',      // request replay cache, no business data
     'upload_sessions',       // short-lived upload sessions (attestation data)
+    'content_documents',     // index derived from the PDF text layer, private pages are in app
     'schema_migrations_log', // technical
     'job_nonces', 'backup_runs'];
   const rows = await owner(pool, "select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind in ('r','p') order by 1");

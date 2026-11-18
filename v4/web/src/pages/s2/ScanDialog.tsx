@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type ChangeEvent } from 'react';
 import { Alert } from '../../components/Alert';
 import { MAX_SCAN_PAGES, prepareScanPhoto, scanToPdf, type ScanPage, type ScanResult } from '../../lib/scan';
+import { limitScanContent, type ScanContent } from '../../lib/contentSearch';
 import type { Corners } from '../../lib/perspective';
 import { ScanCropEditor } from './ScanCropEditor';
 import './scan.css';
@@ -105,6 +106,7 @@ export function ScanDialog({ onCancel, onUse }: { onCancel(): void; onUse(result
     };
     try {
       let layers: (Uint8Array | null)[] | undefined;
+      let indexContent: ScanContent | undefined;
       let outcome: ScanResult['ocr'];
       if (useOcr) {
         const controller = new AbortController();
@@ -114,12 +116,15 @@ export function ScanDialog({ onCancel, onUse }: { onCancel(): void; onUse(result
         try {
           const { recognizeScan } = await import('../../lib/scanOcr');
           controller.signal.throwIfAborted();
-          layers = await recognizeScan(pages, controller.signal, (p) => {
+          const recognized = await recognizeScan(pages, controller.signal, (p) => {
             if (!stopped.current && !controller.signal.aborted && p) {
               setProgress(`Membaca teks halaman ${p.page} dari ${p.total} · ${p.percent}%…`);
             }
           });
+          layers = recognized.layers;
           outcome = layers.filter(Boolean).length;
+          const content = limitScanContent(recognized.pages);
+          if (content.pages.some(Boolean)) indexContent = content;
         } catch {
           outcome = controller.signal.aborted ? 'lewati' : 'gagal';
         } finally {
@@ -137,13 +142,16 @@ export function ScanDialog({ onCancel, onUse }: { onCancel(): void; onUse(result
         } catch {
           if (stopped.current) return;
           outcome = 'gagal';
+          indexContent = undefined;
           setProgress('Menyiapkan PDF tanpa OCR…');
           result = await scanToPdf(pages, pdfProgress);
         }
       } else {
         result = await scanToPdf(pages, pdfProgress);
       }
-      if (!stopped.current) onUse(outcome === undefined ? result : { ...result, ocr: outcome });
+      if (!stopped.current) onUse(outcome === undefined ? result : {
+        ...result, ocr: outcome, ...(indexContent ? { indexContent } : {}),
+      });
     } catch (err) {
       if (!stopped.current) setError(err instanceof Error ? err.message : 'PDF gagal disiapkan.');
     } finally {

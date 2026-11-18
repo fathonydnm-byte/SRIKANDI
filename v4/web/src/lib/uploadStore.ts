@@ -17,12 +17,14 @@ export interface UploadJob {
   error: UserMessage | null;
   result: UploadResult | null;
   paused: boolean;
+  indexState?: 'pending' | 'ready' | 'failed';
 }
 
 type Listener = () => void;
 let jobs: UploadJob[] = [];
 const handles = new Map<string, UploadHandle>();
 const callbacks = new Map<string, (r: UploadResult) => void>();
+const indexers = new Map<string, (r: UploadResult) => Promise<unknown>>();
 const listeners = new Set<Listener>();
 let getTokenRef: GetAccessToken = async () => null;
 
@@ -34,6 +36,19 @@ function patch(id: string, p: Partial<UploadJob>) {
   set(jobs.map((j) => (j.id === id ? { ...j, ...p } : j)));
 }
 
+async function indexContent(id: string, result: UploadResult) {
+  const index = indexers.get(id);
+  if (!index) return;
+  patch(id, { indexState: 'pending' });
+  try {
+    await index(result);
+    indexers.delete(id);
+    patch(id, { indexState: 'ready' });
+  } catch {
+    patch(id, { indexState: 'failed' });
+  }
+}
+
 function run(job: UploadJob) {
   const handle = startUpload(job.request, {
     getToken: getTokenRef,
@@ -43,7 +58,9 @@ function run(job: UploadJob) {
   handle.promise.then(
     (result) => {
       patch(job.id, { result, error: null });
+      void indexContent(job.id, result);
       callbacks.get(job.id)?.(result);
+      callbacks.delete(job.id);
     },
     (error: unknown) => {
       patch(job.id, { error: error instanceof FileAccessError ? error.userMessage : { title: 'Unggahan gagal.', action: 'Coba lagi.' } });
@@ -56,13 +73,17 @@ export const uploads = {
     getTokenRef = getToken;
   },
   /** Mulai unggahan. requestId tetap per job, sehingga "Coba lagi" tidak membuat sesi ganda. */
-  start(request: Omit<UploadRequest, 'requestId'>, label: string, onDone?: (r: UploadResult) => void): string {
+  start(
+    request: Omit<UploadRequest, 'requestId'>, label: string,
+    onDone?: (r: UploadResult) => void, index?: (r: UploadResult) => Promise<unknown>,
+  ): string {
     const id = newRequestId();
     const job: UploadJob = {
       id, label, request: { ...request, requestId: id }, error: null, result: null, paused: false,
       progress: { stage: 'menyiapkan', sent: 0, total: request.file.size },
     };
     if (onDone) callbacks.set(id, onDone);
+    if (index) indexers.set(id, index);
     set([...jobs, job]);
     run(job);
     return id;
@@ -74,12 +95,17 @@ export const uploads = {
     set(jobs.map((j) => (j.id === id ? next : j)));
     run(next);
   },
+  retryIndex(id: string) {
+    const job = jobs.find((j) => j.id === id);
+    if (job?.result && job.indexState === 'failed') void indexContent(id, job.result);
+  },
   pause: (id: string) => handles.get(id)?.pause(),
   resume: (id: string) => handles.get(id)?.resume(),
   abort: (id: string) => handles.get(id)?.abort(),
   dismiss(id: string) {
     handles.delete(id);
     callbacks.delete(id);
+    indexers.delete(id);
     set(jobs.filter((j) => j.id !== id));
   },
   forObject(objectId: string): UploadJob | undefined {
@@ -95,6 +121,7 @@ export const uploads = {
     handles.forEach((h) => h.abort());
     handles.clear();
     callbacks.clear();
+    indexers.clear();
     set([]);
   },
 };

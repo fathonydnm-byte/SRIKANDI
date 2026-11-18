@@ -82,3 +82,45 @@ asset dan aturan header bersama saat menaikkan versi mesin atau model.
 Izin kompilasi WebAssembly hanya berlaku pada respons skrip worker OCR.
 Tidak ada perubahan database, hak akses Drive, atau pengiriman foto ke
 layanan OCR eksternal.
+
+## Tahap kelima — Cari Isi Berkas dari OCR pindaian baru
+
+1. Buat PDF dengan OCR di **Alih Media Arsip**, lalu pilih **Upload Alih
+   Media**. Setelah PDF terverifikasi dan terhubung dengan item, aplikasi
+   otomatis mengirim teks OCR yang sudah tersedia; PDF tidak diunduh
+   atau di-OCR ulang. Tray unggahan menampilkan status indeks secara
+   terpisah. Jika gagal, **Coba lagi indeks teks** mengulang penyimpanan
+   tanpa mengunggah ulang PDF. Draf teks untuk retry hanya hidup di tab.
+2. Buka **Cari Isi Berkas**, masukkan kata atau frasa, lalu tekan **Cari**.
+   Mode biasa membutuhkan semua kata pada halaman yang sama; **Cari frasa
+   berurutan** membutuhkan urutan dan posisi yang berdampingan. Hasil berisi
+   cuplikan, unit, nomor item/berkas, dan nomor halaman PDF. Klik judul
+   hasil untuk buka detail item. Lokasi akses PDF tetap di detail tersebut.
+
+Tahap ini mencakup PDF pindaian baru yang dibuat dengan OCR di aplikasi
+dan diunggah setelah migrasi. PDF lama, PDF eksternal, lampiran DOCX dan
+OCR yang dilewati belum ikut indeks. Teks dibatasi 8.000 karakter per
+halaman dan 48.000 per PDF; pemotongan tidak mengubah PDF.
+
+- `index_scan_content(p_session_id, p_pages)` menerima array teks/null
+  sesuai urutan halaman, hanya dari pemilik sesi unggah PDF item yang
+  berstatus COMMITTED dan masih menunjuk ke file aktif. Isi indeks
+  berasal dari OCR browser; pengindeksan tidak mengubah isi PDF. Retry
+  dengan sesi sama tidak menggandakan atau menimpa isi yang telah disimpan.
+- `search_scan_content(p_query, p_unit_id, p_phrase, p_limit, p_offset)`
+  memakai PostgreSQL FTS (`simple`) dan hanya mengembalikan cuplikan.
+  Hak baca mengikuti PDF arsip aktif: peran aktif melihat unit sendiri;
+  Admin Pusat bisa memilih satu atau semua unit. Baris mentah tidak
+  diberikan ke peran browser. Hasil dibatasi per halaman.
+- `content_documents` menggunakan kait invalidasi Sprint 3. Ketika file
+  diganti atau arsip dibatalkan, indeks lama tidak ditampilkan dan teksnya
+  dihapus ketika status menjadi STALE. Teks tidak ikut cermin/backup
+  metadata; lapisan teks tetap ada di PDF. Fitur pengindeksan ulang
+  diperlukan jika hasil pencarian isi perlu dipulihkan dari PDF lama.
+
+**Urutan rilis:** terapkan `0027_s6_content_search.sql` dalam satu
+transaksi di basis data staging. Pastikan `schema_migrations_log`
+memuat `0027 / s6_content_search`, baru pasang build web. Uji dengan
+pindaian OCR arsip contoh berisi kata yang tidak ada di judul, lalu cek
+bahwa hasil hanya muncul untuk unit yang berwenang. Tidak ada perubahan
+gateway/izin Drive dan alur unggah PDF biasa tetap tersedia.
