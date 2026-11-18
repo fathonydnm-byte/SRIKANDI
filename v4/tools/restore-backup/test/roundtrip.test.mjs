@@ -111,7 +111,8 @@ test('the allow-list of the REAL server module equals the restore tool list and 
   assert.deepEqual(Object.keys(mod.EXPORT_TABLES), RESTORE_TABLES);
   // every public table is either exported or deliberately excluded
   const { rows } = await src.query("select table_name from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE' order by 1");
-  const excluded = ['profiles', 'idempotency_keys', 'upload_sessions', 'schema_migrations_log', 'job_nonces', 'backup_runs'];
+  const excluded = ['profiles', 'idempotency_keys', 'upload_sessions', 'schema_migrations_log', 'job_nonces', 'backup_runs',
+    'content_documents']; // Derived from the PDF text layer.
   assert.deepEqual(rows.map((r) => r.table_name), [...RESTORE_TABLES, ...excluded].sort());
 });
 
