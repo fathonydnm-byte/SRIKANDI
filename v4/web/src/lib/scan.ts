@@ -1,3 +1,5 @@
+import { correctedSize, createRectifier, validCorners, type Corners } from './perspective';
+
 /** Scan files are created locally and enter the existing PDF upload flow. */
 export interface ScanResult {
   pdf: Blob;
@@ -18,7 +20,7 @@ const A4: [number, number] = [595.28, 841.89];
 
 type Decoded = { image: CanvasImageSource; width: number; height: number; release(): void };
 
-async function decode(file: File): Promise<Decoded> {
+async function decode(file: Blob): Promise<Decoded> {
   if (typeof createImageBitmap === 'function') {
     try {
       const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
@@ -65,6 +67,47 @@ export async function prepareScanPhoto(file: File): Promise<Blob> {
         if (blob && blob.type === 'image/jpeg') resolve(blob);
         else reject(new Error('Foto gagal disiapkan. Coba foto lain atau unggah PDF yang sudah ada.'));
       }, 'image/jpeg', 0.87);
+    });
+  } finally {
+    release();
+    canvas.width = canvas.height = 1;
+  }
+}
+
+export async function correctScanPhoto(
+  jpeg: Blob, corners: Corners, signal: AbortSignal, onProgress: (percent: number) => void,
+): Promise<Blob> {
+  if (!validCorners(corners)) throw new Error('Atur empat sudut dokumen agar tidak bersilangan atau terlalu dekat.');
+  const { image, width, height, release } = await decode(jpeg);
+  const canvas = document.createElement('canvas');
+  try {
+    signal.throwIfAborted();
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d', { alpha: false, willReadFrequently: true });
+    if (!context) throw new Error('Perangkat ini tidak dapat merapikan foto.');
+    context.drawImage(image, 0, 0);
+    const source = context.getImageData(0, 0, width, height);
+    const size = correctedSize(corners, width, height);
+    canvas.width = size.width;
+    canvas.height = size.height;
+    const result = context.createImageData(size.width, size.height);
+    const draw = createRectifier(source, result, corners);
+    for (let row = 0; row < size.height; row += 64) {
+      signal.throwIfAborted();
+      const end = Math.min(row + 64, size.height);
+      draw(row, end);
+      onProgress(Math.floor(end * 95 / size.height));
+      // Give the browser a chance to paint progress and handle cancel.
+      await new Promise<void>((resume) => setTimeout(resume, 0));
+    }
+    signal.throwIfAborted();
+    context.putImageData(result, 0, 0);
+    return await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob?.type === 'image/jpeg') resolve(blob);
+        else reject(new Error('Foto yang dirapikan gagal disimpan. Foto sebelumnya masih tersedia.'));
+      }, 'image/jpeg', 0.9);
     });
   } finally {
     release();

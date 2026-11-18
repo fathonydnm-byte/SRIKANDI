@@ -41,4 +41,18 @@ tidak disimpan di cache. Bila akses publik sumber dicabut, tampilkan kegagalan
 yang bisa dicoba ulang dan tautan rujukan; jangan mengubah izin sumber otomatis.
 
 Tidak ada migrasi database atau perubahan nilai retensi arsip tersimpan.
-Deteksi tepi, koreksi perspektif, OCR, dan Cari Isi Berkas masih belum selesai.
+
+## Tahap ketiga — Rapikan perspektif foto pindaian
+
+Di pemindai **Alih Media Arsip**, pilih **Rapikan sudut** pada satu halaman.
+Geser keempat penanda ke sudut kertas; tombol panah juga bisa dipakai.
+Pilih **Terapkan** untuk memotong foto dan meluruskan perspektifnya, atau
+**Kembali** untuk mempertahankan keadaan halaman sebelumnya. Jika hasilnya
+kurang pas, buka lagi dan pilih **Pakai batas foto asli**, kemudian
+**Terapkan**. Koreksi selalu dimulai dari foto asli yang disiapkan browser;
+rotasi halaman tetap diterapkan ketika menampilkan pratinjau dan menyusun PDF.
+
+Koreksi berjalan di perangkat, dengan progres dan keluaran hingga 4 MP
+(dan sisi terpanjang 2.400 piksel). Tidak ada dependensi baru, pengiriman
+otomatis, atau migrasi. Deteksi tepi otomatis, OCR, dan pencarian isi PDF
+masih di luar tahap ini.
