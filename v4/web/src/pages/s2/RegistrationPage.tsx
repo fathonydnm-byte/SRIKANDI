@@ -1,3 +1,4 @@
+import { JraLookup } from '../../components/jra/JraLookup';
 import { useId, useMemo, useRef, useState, type FormEvent, type Ref } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
@@ -173,6 +174,7 @@ function BerkasSection({ opts, mode, setMode, berkasId, setBerkasId, nb, setNb, 
           </div>
           <h4 className="mini-title">Kode Klasifikasi</h4>
           <ClassificationPicker all={opts.classifications} value={nb.classification_id} onChange={(v) => set('classification_id', v)} error={errors.classification} />
+          <JraLookup />
           <h4 className="mini-title">Retensi</h4>
           <div className="form-grid-3">
             {(['active', 'inactive'] as const).map((k) => (

@@ -1,0 +1,12 @@
+.jra-lookup { padding: 1rem; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--green-50); }
+.jra-lookup p, .jra-lookup h5 { margin: 0; }
+.jra-search, .jra-actions { display: flex; align-items: flex-end; flex-wrap: wrap; gap: .5rem; }
+.jra-search .field { flex: 1 1 15rem; min-width: 0; margin: 0; }
+.jra-search input { width: 100%; }
+.jra-results { max-height: 34rem; overflow-y: auto; overscroll-behavior: contain; }
+.jra-result { background: var(--white); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: .8rem; margin-bottom: .6rem; overflow-wrap: anywhere; }
+.jra-description, .jra-result dd { white-space: pre-wrap; }
+.jra-result dl { display: grid; grid-template-columns: minmax(6rem,1fr) minmax(0,2fr); gap: .35rem .7rem; font-size: .9rem; }
+.jra-result dt { font-weight: 600; }
+.jra-result dd { margin: 0; }
+@media (max-width: 420px) { .jra-result dl { grid-template-columns: 1fr; } .jra-result dd { margin-bottom: .3rem; } }
