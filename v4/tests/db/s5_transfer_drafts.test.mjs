@@ -22,8 +22,8 @@ before(async () => {
   for (const [n, days] of [[1,-3],[2,0],[3,7],[4,-2],[5,-2],[6,-2],[7,-2],[8,-2],[9,8],[10,-1],[11,-1]]) {
     const u = n === 8 ? fx.unit.B : fx.unit.A;
     await owner(pool, `insert into public.berkas(unit_id,id,no_berkas_definitif,judul_berkas,status_berkas,batas_aktif,
-      status_verifikasi_metadata,usul_pindah_id_aktif,status_pemindahan)
-      values ($1,$2,$3,$2,'AKTIF',app.today_jakarta()+$4::integer,$5,$6,$7)`, [
+      status_verifikasi_metadata,usul_pindah_id_aktif,status_pemindahan,retensi_acuan_mode,tgl_acuan_retensi,batas_inaktif)
+      values ($1,$2,$3,$2,'AKTIF',app.today_jakarta()+$4::integer,$5,$6,$7,'MANUAL',app.today_jakarta()-365,app.today_jakarta()+365)`, [
       u,folder(n),n,days,n===5?'PERLU VERIFIKASI':'TERVERIFIKASI',n===6?'USP-LEGACY':null,n===7?'SUDAH DIPINDAHKAN':null,
     ]);
     if (n !== 10) await owner(pool, `insert into public.item(unit_id,id,berkas_id,no_item_definitif,uraian_lengkap,jumlah_halaman,status_peminjaman)

@@ -404,3 +404,20 @@ test('CLI: secrets only from env, never echoed; reports written; usage errors ex
   const badKey = spawnSync(process.execPath, [join(HERE, '..', 'import.mjs'), '--file', fixtureFile, '--unit-code', 'X', '--unit-name', 'X', '--pii-key-env', 'TIDAK_ADA_ENV'], { encoding: 'utf8', env: { ...process.env, TIDAK_ADA_ENV: '' } });
   assert.equal(badKey.status, 2);
 });
+
+test('a legacy reimport preserves a schedule already confirmed by an operator', async () => {
+  const id = await unitId();
+  await pool.query(`update public.berkas set retensi_acuan_mode='MANUAL', tgl_acuan_retensi='2026-10-01',
+    batas_aktif='2028-10-01', batas_inaktif='2031-10-01', retensi_aktif_nilai=2, retensi_inaktif_nilai=3,
+    nasib_akhir='PERMANEN' where unit_id=$1 and id='BRK-1'`, [id]);
+  const file = await variant('legacy-retention', (def) => {
+    def.DB_BERKAS.rows[0].JUDUL_BERKAS = 'Judul dari impor ulang';
+    def.DB_BERKAS.rows[0].TGL_ACUAN_RETENSI = '01/01/2020';
+    def.DB_BERKAS.rows[0].NASIB_AKHIR = 'MUSNAH';
+  });
+  const result = await imp(file);
+  assert.equal(result.status, 'BERHASIL', result.fatal.join('\n'));
+  const { rows } = await pool.query(`select judul_berkas, tgl_acuan_retensi::text as acuan,
+    batas_aktif::text as aktif,nasib_akhir from public.berkas where unit_id=$1 and id='BRK-1'`, [id]);
+  assert.deepEqual(rows,[{ judul_berkas:'Judul dari impor ulang',acuan:'2026-10-01',aktif:'2028-10-01',nasib_akhir:'PERMANEN' }]);
+});

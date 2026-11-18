@@ -34,7 +34,7 @@ test('filing into a NEW berkas: inherited metadata, item order, aggregates, rete
     receiptItem({ description: 'Ketiga', document_date: '2025-01-31', page_count: 4, security_classification: 'RAHASIA', condition: 'RUSAK RINGAN', notes: 'catatan item' }),
     receiptItem({ description: 'Pertama', document_date: '2023-12-05', page_count: 1, primary_letter_number: 'B-10/UJI' }),
     receiptItem({ description: 'Kedua', document_date: '2023-12-05', page_count: 2, primary_letter_number: 'B-9/UJI' })]);
-  const res = await file(fx.user.petugasB, rc.itemIds, newBerkasTarget({ active_retention_value: 1, active_retention_unit: 'BULAN',
+  const res = await file(fx.user.petugasB, rc.itemIds, newBerkasTarget({ retention_reference_date: '2025-08-31', active_retention_value: 1, active_retention_unit: 'BULAN',
     inactive_retention_value: 1, inactive_retention_unit: 'TAHUN', title: 'Anggaran 2023–2025 (fiktif)', classification_id: 'K-KU02' }));
   assert.equal(res.item_count, 3);
   assert.equal(res.total_pages, 7);
@@ -47,8 +47,8 @@ test('filing into a NEW berkas: inherited metadata, item order, aggregates, rete
   }, { no: 1, folder: '1', status: 'AKTIF', jml: 3, hal: 7, kurun: '2023–2025', sec: 'RAHASIA', kode: 'KU.02' });
   const [dates] = await owner(pool, `select tgl_item_awal::text a, tgl_item_akhir::text z, tgl_acuan_retensi::text acuan,
       batas_aktif::text ba, batas_inaktif::text bi, status_retensi from public.berkas where id = $1`, [res.berkas_id]);
-  // JS setMonth semantics: 2025-01-31 + 1 month = 2025-03-03; + 1 year = 2026-03-03
-  assert.deepEqual(dates, { a: '2023-12-05', z: '2025-01-31', acuan: '2025-01-31', ba: '2025-03-03', bi: '2026-03-03',
+  // End-of-month overflow uses the chosen date, independent of both item dates.
+  assert.deepEqual(dates, { a: '2023-12-05', z: '2025-01-31', acuan: '2025-08-31', ba: '2025-10-01', bi: '2026-10-01',
     status_retensi: 'HABIS AKTIF – PERLU PERSETUJUAN PEMINDAHAN' });
   const items = await itemsOf(res.berkas_id);
   // same date: natural order of the normalised letter number (B 9 before B 10)

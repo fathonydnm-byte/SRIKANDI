@@ -219,6 +219,7 @@ export type BerkasTarget =
       mode: 'NEW';
       title: string;
       classification_id: string;
+      retention_reference_date?: string | null;
       active_retention_value: number;
       active_retention_unit: 'TAHUN' | 'BULAN';
       inactive_retention_value: number;

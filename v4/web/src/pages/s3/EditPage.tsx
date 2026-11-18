@@ -11,6 +11,7 @@ import { cancelUploadSession, s3, type ChangedField, type EditBerkas, type EditI
 import { percent, STAGE_LABELS, uploads, useUploads } from '../../lib/uploadStore';
 import { useLoad } from '../../lib/useLoad';
 import { CONDITION_LABEL, DEV_LABEL, errorMessage, NeedsUnit, SECURITY_LABEL, useGetToken, useWriteUnit } from '../s2/common';
+import { RetentionEditor } from './RetentionEditor';
 import { FilePicker, loanLabel, MIN_REASON, Picker, ReasonField, useRequestKey, type PickOption } from './editShared';
 
 export const FIELD_LABEL: Record<ChangedField, string> = {
@@ -363,20 +364,22 @@ function TitleEditor({ options, reload }: { options: EditOptions; reload(): void
 export function EditPage() {
   const { client } = useAuth();
   const { unitId, needsUnit } = useWriteUnit();
-  const [mode, setMode] = useState<'item' | 'judul'>('item');
+  const [mode, setMode] = useState<'item' | 'judul' | 'retensi'>('item');
   const [load, retry] = useLoad(`edit:${unitId ?? 'own'}`, () => s3.editOptions(client, unitId));
-  if (needsUnit) return (<><PageHeader title="Perubahan Arsip" subtitle="Ubah metadata item, ganti PDF, atau ubah judul berkas." /><NeedsUnit /></>);
+  if (needsUnit) return (<><PageHeader title="Perubahan Arsip" subtitle="Ubah metadata item, PDF, judul berkas, atau jadwal retensi." /><NeedsUnit /></>);
   return (
     <>
-      <PageHeader title="Perubahan Arsip" subtitle="Ubah metadata atau PDF satu item, atau judul berkas, tanpa menghapus dan menginput ulang." />
+      <PageHeader title="Perubahan Arsip" subtitle="Ubah metadata item, PDF, judul berkas, atau jadwal retensi." />
       <Alert tone="info"><strong>Perubahan terkontrol.</strong>{' '}<span>Perubahan tanggal dapat mengubah nomor kronologis. Alasan dicatat di Master Log. PDF lama tidak dihapus, hanya dipindahkan ke karantina.</span></Alert>
       <div className="mode-switch" role="group" aria-label="Yang diubah">
         <button type="button" className={`mode-button${mode === 'item' ? ' active' : ''}`} aria-pressed={mode === 'item'} onClick={() => setMode('item')}>Detail item</button>
         <button type="button" className={`mode-button${mode === 'judul' ? ' active' : ''}`} aria-pressed={mode === 'judul'} onClick={() => setMode('judul')}>Ubah judul berkas</button>
+        <button type="button" className={`mode-button${mode === 'retensi' ? ' active' : ''}`} aria-pressed={mode === 'retensi'} onClick={() => setMode('retensi')}>Ubah jadwal retensi</button>
       </div>
       {load.kind === 'loading' ? <p className="muted" role="status">Memuat daftar berkas…</p> : null}
       {load.kind === 'error' ? <div className="stack"><Alert tone="error" message={load.message} /><button type="button" className="btn btn-secondary" onClick={retry}>Coba lagi</button></div> : null}
-      {load.kind === 'ok' ? (mode === 'item' ? <ItemEditor options={load.data} unitId={unitId} reload={retry} /> : <TitleEditor options={load.data} reload={retry} />) : null}
+      {load.kind === 'ok' ? (mode === 'item' ? <ItemEditor options={load.data} unitId={unitId} reload={retry} /> : mode === 'judul' ? <TitleEditor options={load.data} reload={retry} />
+        : <RetentionEditor key={unitId ?? 'own'} options={load.data} unitId={unitId} />) : null}
     </>
   );
 }

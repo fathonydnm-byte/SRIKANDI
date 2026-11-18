@@ -74,6 +74,8 @@ const CODE_ACTIONS: Record<string, string> = {
   ITEM_NOT_READY: 'Lengkapi metadata item di Penerimaan Naskah terlebih dahulu.',
   BATCH_LIMIT: 'Pilih paling banyak 100 item per penyimpanan.',
   CLASSIFICATION_INVALID: 'Pilih kode klasifikasi lain.',
+  VERSION_CONFLICT: 'Muat ulang jadwal retensi dan periksa perubahan sebelum menyimpan lagi.',
+  RETENTION_LOCKED: 'Periksa status berkas dan draf usul pemindahan sebelum melanjutkan.',
   TRANSFER_INELIGIBLE: 'Muat ulang daftar dan sesuaikan pilihan berkas.',
   BERKAS_TRANSFERRED: 'Pilih berkas lain yang belum dipindahkan.',
   NO_CHANGES: 'Ubah minimal satu isian atau pilih PDF pengganti.',

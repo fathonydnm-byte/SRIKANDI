@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderApp } from '../../test/renderApp';
 import { createFakeClient, makeProfile, makeSession, type RpcHandler } from '../../test/fakeSupabase';
@@ -258,6 +258,7 @@ describe('Registrasi Berkas Baru', () => {
     await user.selectOptions(screen.getByLabelText('Primer *'), 'K1');
     expect(screen.getByText('Primer ini memiliki turunan: pilih sekunder.')).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText('Sekunder'), 'K2');
+    fireEvent.change(screen.getByLabelText('Tanggal mulai perhitungan retensi aktif dan inaktif'), { target: { value: '2026-10-10' } });
     await user.type(screen.getByLabelText('Retensi aktif *'), '2');
     await user.type(screen.getByLabelText('Retensi inaktif *'), '3');
     await user.selectOptions(screen.getByLabelText('Nasib akhir *'), 'PERMANEN');
@@ -271,7 +272,7 @@ describe('Registrasi Berkas Baru', () => {
     await user.click(screen.getByRole('button', { name: 'Simpan Item' }));
     expect(await screen.findByText(/Tersimpan: Berkas 2 \/ Item 1\. PDF sedang diunggah\./)).toBeInTheDocument();
     expect(create.mock.calls[0]![0]).toMatchObject({
-      p_target: { mode: 'NEW', title: 'Laporan 2026', classification_id: 'K2', active_retention_value: 2, inactive_retention_value: 3, final_disposition: 'PERMANEN', arsip_vital: true, arsip_terjaga: false },
+      p_target: { mode: 'NEW', title: 'Laporan 2026', classification_id: 'K2', retention_reference_date: '2026-10-10', active_retention_value: 2, inactive_retention_value: 3, final_disposition: 'PERMANEN', arsip_vital: true, arsip_terjaga: false },
       p_item: { description: 'Laporan triwulan', page_count: 1, development_level: 'ASLI', security_classification: 'BIASA/TERBUKA' },
     });
     expect(start).toHaveBeenCalledWith(expect.objectContaining({ purpose: 'ITEM_PDF', objectId: 'ITM-NEW', fileName: 'laporan.pdf' }), 'PDF Berkas 2 / Item 1', expect.any(Function));
