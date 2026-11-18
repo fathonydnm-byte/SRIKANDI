@@ -13,7 +13,7 @@ export function JraLookup() {
   const [busy, setBusy] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const current = useRef<AbortController | null>(null);
-  const offset = useRef(0);
+  const [offset, setOffset] = useState(0);
   useEffect(() => () => { current.current?.abort(); }, []);
   useEffect(() => {
     if (!busy) return;
@@ -56,7 +56,7 @@ export function JraLookup() {
         throw new Error('Jawaban sumber JRA belum dapat dibaca. Coba lagi.');
       }
       if (current.current !== ctrl) return;
-      offset.current = next;
+      setOffset(next);
       setResult(body as JraResult);
     } catch (err) {
       if (current.current !== ctrl) return;
@@ -103,7 +103,7 @@ export function JraLookup() {
         <a href={`${JRA_SOURCE_URL}&range=A${row.row}:I${row.row}`} target="_blank" rel="noopener noreferrer">Lihat baris sumber {row.row}</a>
       </article>)}
       <div className="jra-actions">
-        {offset.current > 0 && <button type="button" className="btn btn-secondary" onClick={() => void search(offset.current - 10)}>JRA sebelumnya</button>}
+        {offset > 0 && <button type="button" className="btn btn-secondary" onClick={() => void search(offset - 10)}>JRA sebelumnya</button>}
         {result.nextOffset !== null && <button type="button" className="btn btn-secondary" onClick={() => void search(result.nextOffset!)}>JRA berikutnya</button>}
       </div>
     </div>}

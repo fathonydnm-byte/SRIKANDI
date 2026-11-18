@@ -57,8 +57,8 @@ export function parseJraCsv(csv: string): string[][] {
   if (quoted) throw new Error('SOURCE_FORMAT');
   if (started || closed || cell || row.length) addRow();
   if (!JRA_HEADERS.every((h, i) => rows[0]?.[i]?.trim() === h)) throw new Error('SOURCE_HEADERS');
-  // Google may append an empty tenth column; reject newly populated columns rather than silently ignoring them.
-  if (rows.some((r) => r.slice(9).some((c) => c.trim()))) throw new Error('SOURCE_HEADERS');
+  // Match the legacy A:I reference range. An unheaded trailing notes column is not part of the schedule.
+  if (rows[0]!.slice(9).some((c) => c.trim())) throw new Error('SOURCE_HEADERS');
   return rows.map((r) => r.slice(0, 9));
 }
 

@@ -29,6 +29,9 @@ it('parses quoted newlines, escaped quotes and BOM, and keeps original source ro
   expect(() => parseJraCsv('Bad headers')).toThrow('SOURCE_HEADERS');
   expect(() => parseJraCsv(header + ',EXTRA\n,,,,,,,,,new data')).toThrow('SOURCE_HEADERS');
   expect(() => parseJraCsv('x'.repeat(2_000_001))).toThrow();
+  const unheadedNotes = parseJraCsv(header + ',\nFasilitatif,1,Rektor,1 tahun,2 tahun,Permanen,,,,Catatan di luar tabel');
+  expect(unheadedNotes[1]).toHaveLength(9);
+  expect(searchJraRows(unheadedNotes, 'catatan di luar tabel', 0).total).toBe(0);
 });
 
 it('verifies active account first, never sends JWT or keyword to Google, and marks replies non-cacheable', async () => {
