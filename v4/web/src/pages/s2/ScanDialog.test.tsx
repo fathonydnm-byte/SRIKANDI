@@ -2,7 +2,10 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { expect, it, vi } from 'vitest';
 import { correctScanPhoto, prepareScanPhoto, scanToPdf } from '../../lib/scan';
+import { recognizeScan } from '../../lib/scanOcr';
 import { ScanDialog } from './ScanDialog';
+
+vi.mock('../../lib/scanOcr', () => ({ recognizeScan: vi.fn() }));
 
 vi.mock('../../lib/scan', async (getActual) => ({
   ...await getActual<typeof import('../../lib/scan')>(),
@@ -88,6 +91,51 @@ it.each([false, true])('generates the PDF from the chosen page image (restored=%
       expect.objectContaining({ jpeg: restore ? original : cropped, turns: 1 }),
     ], expect.any(Function));
     expect(onUse).toHaveBeenCalledExactlyOnceWith(result);
+  } finally {
+    cleanup();
+    vi.unstubAllGlobals();
+  }
+});
+
+it.each(['success', 'skip', 'failure'] as const)('keeps the PDF usable when OCR results in %s', async (kind) => {
+  const jpeg = new Blob(['original'], { type: 'image/jpeg' });
+  const layer = new Uint8Array([1, 2, 3]);
+  const result = { pdf: new Blob(['PDF'], { type: 'application/pdf' }), fileName: 'Pindaian Arsip.pdf', pageCount: 1 };
+  vi.mocked(prepareScanPhoto).mockResolvedValueOnce(jpeg);
+  vi.mocked(scanToPdf).mockClear().mockResolvedValueOnce(result);
+  vi.mocked(recognizeScan).mockClear().mockImplementationOnce(async (_, signal, progress) => {
+    progress({ page: 1, total: 1, percent: 20 });
+    if (kind === 'success') return [layer];
+    if (kind === 'failure') throw new Error('Missing worker model');
+    await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+    signal.throwIfAborted();
+    return [];
+  });
+  const onUse = vi.fn();
+  const user = userEvent.setup();
+  try {
+    vi.stubGlobal('URL', class extends URL {
+      static createObjectURL = vi.fn(() => 'blob:preview-test');
+      static revokeObjectURL = vi.fn();
+    });
+    render(<ScanDialog onUse={onUse} onCancel={vi.fn()} />);
+    await user.upload(screen.getByLabelText('Ambil foto'), new File(['jpeg'], 'photo.jpg', { type: 'image/jpeg' }));
+    await screen.findByText('Halaman 1');
+    const ocr = screen.getByRole('checkbox', { name: /Kenali teks/ });
+    expect(ocr).not.toBeChecked();
+    expect(recognizeScan).not.toHaveBeenCalled();
+    await user.click(ocr);
+    await user.click(screen.getByRole('button', { name: 'Gunakan PDF' }));
+    if (kind === 'skip') {
+      await screen.findByText(/Membaca teks halaman 1 dari 1 · 20%/);
+      expect(onUse).not.toHaveBeenCalled();
+      await user.click(screen.getByRole('button', { name: 'Lewati OCR' }));
+    }
+    const expected = kind === 'success' ? 1 : kind === 'skip' ? 'lewati' : 'gagal';
+    expect(onUse).toHaveBeenCalledExactlyOnceWith({ ...result, ocr: expected });
+    const scanArgs = [[{ id: 1, jpeg, turns: 0 }], expect.any(Function)];
+    if (kind === 'success') scanArgs.push([layer]);
+    expect(scanToPdf).toHaveBeenCalledExactlyOnceWith(...scanArgs);
   } finally {
     cleanup();
     vi.unstubAllGlobals();
