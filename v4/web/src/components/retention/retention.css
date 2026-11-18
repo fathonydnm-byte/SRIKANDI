@@ -1,0 +1,7 @@
+.retention-fields {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.retention-fields > legend { margin-bottom: .5rem; }

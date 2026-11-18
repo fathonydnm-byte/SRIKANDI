@@ -124,3 +124,30 @@ memuat `0027 / s6_content_search`, baru pasang build web. Uji dengan
 pindaian OCR arsip contoh berisi kata yang tidak ada di judul, lalu cek
 bahwa hasil hanya muncul untuk unit yang berwenang. Tidak ada perubahan
 gateway/izin Drive dan alur unggah PDF biasa tetap tersedia.
+
+## Penyesuaian jadwal retensi — migrasi 0028
+
+Form **Buat Berkas Baru**, baik dari penerimaan maupun input manual,
+meminta tanggal acuan yang ditetapkan petugas sesuai JRA, durasi aktif
+dan inaktif (bulan/tahun), serta nasib akhir. Jika tanggal belum diketahui,
+petugas dapat memilih **Tanggal acuan belum diketahui**. Berkas tetap bisa
+digunakan, tetapi batas retensi dan kelayakan usul belum ditentukan.
+
+- Batas aktif = tanggal acuan + durasi aktif. Batas inaktif = batas aktif
+  + durasi inaktif. Penambahan bulan/tahun memakai konvensi kalender yang
+  sama dengan versi sebelumnya. Renumber hanya mengubah kronologi dan
+  metadata item, tanpa mengubah tanggal acuan atau batas retensi.
+- Berkas lama tetap menyimpan tanggal dan batas yang sudah ada. Tanggal
+  lama terlihat di dashboard dan **Perubahan Arsip → Ubah jadwal retensi**.
+  Jadwal lama perlu dikonfirmasi sebelum berkas masuk usul pemindahan baru.
+  Impor ulang data lama tidak menimpa jadwal yang sudah ditetapkan atau
+  ditandai menunggu tanggal acuan.
+- Perubahan dicatat dengan alasan serta nilai sebelum/sesudah di Master Log.
+  Jika berkas masuk draf usul, batalkan draf terlebih dahulu. Berkas yang
+  sudah dipindahkan atau sedang dipinjam mengikuti pembatasan perubahan.
+  Izin pengguna mengikuti izin perubahan arsip dan cakupan unit.
+- Rilis: tinjau aturan ini, ambil cadangan metadata terbaru, terapkan
+  `0028_manual_retention.sql` dalam satu transaksi, lalu pasang build web.
+  Migrasi menambah penanda sumber jadwal tanpa menghitung ulang tanggal
+  arsip lama. Selama jeda antara migrasi dan pembaruan web, versi lama
+  masih bisa membuat berkas; berkas baru itu berstatus menunggu acuan.

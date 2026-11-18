@@ -398,9 +398,23 @@ async function stageAndMerge(client, spec, rows, unitId, tr, piiActive) {
   const tExpr = (c) => (piiCols.has(c) ? `app.decrypt_pii(t.${q(c)})` : `t.${q(c)}`);
   const sExpr = (c) => (piiCols.has(c) ? `app.encrypt_pii(s.${q(c)})`
     : keepCols.has(c) && defaultOf[c] ? `coalesce(s.${q(c)}, ${defaultOf[c]})` : `s.${q(c)}`);
-  const setExpr = (c) => (keepCols.has(c) ? `coalesce(s.${q(c)}, t.${q(c)})` : sExpr(c));
-  const differs = (c) => (keepCols.has(c) ? `s.${q(c)} is not null and ${tExpr(c)} is distinct from s.${q(c)}`
-    : `${tExpr(c)} is distinct from s.${q(c)}`);
+  // A legacy sheet cannot express an operator-selected or pending reference.
+  const managedRetention = spec.table === 'berkas' && Boolean(typeOf.retensi_acuan_mode);
+  const retentionColumns = new Set([
+    'tgl_acuan_retensi', 'retensi_aktif_nilai', 'retensi_aktif_satuan', 'retensi_inaktif_nilai',
+    'retensi_inaktif_satuan', 'nasib_akhir', 'batas_aktif', 'batas_inaktif', 'status_retensi',
+  ]);
+  const protect = (c) => managedRetention && retentionColumns.has(c);
+  const legacy = "t.retensi_acuan_mode = 'LEGACY'";
+  const setExpr = (c) => {
+    const next = keepCols.has(c) ? `coalesce(s.${q(c)}, t.${q(c)})` : sExpr(c);
+    return protect(c) ? `case when ${legacy} then ${next} else t.${q(c)} end` : next;
+  };
+  const differs = (c) => {
+    const changed = keepCols.has(c) ? `s.${q(c)} is not null and ${tExpr(c)} is distinct from s.${q(c)}`
+      : `${tExpr(c)} is distinct from s.${q(c)}`;
+    return protect(c) ? `${legacy} and (${changed})` : changed;
+  };
   const diffArray = `array_remove(array[${valueCols.map((c) => `case when ${differs(c)} then '${c}' end`).join(', ')}]::text[], null)`;
   const { rows: diffs } = await client.query(
     `select ${keyCols.map((k) => `s.${q(k)}`).join(', ')}, ${diffArray} as changed

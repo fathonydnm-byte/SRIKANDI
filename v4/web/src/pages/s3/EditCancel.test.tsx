@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderApp } from '../../test/renderApp';
 import { createFakeClient, makeProfile, makeSession, type RpcHandler } from '../../test/fakeSupabase';
@@ -185,6 +185,29 @@ describe('Perubahan Arsip', () => {
     expect(within(box).getByText('Judul baru: Renstra 2026–2030')).toBeInTheDocument();
     expect(t.mock.calls[0]![0]).toMatchObject({ p_berkas_id: 'BRK-1', p_title: 'Renstra 2026–2030', p_reason: 'Periode renstra diperpanjang' });
   });
+  it('konfirmasi jadwal lama di Perubahan Arsip, lalu tampilkan batas yang dihitung server', async () => {
+    const before = { reference_mode: 'LEGACY', retention_reference_date: '2024-03-01', active_retention_value: 2,
+      active_retention_unit: 'TAHUN', inactive_retention_value: 3, inactive_retention_unit: 'BULAN',
+      final_disposition: 'PERMANEN', active_limit: '2026-03-01', inactive_limit: '2026-06-01',
+      version: 7, blocked_reason: null };
+    const save = vi.fn<RpcHandler>(() => ok({ ...before, reference_mode: 'MANUAL', retention_reference_date: '2026-09-15',
+      active_limit: '2028-09-15', inactive_limit: '2028-12-15', version: 8 }));
+    renderApp('/edit', setup('PETUGAS', { edit_options: () => ok(EDIT), berkas_retention_get: () => ok(before),
+      berkas_retention_update: save }).client);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Ubah jadwal retensi' }));
+    await user.click(await screen.findByRole('button', { name: /Renstra 2026/ }));
+    expect(await screen.findByText(/Jadwal lama · Perlu Konfirmasi/)).toBeVisible();
+    const input = screen.getByLabelText('Tanggal mulai perhitungan retensi aktif dan inaktif');
+    expect(input).toHaveValue('');
+    fireEvent.change(input, { target: { value: '2026-09-15' } });
+    await user.type(screen.getByLabelText('Alasan perubahan *'), 'Pekerjaan selesai sesuai berita acara.');
+    await user.click(screen.getByRole('button', { name: 'Simpan Jadwal Retensi' }));
+    expect(await screen.findByText(/Jadwal retensi tersimpan/)).toBeVisible();
+    expect(save.mock.calls[0]![0]).toMatchObject({ p_berkas_id: 'BRK-1', p_expected_version: 7,
+      p_schedule: { retention_reference_date: '2026-09-15', active_retention_value: 2, inactive_retention_value: 3 } });
+  });
+
 });
 
 describe('Koreksi & Pembatalan', () => {

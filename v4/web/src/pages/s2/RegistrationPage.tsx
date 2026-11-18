@@ -1,3 +1,5 @@
+import { RetentionScheduleFields } from '../../components/retention/RetentionScheduleFields';
+import { retentionDraft, retentionErrors, retentionPayload, type RetentionDraft } from '../../lib/retention';
 import { JraLookup } from '../../components/jra/JraLookup';
 import { useId, useMemo, useRef, useState, type FormEvent, type Ref } from 'react';
 import { Link } from 'react-router-dom';
@@ -15,22 +17,16 @@ import { DEV_LABEL, errorMessage, NeedsUnit, PdfPicker, SaveStage, SECURITY_LABE
 
 const ITEM_PDF_MAX = 104857599; // < 100 MB (API_S2 §4)
 
-interface NewBerkas {
+interface NewBerkas extends RetentionDraft {
   title: string;
   classification_id: string | null;
-  active_retention_value: string;
-  active_retention_unit: 'TAHUN' | 'BULAN';
-  inactive_retention_value: string;
-  inactive_retention_unit: 'TAHUN' | 'BULAN';
-  final_disposition: string;
   filing_cabinet: string;
   drawer: string;
   notes: string;
   categories: Partial<Record<ArchiveCategory['key'], boolean>>;
 }
 const blankBerkas = (): NewBerkas => ({
-  title: '', classification_id: null, active_retention_value: '', active_retention_unit: 'TAHUN', inactive_retention_value: '', inactive_retention_unit: 'TAHUN',
-  final_disposition: '', filing_cabinet: '', drawer: '', notes: '', categories: {},
+  ...retentionDraft(), title: '', classification_id: null, filing_cabinet: '', drawer: '', notes: '', categories: {},
 });
 
 /** Kategori CF-01 → arsip_vital/arsip_terjaga (hanya yang ditawarkan server). */
@@ -175,29 +171,8 @@ function BerkasSection({ opts, mode, setMode, berkasId, setBerkasId, nb, setNb, 
           <h4 className="mini-title">Kode Klasifikasi</h4>
           <ClassificationPicker all={opts.classifications} value={nb.classification_id} onChange={(v) => set('classification_id', v)} error={errors.classification} />
           <JraLookup />
-          <h4 className="mini-title">Retensi</h4>
-          <div className="form-grid-3">
-            {(['active', 'inactive'] as const).map((k) => (
-              <div key={k} className={`field${errors[`${k}_retention`] ? ' field-invalid' : ''}`}>
-                <label htmlFor={`${id}-${k}`}>{k === 'active' ? 'Retensi aktif *' : 'Retensi inaktif *'}</label>
-                <div className="input-pair">
-                  <input id={`${id}-${k}`} type="number" inputMode="numeric" min={0} step={1} value={nb[`${k}_retention_value`]} onChange={(e) => set(`${k}_retention_value`, e.target.value)} />
-                  <select aria-label={k === 'active' ? 'Satuan retensi aktif' : 'Satuan retensi inaktif'} value={nb[`${k}_retention_unit`]} onChange={(e) => set(`${k}_retention_unit`, e.target.value as 'TAHUN' | 'BULAN')}>
-                    {opts.retention_units.map((u) => <option key={u} value={u}>{u === 'TAHUN' ? 'Tahun' : 'Bulan'}</option>)}
-                  </select>
-                </div>
-                {fe(`${k}_retention`)}
-              </div>
-            ))}
-            <div className={`field${errors.final_disposition ? ' field-invalid' : ''}`}>
-              <label htmlFor={`${id}-fd`}>Nasib akhir *</label>
-              <select id={`${id}-fd`} value={nb.final_disposition} onChange={(e) => set('final_disposition', e.target.value)}>
-                <option value="">Pilih nasib akhir</option>
-                {opts.final_dispositions.map((d) => <option key={d} value={d}>{d}</option>)}
-              </select>
-              {fe('final_disposition')}
-            </div>
-          </div>
+          <RetentionScheduleFields value={nb} onChange={(next) => setNb({ ...nb, ...next })} errors={errors}
+            units={opts.retention_units} dispositions={opts.final_dispositions} />
           <h4 className="mini-title">Lokasi Fisik</h4>
           <div className="form-grid-3">
             <div className="field"><label htmlFor={`${id}-cab`}>No. Filling Cabinet</label><div className="field-control"><input id={`${id}-cab`} value={nb.filing_cabinet} onChange={(e) => set('filing_cabinet', e.target.value)} autoComplete="off" /></div></div>
@@ -271,9 +246,7 @@ export function RegistrationPage() {
       if (!nb.title.trim()) e.title = 'Judul berkas wajib diisi.';
       const cls = regLoad.kind === 'ok' ? regLoad.data.classifications.find((c) => c.id === nb.classification_id) : undefined;
       if (!cls || !cls.selectable) e.classification = 'Pilih kode klasifikasi sampai tingkat yang boleh dipilih.';
-      if (!/^\d+$/.test(nb.active_retention_value)) e.active_retention = 'Isi angka retensi aktif.';
-      if (!/^\d+$/.test(nb.inactive_retention_value)) e.inactive_retention = 'Isi angka retensi inaktif.';
-      if (!nb.final_disposition) e.final_disposition = 'Pilih nasib akhir.';
+      Object.assign(e, retentionErrors(nb));
     }
     if (source === 'RECEIPT' && !selected.size) e.queue = 'Pilih minimal satu item dari antrean penerimaan.';
     if (source === 'MANUAL') {
@@ -285,9 +258,7 @@ export function RegistrationPage() {
     if (Object.keys(e).length) return { value: null, issues: e };
     if (mode === 'EXISTING') return { value: { mode: 'EXISTING', berkas_id: berkasId }, issues: e };
     const value: BerkasTarget = {
-      mode: 'NEW', title: nb.title.trim(), classification_id: nb.classification_id!, active_retention_value: Number(nb.active_retention_value),
-      active_retention_unit: nb.active_retention_unit, inactive_retention_value: Number(nb.inactive_retention_value), inactive_retention_unit: nb.inactive_retention_unit,
-      final_disposition: nb.final_disposition,
+      mode: 'NEW', title: nb.title.trim(), classification_id: nb.classification_id!, ...retentionPayload(nb),
       ...(nb.filing_cabinet.trim() ? { filing_cabinet: nb.filing_cabinet.trim() } : {}),
       ...(nb.drawer.trim() ? { drawer: nb.drawer.trim() } : {}),
       ...(nb.notes.trim() ? { notes: nb.notes.trim() } : {}),
