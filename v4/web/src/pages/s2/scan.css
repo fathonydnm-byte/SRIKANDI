@@ -23,3 +23,6 @@
 .scan-crop-handle:active { cursor: grabbing; }
 .scan-crop-handle:focus-visible { outline: 2px solid var(--navy); }
 .scan-crop-surface { margin-inline: auto; }
+.scan-ocr-choice { gap: .35rem; }
+.scan-ocr-toggle { display: flex; align-items: center; gap: .5rem; width: fit-content; min-height: 2.75rem; font-weight: 600; cursor: pointer; }
+.scan-ocr-toggle input { flex: none; width: 1.125rem; height: 1.125rem; margin: 0; }

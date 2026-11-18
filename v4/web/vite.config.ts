@@ -35,6 +35,7 @@ export default defineConfig({
       injectManifest: {
         // Aset dan shell saja; tidak pernah menyimpan respons Supabase atau Pages Functions.
         globPatterns: ['**/*.{js,css,html,png,svg,webmanifest}'],
+        globIgnores: ['ocr/**'], // Models and OCR engines download only on demand.
       },
     }),
   ],

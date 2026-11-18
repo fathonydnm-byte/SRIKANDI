@@ -5,6 +5,7 @@ export interface ScanResult {
   pdf: Blob;
   fileName: string;
   pageCount: number;
+  ocr?: number | 'lewati' | 'gagal'; // Number of pages with searchable text.
 }
 export interface ScanPage {
   jpeg: Blob;
@@ -115,7 +116,35 @@ export async function correctScanPhoto(
   }
 }
 
-export async function scanToPdf(pages: readonly ScanPage[], onProgress?: (done: number) => void): Promise<ScanResult> {
+function rotation(turns: number) { return (((turns % 4) + 4) % 4) * 90; }
+
+export async function uprightScanPhoto({ jpeg, turns }: ScanPage): Promise<Blob> {
+  const angle = rotation(turns);
+  if (!angle) return jpeg;
+  const { image, width, height, release } = await decode(jpeg);
+  const canvas = document.createElement('canvas');
+  try {
+    const swap = angle === 90 || angle === 270;
+    canvas.width = swap ? height : width;
+    canvas.height = swap ? width : height;
+    const context = canvas.getContext('2d', { alpha: false });
+    if (!context) throw new Error('Foto tidak dapat diputar untuk OCR.');
+    context.translate(canvas.width / 2, canvas.height / 2);
+    context.rotate(angle * Math.PI / 180);
+    context.drawImage(image, -width / 2, -height / 2);
+    return await new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => {
+      if (blob?.type === 'image/jpeg') resolve(blob);
+      else reject(new Error('Foto tidak dapat disiapkan untuk OCR.'));
+    }, 'image/jpeg', 0.9));
+  } finally {
+    release();
+    canvas.width = canvas.height = 1;
+  }
+}
+
+export async function scanToPdf(
+  pages: readonly ScanPage[], onProgress?: (done: number) => void, ocrLayers?: readonly (Uint8Array | null)[],
+): Promise<ScanResult> {
   if (!pages.length || pages.length > MAX_SCAN_PAGES) throw new Error(`Pilih 1 sampai ${MAX_SCAN_PAGES} halaman.`);
   if (pages.reduce((size, page) => size + page.jpeg.size, 0) > MAX_SCAN_BYTES) {
     throw new Error('Foto terlalu besar untuk satu PDF. Kurangi jumlah halaman.');
@@ -123,9 +152,10 @@ export async function scanToPdf(pages: readonly ScanPage[], onProgress?: (done: 
   const { PDFDocument, degrees } = await import('pdf-lib');
   const pdf = await PDFDocument.create();
   pdf.setTitle('Pindaian Alih Media Arsip');
-  for (const { jpeg, turns } of pages) {
+  if (ocrLayers && ocrLayers.length !== pages.length) throw new Error('Jumlah halaman OCR tidak sesuai.');
+  for (const [i, { jpeg, turns }] of pages.entries()) {
     const image = await pdf.embedJpg(await jpeg.arrayBuffer());
-    const angle = (((turns % 4) + 4) % 4) * 90;
+    const angle = rotation(turns);
     const swapped = angle === 90 || angle === 270;
     const width = swapped ? image.height : image.width;
     const height = swapped ? image.width : image.height;
@@ -141,6 +171,12 @@ export async function scanToPdf(pages: readonly ScanPage[], onProgress?: (done: 
       height: image.height * scale,
       rotate: degrees(-angle),
     });
+    const ocrLayer = ocrLayers?.[i];
+    if (ocrLayer) {
+      const [overlay] = await pdf.embedPdf(ocrLayer, [0]);
+      if (!overlay) throw new Error('Lapisan teks OCR tidak dapat disalin.');
+      page.drawPage(overlay, { x: left, y: bottom, width: width * scale, height: height * scale });
+    }
     onProgress?.(pdf.getPageCount());
   }
   const bytes = Uint8Array.from(await pdf.save());

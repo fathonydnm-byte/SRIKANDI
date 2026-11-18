@@ -132,7 +132,11 @@ export function MediaPage() {
         <Suspense fallback={<p role="status">Memuat pemindai…</p>}>
           <ScanDialog onCancel={() => setScanFor(null)} onUse={(r) => {
             setFile(new File([r.pdf], r.fileName, { type: 'application/pdf' }));
-            setNotice(`PDF pindaian siap: ${r.pageCount} halaman. Tekan Upload Alih Media untuk menyimpan.`);
+            const details = r.ocr === 'lewati' ? ' OCR dilewati.'
+              : r.ocr === 'gagal' ? ' OCR tidak selesai; PDF gambar tetap siap.'
+                : r.ocr === 0 ? ' Tidak ada teks yang berhasil dikenali.'
+                  : r.ocr ? ` Teks bisa dicari pada ${r.ocr} dari ${r.pageCount} halaman.` : '';
+            setNotice(`PDF pindaian siap: ${r.pageCount} halaman.${details} Tekan Upload Alih Media untuk menyimpan.`);
             setScanFor(null);
           }} />
         </Suspense>

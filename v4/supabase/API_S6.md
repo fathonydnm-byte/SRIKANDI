@@ -56,3 +56,29 @@ Koreksi berjalan di perangkat, dengan progres dan keluaran hingga 4 MP
 (dan sisi terpanjang 2.400 piksel). Tidak ada dependensi baru, pengiriman
 otomatis, atau migrasi. Deteksi tepi otomatis, OCR, dan pencarian isi PDF
 masih di luar tahap ini.
+
+## Tahap keempat — OCR opsional pada PDF pindaian
+
+Di dialog pemindaian **Alih Media Arsip**, centang **Kenali teks agar
+bisa dicari di PDF (OCR)** sebelum menekan **Gunakan PDF**. Progres
+menampilkan halaman dan persentase pembacaan. **Lewati OCR** melanjutkan
+pembuatan PDF gambar; jika unduhan model, pembacaan, atau penggabungan
+lapisan teks gagal, PDF gambar tetap dibuat. Status akhir memberi tahu
+operator berapa halaman yang berisi teks, atau bila OCR tidak selesai.
+
+Satu Web Worker Tesseract.js (Apache-2.0) membaca Indonesia dan Inggris
+di perangkat. Foto asli dari alur pindai (setelah koreksi bila dipakai)
+tetap menjadi tampilan PDF; OCR menambahkan lapisan teks yang mengikuti
+urutan, rotasi, dan posisi gambar. Teks ini bisa dicari di pembaca PDF,
+sementara indeks aplikasi **Cari Isi Berkas** belum terhubung. Halaman
+kosong atau tanpa teks yang dikenali tidak diberi lapisan teks. OCR tidak
+mengubah alur unggah: operator tetap harus menekan **Upload Alih Media**.
+
+Build menyalin worker, tiga varian inti LSTM, model Indonesia dan Inggris,
+serta atribusi ke `/ocr/v1/` dari versi npm yang terkunci. Browser mengunduh
+satu varian inti dan kedua model (sekitar 8 MB pertama kali) dari domain yang
+sama; Workbox tidak memasukkannya ke pemasangan PWA. Perbarui versi path
+asset dan aturan header bersama saat menaikkan versi mesin atau model.
+Izin kompilasi WebAssembly hanya berlaku pada respons skrip worker OCR.
+Tidak ada perubahan database, hak akses Drive, atau pengiriman foto ke
+layanan OCR eksternal.

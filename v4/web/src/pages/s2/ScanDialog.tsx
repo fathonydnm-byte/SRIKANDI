@@ -24,21 +24,29 @@ export function ScanDialog({ onCancel, onUse }: { onCancel(): void; onUse(result
   const stopped = useRef(false);
   const lock = useRef(false);
   const sequence = useRef(0);
+  const ocrTask = useRef<AbortController | null>(null);
   const heading = useId();
+  const ocrHint = useId();
   const [pages, setPages] = useState<Page[]>([]);
   const [editingId, setEditingId] = useState<number>();
   const [error, setError] = useState('');
   const [progress, setProgress] = useState('');
+  const [useOcr, setUseOcr] = useState(false);
+  const [reading, setReading] = useState(false);
 
   useEffect(() => {
     const dialog = node.current!;
     stopped.current = false;
     if (typeof dialog.showModal === 'function') dialog.showModal();
     else dialog.setAttribute('open', '');
-    return () => { stopped.current = true; if (dialog.open && typeof dialog.close === 'function') dialog.close(); };
+    return () => {
+      stopped.current = true;
+      ocrTask.current?.abort();
+      if (dialog.open && typeof dialog.close === 'function') dialog.close();
+    };
   }, []);
 
-  function exit() { stopped.current = true; onCancel(); }
+  function exit() { stopped.current = true; ocrTask.current?.abort(); onCancel(); }
 
   function closeEditor() {
     setEditingId(undefined);
@@ -92,12 +100,50 @@ export function ScanDialog({ onCancel, onUse }: { onCancel(): void; onUse(result
     if (lock.current || !pages.length) return;
     lock.current = true;
     setError('');
-    setProgress('Menyiapkan PDF…');
+    const pdfProgress = (n: number) => {
+      if (!stopped.current) setProgress(`Menyusun PDF: ${n} dari ${pages.length} halaman…`);
+    };
     try {
-      const result = await scanToPdf(pages, (n) => {
-        if (!stopped.current) setProgress(`Menyusun PDF: ${n} dari ${pages.length} halaman…`);
-      });
-      if (!stopped.current) onUse(result);
+      let layers: (Uint8Array | null)[] | undefined;
+      let outcome: ScanResult['ocr'];
+      if (useOcr) {
+        const controller = new AbortController();
+        ocrTask.current = controller;
+        setReading(true);
+        setProgress('Menyiapkan OCR dan model bahasa…');
+        try {
+          const { recognizeScan } = await import('../../lib/scanOcr');
+          controller.signal.throwIfAborted();
+          layers = await recognizeScan(pages, controller.signal, (p) => {
+            if (!stopped.current && !controller.signal.aborted && p) {
+              setProgress(`Membaca teks halaman ${p.page} dari ${p.total} · ${p.percent}%…`);
+            }
+          });
+          outcome = layers.filter(Boolean).length;
+        } catch {
+          outcome = controller.signal.aborted ? 'lewati' : 'gagal';
+        } finally {
+          ocrTask.current = null;
+          if (!stopped.current) setReading(false);
+        }
+      }
+      if (stopped.current) return;
+      setProgress('Menyiapkan PDF…');
+      let result: ScanResult;
+      const layerReady = typeof outcome === 'number' && outcome > 0;
+      if (layerReady) {
+        try {
+          result = await scanToPdf(pages, pdfProgress, layers);
+        } catch {
+          if (stopped.current) return;
+          outcome = 'gagal';
+          setProgress('Menyiapkan PDF tanpa OCR…');
+          result = await scanToPdf(pages, pdfProgress);
+        }
+      } else {
+        result = await scanToPdf(pages, pdfProgress);
+      }
+      if (!stopped.current) onUse(outcome === undefined ? result : { ...result, ocr: outcome });
     } catch (err) {
       if (!stopped.current) setError(err instanceof Error ? err.message : 'PDF gagal disiapkan.');
     } finally {
@@ -151,8 +197,21 @@ export function ScanDialog({ onCancel, onUse }: { onCancel(): void; onUse(result
           </div>
         </li>)}
       </ol>
+      <div className="stack scan-ocr-choice">
+        <label className="scan-ocr-toggle">
+          <input type="checkbox" checked={useOcr} disabled={busy || !pages.length} aria-describedby={ocrHint}
+            onChange={(e) => setUseOcr(e.target.checked)} />
+          Kenali teks agar bisa dicari di PDF (OCR)
+        </label>
+        <p id={ocrHint} className="muted small">Bahasa Indonesia dan Inggris. Proses berjalan di perangkat dan dapat memakan waktu; model bahasa diunduh saat dibutuhkan.</p>
+      </div>
       <div className="scan-actions">
         <button type="button" className="btn btn-secondary" onClick={exit}>Batal</button>
+        {reading && <button type="button" className="btn btn-secondary" onClick={() => {
+          ocrTask.current?.abort();
+          setReading(false);
+          setProgress('Menyiapkan PDF tanpa OCR…');
+        }}>Lewati OCR</button>}
         <button type="button" className="btn btn-primary" disabled={busy || !pages.length} onClick={() => void finish()}>Gunakan PDF</button>
       </div>
       </>}

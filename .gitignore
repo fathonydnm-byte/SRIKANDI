@@ -2,3 +2,5 @@ node_modules/
 .clasp-credentials.json
 *.log
 .DS_Store
+
+/v4/web/public/ocr/

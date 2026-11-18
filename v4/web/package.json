@@ -12,17 +12,22 @@
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint . --max-warnings=0",
-    "test": "vitest run"
+    "test": "vitest run",
+    "predev": "node scripts/prepare-ocr.mjs",
+    "prebuild": "node scripts/prepare-ocr.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.119.0",
     "pdf-lib": "1.17.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "react-router-dom": "7.18.5"
+    "react-router-dom": "7.18.5",
+    "tesseract.js": "7.0.0"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@tesseract.js-data/eng": "1.0.0",
+    "@tesseract.js-data/ind": "1.0.0",
     "@testing-library/dom": "10.4.2",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",
