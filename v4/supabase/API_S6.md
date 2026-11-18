@@ -18,3 +18,27 @@ operator menekan **Upload Alih Media**.
 - Deteksi tepi/koreksi perspektif, OCR, Cari Isi Berkas, dan Cek JRA
   masih tahap lanjutan. Uji kamera fisik dilakukan kemudian sesuai
   arahan pemilik; tes otomatis menguji input foto dan PDF sintetis.
+
+## Tahap kedua — Cek JRA pada registrasi berkas baru
+
+Pemilik telah menguji pindai kamera melalui HP dan menyatakan hasilnya baik
+(18 November 2026). Tahap berikutnya menambahkan Cek JRA di atas isian Retensi
+pada **Buat Berkas Baru**.
+
+Pencarian membaca tab **Jadwal Retensi** dari spreadsheet rujukan yang sudah
+digunakan aplikasi Apps Script. Nilai aktif, inaktif, nasib akhir/keterangan,
+dan catatan sel gabungan ditampilkan persis sebagai teks; kondisi retensi
+seperti “setelah tidak berlaku” tidak dikonversi menjadi angka secara otomatis.
+Baris induk tanpa nilai tidak mewarisi retensi dari baris lain. Operator tetap
+memutuskan dan memasukkan nilai pada form berkas, dengan tautan ke baris sumber.
+
+Endpoint `POST /api/jra/search` memeriksa akun aktif lewat Supabase sebelum
+membaca satu URL spreadsheet tetap. Kata kunci/JWT tidak dikirim ke Google.
+Tidak ada perluasan izin Drive atau kunci layanan baru. Pengambilan CSV dibatasi
+2 MB, 10.000 baris, dan 15 detik; header diverifikasi. Sepuluh hasil per halaman;
+fingerprint sumber mencegah paginasi pada data yang sudah berubah. Jawaban
+tidak disimpan di cache. Bila akses publik sumber dicabut, tampilkan kegagalan
+yang bisa dicoba ulang dan tautan rujukan; jangan mengubah izin sumber otomatis.
+
+Tidak ada migrasi database atau perubahan nilai retensi arsip tersimpan.
+Deteksi tepi, koreksi perspektif, OCR, dan Cari Isi Berkas masih belum selesai.
