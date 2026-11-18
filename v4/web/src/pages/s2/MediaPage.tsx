@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { Alert } from '../../components/Alert';
 import { PageHeader } from '../../components/PageHeader';
+import { indexScanContent, type ScanContent } from '../../lib/contentSearch';
 import { formatDate, formatNumber } from '../../lib/format';
 import { runDriveTasks, s2 } from '../../lib/s2api';
 
@@ -24,7 +25,7 @@ export function MediaPage() {
   const deepItem = sp.get('item');
   const [chosenBerkas, setChosenBerkas] = useState<string | null>(null);
   const [chosenItem, setChosenItem] = useState<string | null>(null);
-  const [file, setFile] = useState<File | null>(null);
+  const [draft, setDraft] = useState<{ file: File; unitId: string | null; itemId: string; content?: ScanContent } | null>(null);
   const [fileKey, setFileKey] = useState(0);
   const [scanFor, setScanFor] = useState<{ unitId: string | null; itemId: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +47,8 @@ export function MediaPage() {
   const items = (berkas?.items ?? []).filter((i) => !busyIds.has(i.id) || i.id === wantedItem);
   const selected = items.find((i) => i.id === wantedItem);
   const itemId = selected?.id ?? '';
+  const prepared = draft?.itemId === itemId && draft.unitId === unitId ? draft : null;
+  const file = prepared?.file ?? null;
   const ready = load.kind === 'ok';
 
   function submit(e: FormEvent) {
@@ -54,17 +57,18 @@ export function MediaPage() {
     if (!ready || !selected || !berkas) return setError('Pilih item tanpa PDF terlebih dahulu.');
     if (!file) return setError('Pilih file PDF alih media.');
     if (file.size > ITEM_PDF_MAX) return setError('PDF harus kurang dari 100 MB.');
+    const content = prepared?.content;
     const label = `PDF Berkas ${berkas.number ?? '–'} / Item ${selected.number ?? '–'}`;
     uploads.start({ purpose: 'ITEM_PDF', objectId: selected.id, file, fileName: file.name, mime: 'application/pdf', unitId }, label, (r) => {
       retry();
       const tasks = (r.result as { drive_tasks?: unknown[] } | null)?.drive_tasks;
       if (tasks?.length) runDriveTasks(getToken, unitId);
-    });
+    }, content ? (r) => indexScanContent(client, r.sessionId, content) : undefined);
     setNotice(`${label}: unggahan dimulai. Anda dapat memilih item berikutnya sambil menunggu.`);
     setChosenItem('');
     if (deepItem) setSp({}, { replace: true });
     setScanFor(null);
-    setFile(null);
+    setDraft(null);
     setFileKey((k) => k + 1);
   }
 
@@ -84,14 +88,14 @@ export function MediaPage() {
           <div className="form-grid-2">
             <div className="field">
               <label htmlFor={ids.b}>Berkas induk *</label>
-              <select id={ids.b} value={berkasId} disabled={!ready || !berkasList.length} onChange={(e) => { setScanFor(null); setChosenBerkas(e.target.value); setChosenItem(''); if (deepItem) setSp({}, { replace: true }); }}>
+              <select id={ids.b} value={berkasId} disabled={!ready || !berkasList.length} onChange={(e) => { setScanFor(null); setDraft(null); setChosenBerkas(e.target.value); setChosenItem(''); if (deepItem) setSp({}, { replace: true }); }}>
                 <option value="">{load.kind === 'loading' ? 'Memuat daftar berkas…' : berkasList.length ? 'Pilih berkas induk' : 'Semua item sudah memiliki PDF'}</option>
                 {berkasList.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
               </select>
             </div>
             <div className="field">
               <label htmlFor={ids.i}>Item tanpa PDF *</label>
-              <select id={ids.i} value={itemId} disabled={!berkasId} onChange={(e) => { setScanFor(null); setChosenItem(e.target.value); }}>
+              <select id={ids.i} value={itemId} disabled={!berkasId} onChange={(e) => { setScanFor(null); setDraft(null); setChosenItem(e.target.value); }}>
                 <option value="">{berkasId ? 'Pilih item' : 'Pilih berkas terlebih dahulu'}</option>
                 {items.map((it) => <option key={it.id} value={it.id}>{it.label}</option>)}
               </select>
@@ -111,7 +115,7 @@ export function MediaPage() {
               <span className="muted">Pilih item yang akan dilengkapi alih medianya.</span>
             )}
           </div>
-          <PdfPicker key={fileKey} id={ids.f} label="PDF alih media *" file={file} onChange={setFile}
+          <PdfPicker key={fileKey} id={ids.f} label="PDF alih media *" file={file} onChange={(next) => setDraft(next ? { file: next, unitId, itemId } : null)}
             hint="PDF harus kurang dari 100 MB. Upload dikirim bertahap dan dapat dilanjutkan bila koneksi terputus." />
           <div className="action-row">
             <button type="button" className="btn btn-secondary" disabled={!itemId || busyIds.has(itemId)} onClick={() => { setError(null); setScanFor({ unitId, itemId }); }}>
@@ -131,12 +135,17 @@ export function MediaPage() {
       {scanFor?.itemId === itemId && scanFor.unitId === unitId && (
         <Suspense fallback={<p role="status">Memuat pemindai…</p>}>
           <ScanDialog onCancel={() => setScanFor(null)} onUse={(r) => {
-            setFile(new File([r.pdf], r.fileName, { type: 'application/pdf' }));
+            setDraft({
+              file: new File([r.pdf], r.fileName, { type: 'application/pdf' }),
+              unitId, itemId, content: r.indexContent,
+            });
             const details = r.ocr === 'lewati' ? ' OCR dilewati.'
               : r.ocr === 'gagal' ? ' OCR tidak selesai; PDF gambar tetap siap.'
                 : r.ocr === 0 ? ' Tidak ada teks yang berhasil dikenali.'
                   : r.ocr ? ` Teks bisa dicari pada ${r.ocr} dari ${r.pageCount} halaman.` : '';
-            setNotice(`PDF pindaian siap: ${r.pageCount} halaman.${details} Tekan Upload Alih Media untuk menyimpan.`);
+            const indexed = r.indexContent?.truncated ? ' Sebagian teks terlalu panjang untuk pencarian di aplikasi.'
+              : r.indexContent ? ' Teks akan masuk Cari Isi Berkas setelah unggahan selesai.' : '';
+            setNotice(`PDF pindaian siap: ${r.pageCount} halaman.${details}${indexed} Tekan Upload Alih Media untuk menyimpan.`);
             setScanFor(null);
           }} />
         </Suspense>

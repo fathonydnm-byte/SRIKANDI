@@ -25,6 +25,7 @@ const BackupPage = lazy(() => import('./pages/s3/BackupPage').then((m) => ({ def
 const QuarantinePage = lazy(() => import('./pages/s3/QuarantinePage').then((m) => ({ default: m.QuarantinePage })));
 const RetentionPage = lazy(() => import('./pages/s5/RetentionPage').then((m) => ({ default: m.RetentionPage })));
 const LoansPage = lazy(() => import('./pages/s4/LoansPage').then((m) => ({ default: m.LoansPage })));
+const ContentSearchPage = lazy(() => import('./pages/search/ContentSearchPage').then((m) => ({ default: m.ContentSearchPage })));
 const MediaPage = lazy(() => import('./pages/s2/MediaPage').then((m) => ({ default: m.MediaPage })));
 const ReceiptPrintPage = lazy(() => import('./pages/s2/ReceiptPrintPage').then((m) => ({ default: m.ReceiptPrintPage })));
 
@@ -41,6 +42,7 @@ import { ResetPasswordPage } from './pages/ResetPasswordPage';
 const BUILT: Record<string, () => ReactElement> = {
   dashboard: () => <DashboardPage />,
   cari: () => <SearchPage />,
+  'cari-isi': () => <Lazy><ContentSearchPage /></Lazy>,
   penerimaan: () => <Lazy><ReceiptsPage /></Lazy>,
   pemberkasan: () => <Lazy><RegistrationPage /></Lazy>,
   'alih-media': () => <Lazy><MediaPage /></Lazy>,

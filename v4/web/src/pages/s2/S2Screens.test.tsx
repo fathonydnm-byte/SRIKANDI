@@ -309,7 +309,7 @@ describe('Alih Media Arsip', () => {
     expect(screen.getByRole('button', { name: 'Pindai dengan kamera' })).toBeEnabled();
     await user.upload(screen.getByLabelText('PDF alih media *'), new File(['%PDF'], 'scan.pdf', { type: 'application/pdf' }));
     await user.click(screen.getByRole('button', { name: 'Upload Alih Media' }));
-    expect(start).toHaveBeenCalledWith(expect.objectContaining({ purpose: 'ITEM_PDF', objectId: 'ITM-2' }), 'PDF Berkas 1 / Item 2', expect.any(Function));
+    expect(start).toHaveBeenCalledWith(expect.objectContaining({ purpose: 'ITEM_PDF', objectId: 'ITM-2' }), 'PDF Berkas 1 / Item 2', expect.any(Function), undefined);
     expect(screen.getByText(/unggahan dimulai/)).toBeInTheDocument();
   });
 });

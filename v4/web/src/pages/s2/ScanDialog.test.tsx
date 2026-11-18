@@ -105,11 +105,11 @@ it.each(['success', 'skip', 'failure'] as const)('keeps the PDF usable when OCR 
   vi.mocked(scanToPdf).mockClear().mockResolvedValueOnce(result);
   vi.mocked(recognizeScan).mockClear().mockImplementationOnce(async (_, signal, progress) => {
     progress({ page: 1, total: 1, percent: 20 });
-    if (kind === 'success') return [layer];
+    if (kind === 'success') return { layers: [layer], pages: ['Surat Keputusan'] };
     if (kind === 'failure') throw new Error('Missing worker model');
     await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
     signal.throwIfAborted();
-    return [];
+    return { layers: [], pages: [] };
   });
   const onUse = vi.fn();
   const user = userEvent.setup();
@@ -132,7 +132,10 @@ it.each(['success', 'skip', 'failure'] as const)('keeps the PDF usable when OCR 
       await user.click(screen.getByRole('button', { name: 'Lewati OCR' }));
     }
     const expected = kind === 'success' ? 1 : kind === 'skip' ? 'lewati' : 'gagal';
-    expect(onUse).toHaveBeenCalledExactlyOnceWith({ ...result, ocr: expected });
+    expect(onUse).toHaveBeenCalledExactlyOnceWith({
+      ...result, ocr: expected,
+      ...(kind === 'success' ? { indexContent: { pages: ['Surat Keputusan'], truncated: false } } : {}),
+    });
     const scanArgs = [[{ id: 1, jpeg, turns: 0 }], expect.any(Function)];
     if (kind === 'success') scanArgs.push([layer]);
     expect(scanToPdf).toHaveBeenCalledExactlyOnceWith(...scanArgs);
