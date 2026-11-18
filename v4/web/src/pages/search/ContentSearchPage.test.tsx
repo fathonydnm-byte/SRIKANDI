@@ -18,7 +18,7 @@ it('searches only on submit, reports progress, and links a page match to the arc
   expect(await screen.findByText('Sedang mencari isi PDF…')).toBeVisible();
   expect(search).toHaveBeenCalledWith(expect.objectContaining({
     p_query: 'keputusan rektor', p_phrase: true, p_limit: 12, p_offset: 0, p_unit_id: null,
-  }));
+  }), undefined);
   finish({
     error: null,
     data: { results: [{
@@ -31,5 +31,5 @@ it('searches only on submit, reports progress, and links a page match to the arc
   expect(screen.getByText(/Halaman PDF 3/)).toBeVisible();
   expect(screen.getByText(/Menimbang keputusan rektor/)).toBeVisible();
   await user.click(screen.getByRole('button', { name: 'Berikutnya' }));
-  expect(search).toHaveBeenLastCalledWith(expect.objectContaining({ p_offset: 12 }));
+  expect(search).toHaveBeenLastCalledWith(expect.objectContaining({ p_offset: 12 }), undefined);
 });
