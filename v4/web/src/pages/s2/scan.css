@@ -11,3 +11,15 @@
 .scan-photo { display: grid; place-items: center; width: 5rem; height: 5rem; background: var(--bg); overflow: hidden; }
 .scan-photo img { width: 100%; height: 100%; object-fit: contain; }
 .scan-page-actions { gap: .35rem; }
+.scan-dialog h3 { margin: 0; }
+.scan-crop-frame { width: min(100%, 30rem); margin-inline: auto; padding: 22px; background: var(--bg); border-radius: var(--radius-md); }
+.scan-crop-surface { position: relative; }
+.scan-crop-surface img { display: block; width: 100%; height: auto; user-select: none; }
+.scan-crop-outline { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.scan-crop-outline polygon { fill: #3ddc9733; stroke: #0c6c4b; stroke-width: 2; }
+.scan-crop-outline .scan-crop-invalid { fill: #b83b3b26; stroke: #b83b3b; }
+.scan-crop-handle { position: absolute; width: 44px; height: 44px; display: grid; place-items: center; transform: translate(-50%, -50%); border: 0; background: transparent; padding: 0; border-radius: 50%; touch-action: none; cursor: grab; }
+.scan-crop-handle::after { content: ''; width: 17px; height: 17px; background: #0c6c4b; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #09372a; }
+.scan-crop-handle:active { cursor: grabbing; }
+.scan-crop-handle:focus-visible { outline: 2px solid var(--navy); }
+.scan-crop-surface { margin-inline: auto; }

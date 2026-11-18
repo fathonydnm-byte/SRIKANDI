@@ -1,9 +1,11 @@
 import { useEffect, useId, useRef, useState, type ChangeEvent } from 'react';
 import { Alert } from '../../components/Alert';
 import { MAX_SCAN_PAGES, prepareScanPhoto, scanToPdf, type ScanPage, type ScanResult } from '../../lib/scan';
+import type { Corners } from '../../lib/perspective';
+import { ScanCropEditor } from './ScanCropEditor';
 import './scan.css';
 
-interface Page extends ScanPage { id: number }
+interface Page extends ScanPage { id: number; original?: Blob; corners?: Corners }
 const ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif';
 
 function Photo({ page, number }: { page: Page; number: number }) {
@@ -24,6 +26,7 @@ export function ScanDialog({ onCancel, onUse }: { onCancel(): void; onUse(result
   const sequence = useRef(0);
   const heading = useId();
   const [pages, setPages] = useState<Page[]>([]);
+  const [editingId, setEditingId] = useState<number>();
   const [error, setError] = useState('');
   const [progress, setProgress] = useState('');
 
@@ -36,6 +39,11 @@ export function ScanDialog({ onCancel, onUse }: { onCancel(): void; onUse(result
   }, []);
 
   function exit() { stopped.current = true; onCancel(); }
+
+  function closeEditor() {
+    setEditingId(undefined);
+    requestAnimationFrame(() => node.current?.querySelector<HTMLButtonElement>(`[data-crop-page="${editingId}"]`)?.focus());
+  }
 
   async function add(e: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.currentTarget.files ?? []);
@@ -99,9 +107,18 @@ export function ScanDialog({ onCancel, onUse }: { onCancel(): void; onUse(result
   }
 
   const busy = Boolean(progress);
-  return <dialog ref={node} className="scan-dialog" aria-labelledby={heading} onCancel={(e) => { e.preventDefault(); exit(); }}>
+  const editIndex = pages.findIndex((p) => p.id === editingId);
+  const editing = pages[editIndex];
+  return <dialog ref={node} className="scan-dialog" aria-labelledby={heading} onCancel={(e) => { e.preventDefault(); if (editing) closeEditor(); else exit(); }}>
     <div className="stack">
       <h2 id={heading}>Pindai arsip</h2>
+      {editing ? <ScanCropEditor original={editing.original ?? editing.jpeg} saved={editing.corners}
+        number={editIndex + 1} onBack={closeEditor} onApply={(jpeg, corners) => {
+          setPages((current) => current.map((p) => p.id === editing.id ? {
+            id: p.id, jpeg, turns: p.turns, ...(corners && { original: p.original ?? p.jpeg, corners }),
+          } : p));
+          closeEditor();
+        }} /> : <>
       <p className="muted">Ambil foto dengan kamera atau pilih foto dari galeri. Periksa urutannya sebelum membuat PDF. Foto baru dikirim setelah Anda menekan Upload Alih Media.</p>
       <div className="scan-actions">
         <label className="btn btn-secondary scan-picker" aria-disabled={busy || pages.length >= MAX_SCAN_PAGES}>
@@ -120,7 +137,11 @@ export function ScanDialog({ onCancel, onUse }: { onCancel(): void; onUse(result
           <Photo page={page} number={i + 1} />
           <div className="stack scan-page-actions">
             <strong>Halaman {i + 1}</strong>
+            {page.corners && <span className="muted">Perspektif dirapikan</span>}
             <div className="scan-actions">
+              <button type="button" className="btn btn-secondary" data-crop-page={page.id}
+                aria-label={`Rapikan sudut halaman ${i + 1}`} disabled={busy}
+                onClick={() => setEditingId(page.id)}>Rapikan sudut</button>
               <button type="button" className="btn btn-secondary" aria-label={`Putar halaman ${i + 1}`} disabled={busy}
                 onClick={() => setPages((p) => p.map((x) => x.id === page.id ? { ...x, turns: (x.turns + 1) % 4 } : x))}>Putar</button>
               <button type="button" className="btn btn-secondary" aria-label={`Geser halaman ${i + 1} ke atas`} disabled={busy || i === 0} onClick={() => move(i, -1)}>Naik</button>
@@ -134,6 +155,7 @@ export function ScanDialog({ onCancel, onUse }: { onCancel(): void; onUse(result
         <button type="button" className="btn btn-secondary" onClick={exit}>Batal</button>
         <button type="button" className="btn btn-primary" disabled={busy || !pages.length} onClick={() => void finish()}>Gunakan PDF</button>
       </div>
+      </>}
     </div>
   </dialog>;
 }
