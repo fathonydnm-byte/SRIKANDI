@@ -80,6 +80,11 @@ Pengguna tidak punya akses Google Drive. Alurnya: browser → `POST /api/files/t
 
 Variabel server di Cloudflare Pages (Settings → Variables and Secrets, tipe Secret): `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `FILE_TICKET_SECRET`, `DRIVE_GATEWAY_URL`, `DRIVE_GATEWAY_SECRET`. Tanpa service-role key. Selama gerbang belum dipasang, tombol file menampilkan "Jembatan Drive belum dipasang". Mode darurat lama (buka URL Drive langsung) hanya bila build diberi `VITE_FILE_ACCESS_MODE=drive-url`.
 
+## Persiapan perpindahan
+
+Jalankan [latihan rekonsiliasi dan checklist perpindahan](../docs/CENTRAL_FILE_V4_S7_CUTOVER_REHEARSAL.md)
+dengan ekspor XLSX lama dan paket cadangan unit v4. Alat pembanding berjalan lokal dan hanya membaca kedua salinan.
+
 ## CI
 
 `.github/workflows/v4-ci.yml` berjalan untuk perubahan di `v4/**`: job **web** (typecheck termasuk Functions, lint, tes, build, tes gerbang Apps Script) dan job **db** (`v4/tests/db/run.sh` dengan PostgreSQL 16 dari runner).
