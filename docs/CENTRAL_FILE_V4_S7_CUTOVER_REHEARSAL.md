@@ -1,8 +1,10 @@
 # Sprint 7 — Latihan perpindahan Central File
 
-Sistem produksi tetap **Central File 3.x (Apps Script)** sampai pemilik
-memberi keputusan. Dokumen ini untuk latihan di salinan data. Hasil latihan
-tidak mengubah aplikasi, akses, trigger, maupun data di kedua lingkungan.
+Untuk unit **BAGUM**, pemilik menetapkan **PostgreSQL Central File v4 (.dev)**
+sebagai sumber data yang berlaku pada 20 November 2026. Penerimaan dan
+pengambilan arsip oleh vendor sudah dicatat di v4 tanpa disalin ke Apps
+Script. Gunakan 3.x sebagai pembanding historis. Keputusan atas sumber data
+ini belum mengubah deployment, akses, trigger, atau data pada kedua sistem.
 
 ## 1. Buat laporan pembanding BAGUM
 
@@ -40,14 +42,43 @@ Perubahan PDF dilaporkan sebagai perbedaan referensi, tanpa membacanya.
 Berkas dengan jadwal **MANUAL** atau **PENDING** di v4 ditandai terpisah;
 kolom jadwal pada berkas tersebut tidak diperlakukan sebagai selisih biasa.
 
-Tentukan tindakan untuk setiap temuan berdasarkan bukti transaksi dan waktu
-ekspor. Data satu sisi bisa merupakan arsip baru yang sah. Metadata yang
-berubah pada ID sama perlu ditinjau; nomor definitif dapat bergeser sehingga
-nomor yang sama belum tentu menunjuk arsip yang sama. Jangan menjalankan
-impor ulang di staging atau di produksi untuk menyelesaikan selisih ini.
+Untuk BAGUM, pertahankan data v4 yang hanya ada pada satu sisi maupun nilai
+v4 pada ID yang sama. Pakai bukti transaksi dan kondisi fisik untuk meninjau
+anomali. Jika ditemukan rekod yang hanya ada di 3.x pada pembandingan lain,
+verifikasi rekod tersebut satu per satu dan catat keputusan sebelum
+memasukkannya ke v4. Nomor definitif dapat bergeser; cocokkan selalu
+berdasarkan ID. Jangan jalankan impor ulang dari ekspor Apps Script ke v4.
 Laporan tidak memuat uraian, nama orang, atau ID/URL Drive. ID arsip tetap
 data internal; bagikan hanya ringkasan jumlah dan jenis temuan di luar alur
 kerja instansi. Simpan workbook dan paket ZIP di penyimpanan instansi.
+
+### Hasil pembandingan BAGUM — 20 November 2026
+
+Cadangan v4 skema `0028` berhasil dibandingkan. Tidak ada ID yang hanya
+ada di Apps Script pada empat tabel di bawah.
+
+| Tabel | Hanya di v4 | ID sama dengan perubahan |
+| --- | ---: | ---: |
+| Berkas | 2 | 27 |
+| Item | 13 | 14 |
+| Penerimaan | 1 | 0 |
+| Item penerimaan | 4 | 0 |
+
+Jumlah aktif: berkas **28 → 30**, item **138 → 151**, lembar
+**1.525 → 1.517**, dan item dengan referensi file **135 → 150**. Selisih
+lembar adalah angka bersih; belum diketahui kontribusi masing-masing item.
+
+Sebelum menyatakan siap beralih:
+
+- Cocokkan nomor definitif dan nomor folder v4 dengan daftar lokasi serta
+  label fisik pada **27 berkas** yang nomornya berubah.
+- Cocokkan status peminjaman pada **3 berkas** dan **13 item** dengan catatan
+  pengambilan dan pengembalian. Status dari Apps Script hanya pembanding.
+- Cek **4 item** yang jumlah lembarnya berubah dan **4 item** yang referensi
+  filenya berubah. Kelompok ini bisa tumpang tindih. Cocokkan metadata
+  dengan fisik atau bukti transaksi, dan buka PDF di v4 untuk menguji akses.
+- Cek tanggal acuan dan batas aktif/inaktif pada **1 berkas** berdasarkan
+  dokumen penetapan retensinya.
 
 ## 2. Uji sebelum meminta keputusan
 
@@ -70,17 +101,20 @@ status `COCOK_DALAM_CAKUPAN` tidak menggantikan uji ini.
 
 1. Sepakati waktu jeda, kontak operator, batas sebelum batal, dan tujuan
    penulisan produksi. Catat versi sumber, commit target, dan daftar job.
-2. Jeda penulisan pada sumber dan target; tuntaskan atau catat unggahan,
+2. Jeda penulisan pada sistem yang terkait; tuntaskan atau catat unggahan,
    peminjaman, draf, dan pekerjaan yang masih terbuka. Ambil snapshot
    kedua sisi pada jeda yang sama; buat daftar delta yang direview.
-3. Terapkan hasil rekonsiliasi yang disetujui pada target terpisah. Ulangi
-   pembandingan, pemeriksaan relasi/nomor, akses file, dan uji operasi inti.
-   Perpindahan tidak berjalan bila ada selisih material tanpa keputusan.
+3. Gunakan snapshot **PostgreSQL v4** sebagai dasar BAGUM bila menyiapkan
+   target produksi terpisah. Terapkan hanya koreksi yang sudah disetujui.
+   Ulangi pembandingan, pemeriksaan relasi/nomor, akses file, dan uji
+   operasi inti. Perpindahan tidak berjalan bila ada selisih material
+   yang belum dijelaskan atau diputuskan.
 4. Setelah **go** dari pemilik, aktifkan hanya satu aplikasi penulis dan
    satu set job yang sudah diperiksa. Pantau akses, unggahan, pencarian,
    pengembalian pinjaman dan backup pertama. Pastikan riwayat status pengiriman
    tidak memicu pengiriman ulang.
-5. Jika perlu kembali ke sumber, jeda tulis target dan job lebih dulu.
-   Amankan transaksi yang terjadi setelah beralih dan rekonsiliasi ke sumber
-   sebelum mengaktifkan kembali penulisan lama. Mengubah URL saja akan
-   meninggalkan transaksi baru di target.
+5. Jika perlu kembali ke Apps Script, jeda tulis target dan job lebih dulu.
+   Amankan dan rekonsiliasi seluruh transaksi v4 yang tidak tercatat di
+   Apps Script, **termasuk transaksi sebelum hari perpindahan**, sebelum
+   mengaktifkan kembali penulisan lama. Mengubah URL saja akan meninggalkan
+   transaksi v4 tanpa padanan.
