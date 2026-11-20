@@ -93,6 +93,15 @@ Sebelum menyatakan siap beralih:
 | Pemulihan dan penjadwalan | Ulangi [latihan restore](../v4/tools/restore-backup/README.md) untuk BAGUM dan _PLATFORM dari versi skema terbaru. Verifikasi hasil backup otomatis dan akses file sampel. Siapkan pemulihan login dan uji ulang indeks terpisah; kedua data tersebut tidak ikut dipulihkan dari paket metadata. |
 | Isolasi produksi/staging | Tetapkan target yang terpisah dari staging, verifikasi unit, peran, akses Drive, alamat aplikasi dan tujuan job; jangan sambungkan staging ke Record Center produksi. |
 
+### Status BAGUM — 20 November 2026
+
+| Tahap | Status dan bukti |
+| --- | --- |
+| Pembandingan sumber | Selesai untuk empat tabel; PostgreSQL v4 ditetapkan sebagai dasar BAGUM. |
+| Pemulihan metadata | Lulus untuk paket asli skema `0028` di WSL. Lihat [hasil latihan pemulihan](../v4/tools/restore-backup/README.md#hasil-paket-skema-0028--20-november-2026). |
+| Label, lembar, referensi file, dan peminjaman | Belum semua diverifikasi. Cocokkan perubahan pada daftar di §1. Di v4, buka PDF terkait pada akun berizin dan cek pinjaman aktif terhadap catatan vendor. Jumlah grup yang pulih mencakup riwayat; angka itu bukan jumlah pinjaman yang masih terbuka. |
+| Perpindahan resmi | Belum dijalankan. Uji pemulihan bukan bukti bahwa akses PDF, login, atau kesiapan penulisan produksi sudah teruji. |
+
 Catat hasil tiap uji sebagai **lulus**, **gagal**, atau **belum diuji** dengan
 tanggal, versi aplikasi/skema dan penanggung jawab. Lulus tes otomatis atau
 status `COCOK_DALAM_CAKUPAN` tidak menggantikan uji ini.

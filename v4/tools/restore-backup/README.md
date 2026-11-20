@@ -6,13 +6,20 @@ Gunakan paket asli dari Google Drive di komputer instansi. Perintah di bawah mem
 
 Log Apps Script 17 November 2026 WIB mencatat `BAGUM`: cermin dan backup berhasil (1.772 baris), serta `_PLATFORM`: backup berhasil (0 baris). Pemilik memulihkan kedua paket asli di PostgreSQL 16 lokal melalui Ubuntu WSL. Log berakhir dengan `Latihan pemulihan lulus`. Jumlah baris per tabel cocok; pemeriksaan relasi, keunikan nomor, dan counter tanda terima lulus. Database sementara dibersihkan. Pemicu harian telah dipasang; hasil eksekusi otomatis pertama masih perlu diperiksa.
 
-## Ulangi untuk paket skema 0028
+## Hasil paket skema 0028 — 20 November 2026
 
 Pada 20 November 2026, `runNow` setelah migrasi menghasilkan paket `BAGUM`
-(1.988 baris) dan `_PLATFORM` (0 baris). Pembandingan BAGUM sudah memakai
-paket skema `0028` tersebut. Uji pemulihan paket asli dari skema ini masih
-perlu dijalankan; hasil 17 November membuktikan pemulihan skema sebelumnya.
-Gunakan kedua paket skema `0028` dari eksekusi backup yang sama.
+(1.988 baris) dan `_PLATFORM` (0 baris). Pemilik menjalankan latihan dengan
+paket asli ini di Ubuntu WSL. Log berakhir dengan **Latihan pemulihan lulus**:
+jumlah baris paket cocok (antara lain 34 berkas, 167 item, 17 penerimaan,
+12 grup pinjaman, dan 14 objek pinjaman). Pemeriksaan relasi, keunikan nomor
+dan counter tanda terima lulus. Database sementara dibersihkan.
+Hitungan pemulihan mencakup seluruh baris dalam paket, termasuk arsip yang
+tidak masuk daftar aktif. Latihan tidak mengubah database produksi.
+
+## Cara mengulang
+
+Gunakan kedua paket dari eksekusi backup yang sama.
 
 1. Di Google Drive akun instansi, unduh **masing-masing folder tanggal** dari `CENTRAL FILE V4/BAGUM/BACKUP/` dan `CENTRAL FILE V4/_PLATFORM/BACKUP/`. Pilih tanggal yang sama. Jika dua ZIP bernama sama, beri nama lokal `BAGUM.zip` dan `PLATFORM.zip`. Jangan gabungkan keduanya menjadi satu ZIP. Masing-masing harus memuat `manifest.json`; backup platform dengan nol baris tetap sah.
 2. Gunakan Linux, atau Ubuntu di WSL pada Windows. Dari root repo, pada revisi yang berisi panduan ini, pastikan Node.js 22+, npm, Bash, dan biner PostgreSQL 16 terpasang. Biner PostgreSQL biasanya ada di `/usr/lib/postgresql/16/bin`; jika berbeda, atur `PG_BIN`.
