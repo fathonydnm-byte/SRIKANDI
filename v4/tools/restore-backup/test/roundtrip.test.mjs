@@ -305,6 +305,25 @@ test('idempotent: restoring the same packages again changes nothing', async () =
   assert.equal((await dst.query('select count(*)::int n from public.audit_log')).rows[0].n, sourceDump.audit_log.rows, 'append-only audit rows were not duplicated');
 });
 
+test('restored archives keep manual and pending retention and an outstanding partial loan', async () => {
+  const { rows: retention } = await dst.query(`
+    select id, retensi_acuan_mode as mode, tgl_acuan_retensi::text as acuan,
+      batas_aktif::text as aktif, batas_inaktif::text as inaktif, status_retensi as status
+    from public.berkas where unit_id = $1 and id in ('BRK-A-4', 'BRK-A-5') order by id`, [UNIT.A]);
+  assert.deepEqual(retention, [
+    { id: 'BRK-A-4', mode: 'MANUAL', acuan: '2026-04-12', aktif: '2031-04-12', inaktif: '2033-04-12', status: 'AKTIF' },
+    { id: 'BRK-A-5', mode: 'PENDING', acuan: null, aktif: null, inaktif: null, status: 'MENUNGGU TANGGAL ACUAN' },
+  ]);
+  const { rows: loan } = await dst.query(`
+    select g.returned_on, b.status_peminjaman as berkas, i.status_peminjaman as item
+    from public.loan_groups g
+    join public.loan_objects o on o.unit_id = g.unit_id and o.loan_id = g.id
+    join public.berkas b on b.unit_id = o.unit_id and b.id = o.berkas_id
+    join public.item i on i.unit_id = o.unit_id and i.id = o.item_id
+    where g.unit_id = $1 and g.id = 'PIN-RT-OPEN'`, [UNIT.A]);
+  assert.deepEqual(loan, [{ returned_on: null, berkas: 'SEBAGIAN DIPINJAM', item: 'DIPINJAM' }]);
+});
+
 test('after the restore the system keeps working: counters hand out fresh numbers, the identity column continues', async () => {
   const { rows: [{ n }] } = await dst.query("select app.next_counter($1, 'TRM', 2026) as n", [UNIT.A]);
   assert.equal(Number(n), 13, 'TRM-2026-0013 is next, not a reused number');
