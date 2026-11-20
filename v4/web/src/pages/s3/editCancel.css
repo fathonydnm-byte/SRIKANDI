@@ -8,6 +8,24 @@
 .pick-sub { font-size: 13px; color: var(--muted); }
 .pick-why { font-size: 13px; color: var(--danger); font-weight: 600; }
 .pick-selected { margin: 4px 0 0; overflow-wrap: anywhere; }
+.edit-item-picker .pick-group {
+  margin: 0 0 6px;
+  padding: 8px 12px;
+  border-inline-start: 4px solid var(--navy);
+  border-radius: var(--radius-sm);
+  background: var(--green-100);
+  color: var(--navy);
+  font-size: clamp(1rem, 1.5vw, 1.125rem);
+  line-height: 1.35;
+  text-transform: none;
+}
+.edit-item-picker .pick-list li:not(:first-child) > .pick-group { margin-block-start: 10px; }
+.edit-item-picker .pick-option {
+  margin-inline-start: 10px;
+  width: calc(100% - 10px);
+  font-size: 0.875rem;
+}
+.edit-item-picker .pick-sub { font-size: 0.75rem; }
 .reason-counter.is-ok { color: var(--success); }
 .readonly-box { padding: 10px 12px; background: #f1f5f9; border-radius: var(--radius-sm); overflow-wrap: anywhere; font-size: 14px; }
 .impact-box { border: 1px solid var(--danger-line); background: var(--danger-bg); border-radius: var(--radius-md); padding: 12px 14px; overflow-wrap: anywhere; }
