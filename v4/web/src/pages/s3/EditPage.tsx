@@ -267,7 +267,7 @@ function ItemEditor({ options, unitId, reload }: { options: EditOptions; unitId:
   return (
     <div className="stack">
       {result ? <ItemResult result={result.r} before={result.before} onClose={() => setResult(null)} /> : null}
-      <div className="card">
+      <div className="card edit-item-picker">
         <Picker label="Cari berkas atau item" options={opts} value={itemId} onChange={(id) => { setItemId(id); setResult(null); }} emptyText="Belum ada item yang dapat diubah." />
       </div>
       {berkas && item ? (
