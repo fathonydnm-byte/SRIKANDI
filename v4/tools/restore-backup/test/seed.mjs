@@ -33,6 +33,14 @@ export async function seed(client) {
            'seed', timestamptz '2026-03-04 05:06:07.123456+00' + (g || ' minutes')::interval, 'PERMANEN', 5, 'TAHUN'
       from generate_series(1, ${SIZES.berkasA}) g`, [UNIT.A]);
   await q(`insert into public.berkas (id, unit_id, no_berkas_definitif, judul_berkas, klasifikasi_id, status_berkas) values ('BRK-B-1', $1, 1, 'Berkas B', 'K-PR0101', 'AKTIF')`, [UNIT.B]);
+  // 0028: preserve both an explicit reference date and a deliberately unset one.
+  await q(`update public.berkas set retensi_acuan_mode = 'MANUAL',
+      tgl_acuan_retensi = date '2026-04-12', batas_aktif = date '2031-04-12', batas_inaktif = date '2033-04-12',
+      retensi_inaktif_nilai = 2, retensi_inaktif_satuan = 'TAHUN', status_retensi = 'AKTIF'
+    where unit_id = $1 and id = 'BRK-A-4'`, [UNIT.A]);
+  await q(`update public.berkas set retensi_acuan_mode = 'PENDING',
+      tgl_acuan_retensi = null, batas_aktif = null, batas_inaktif = null, status_retensi = 'MENUNGGU TANGGAL ACUAN'
+    where unit_id = $1 and id = 'BRK-A-5'`, [UNIT.A]);
 
   await q(`insert into public.penerimaan (id, unit_id, nomor_tanda_terima, tahun, tanggal_waktu_terima, penyerah_pegawai_id, nama_penerima, unit_penerima, status, created_by,
       bukti_ttd_file_id, bukti_ttd_nama, bukti_ttd_size_bytes, bukti_ttd_md5, version)
@@ -89,6 +97,12 @@ export async function seed(client) {
     values ($1,'PIN-RT','Nama Contoh','Jabatan','Unit',decode('00abcd','hex'),'Petugas','Arsiparis','Tujuan',current_date,current_date,'BAIK',1,current_date)`, [UNIT.A]);
   await q(`insert into public.loan_objects (unit_id,id,loan_id,berkas_id,berkas_no,berkas_title,location,page_count)
     values ($1,'PO-RT','PIN-RT','BRK-A-1',1,'Berkas 1','Laci A',1)`, [UNIT.A]);
+  await q(`insert into public.loan_groups (unit_id,id,borrower_name,borrower_position,borrower_unit,
+    officer_name,officer_position,purpose,borrowed_on,due_on,borrow_condition,page_count)
+    values ($1,'PIN-RT-OPEN','Vendor Contoh','Petugas vendor','Unit','Petugas','Arsiparis','Uji pinjaman aktif',current_date,current_date + 2,'BAIK',2)`, [UNIT.A]);
+  await q(`insert into public.loan_objects (unit_id,id,loan_id,berkas_id,item_id,berkas_no,berkas_title,item_no,location,page_count)
+    values ($1,'PO-RT-OPEN','PIN-RT-OPEN','BRK-A-3','ITM-A-00002',3,'Berkas 3',2,'Laci A',2)`, [UNIT.A]);
+  await q("select app.loan_status_refresh($1, 'PIN-RT-OPEN', false)", [UNIT.A]);
   await q(`insert into public.transfer_drafts (unit_id,id,draft_number,title,berkas_count,item_count,snapshot)
     values ($1,'USP-RT','DRAF-2026-0001','Usul uji',1,1,'[{"berkas_id":"BRK-A-1","item_count":1}]')`, [UNIT.A]);
   await q(`insert into public.transfer_draft_items (unit_id,id,draft_id,berkas_id,item_id,snapshot)
