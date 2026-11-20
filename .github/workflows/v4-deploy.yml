@@ -6,6 +6,9 @@ name: v4 deploy (staging)
 # Hanya dijalankan manual setelah review, supaya commit WIP tidak ikut tayang di staging.
 on:
   workflow_dispatch:
+  push:
+    branches: [release/v4-edit-item-hierarchy-20261120]
+    paths: ['.github/workflows/v4-deploy.yml']
 
 concurrency:
   group: v4-deploy
