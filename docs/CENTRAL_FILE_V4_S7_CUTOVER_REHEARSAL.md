@@ -99,12 +99,32 @@ Sebelum menyatakan siap beralih:
 | --- | --- |
 | Pembandingan sumber | Selesai untuk empat tabel; PostgreSQL v4 ditetapkan sebagai dasar BAGUM. |
 | Pemulihan metadata | Lulus untuk paket asli skema `0028` di WSL. Lihat [hasil latihan pemulihan](../v4/tools/restore-backup/README.md#hasil-paket-skema-0028--20-november-2026). |
-| Label, lembar, referensi file, dan peminjaman | Belum semua diverifikasi. Cocokkan perubahan pada daftar di §1. Di v4, buka PDF terkait pada akun berizin dan cek pinjaman aktif terhadap catatan vendor. Jumlah grup yang pulih mencakup riwayat; angka itu bukan jumlah pinjaman yang masih terbuka. |
-| Perpindahan resmi | Belum dijalankan. Uji pemulihan bukan bukti bahwa akses PDF, login, atau kesiapan penulisan produksi sudah teruji. |
+| Label, lembar, referensi file, dan peminjaman | Pemilik menyatakan pemeriksaan BAGUM pada daftar di §1 cocok. Ini memvalidasi data yang diperiksa; uji izin PDF dengan akun yang berbeda tetap diperlukan pada target produksi. |
+| Rilis aplikasi | Revisi berjalan: `8f077329` (`release/v4-edit-item-hierarchy-20261120`). Pada 20 November, staging mengembalikan HTTP 200 untuk halaman awal, `/edit`, `/retensi`, service worker, dan manifest PWA. Pemeriksaan HTTP ini tidak meliputi sesi login atau penulisan. |
+| Perpindahan resmi | Belum dijalankan. Proyek dan alamat produksi terpisah belum dikonfirmasi. |
 
 Catat hasil tiap uji sebagai **lulus**, **gagal**, atau **belum diuji** dengan
 tanggal, versi aplikasi/skema dan penanggung jawab. Lulus tes otomatis atau
 status `COCOK_DALAM_CAKUPAN` tidak menggantikan uji ini.
+
+### Persiapan target produksi BAGUM
+
+Kode web, migrasi Supabase, skrip gateway, dan skrip cermin pada branch
+Sprint 7 identik dengan revisi staging `8f077329`. Pilih revisi tersebut
+sebagai kandidat awal dan skema `0028` untuk data saat ini. Perubahan pada
+branch ini adalah alat lokal, dokumentasi, dan tes. Tidak perlu deploy ulang
+staging untuk menguji perpindahan data.
+
+| Pemeriksaan | Bukti sebelum jadwal perpindahan ditetapkan |
+| --- | --- |
+| Tujuan rilis | Nama proyek Supabase, proyek Cloudflare Pages, dan alamat produksi dikonfirmasi. Workflow yang ada menjalankan deploy khusus ke proyek staging `central-file-uinsa`; siapkan alur rilis terpisah untuk target. Cocokkan tujuan build browser dan Pages Functions dengan Supabase target. |
+| Data dan identitas | Latih pemuatan snapshot PostgreSQL v4 ke target kosong. Akun Supabase Auth dan profil tidak ikut backup: cocokkan UUID pengguna, unit dan peran yang dipakai aplikasi. Siapkan material Vault yang diperlukan agar data terenkripsi lama tetap dapat dibaca. Jangan menyalin nilai rahasia ke repo atau laporan. |
+| Uji fungsi | Login dari HP/PC; cek baca PDF dengan akun berizin dan tanpa izin; uji satu transaksi tulis dengan data latihan; cek riwayat pinjaman dan tanggal retensi pada target. Uji sebelum menerima transaksi operasional. |
+| Pekerjaan terjadwal | Inventaris unggahan yang belum selesai, antrean Drive, backup, dan pinjaman aktif. Pastikan hanya satu jalur pencadangan produksi menulis ke tujuan yang disepakati. Untuk hari pertama, tetap pisahkan pengiriman Record Center produksi sampai alurnya disetujui dan diuji. |
+
+Jika target terpisah belum siap, BAGUM tetap memakai v4 yang sekarang.
+Gunakan alur baca saja untuk memeriksa kondisi saat ini dan tunda
+perpindahan sampai akun, izin, dan pencadangan target sudah teruji.
 
 ## 3. Hari perpindahan, setelah disetujui pemilik
 
