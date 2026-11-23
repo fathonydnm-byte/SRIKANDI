@@ -84,7 +84,7 @@ export function DashboardPage() {
       ) : null}
 
       {overview.kind === 'ok' ? (
-        <ArchiveOverview groups={overview.data.groups} unitId={unitId} onRefresh={reload} refreshing={false} />
+        <ArchiveOverview groups={overview.data.groups} unitId={unitId} onRefresh={reload} />
       ) : overview.kind === 'loading' ? (
         <section className="card archive-card" aria-busy="true">
           <h2 className="section-title">Daftar Isi Berkas</h2>

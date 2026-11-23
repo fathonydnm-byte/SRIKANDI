@@ -102,6 +102,10 @@ export function nextOffsetFromRange(range: string | null): number {
 
 export const xhrTransport: Transport = (url, init) =>
   new Promise((resolve, reject) => {
+    if (init.signal.aborted) {
+      reject(new DOMException('aborted', 'AbortError'));
+      return;
+    }
     const xhr = new XMLHttpRequest();
     xhr.open(init.method, url);
     for (const [k, v] of Object.entries(init.headers)) xhr.setRequestHeader(k, v);
@@ -110,7 +114,9 @@ export const xhrTransport: Transport = (url, init) =>
     xhr.onerror = () => reject(new TypeError('network'));
     xhr.ontimeout = () => reject(new TypeError('timeout'));
     xhr.onabort = () => reject(new DOMException('aborted', 'AbortError'));
-    init.signal.addEventListener('abort', () => xhr.abort(), { once: true });
+    const abort = () => xhr.abort();
+    xhr.onloadend = () => init.signal.removeEventListener('abort', abort);
+    init.signal.addEventListener('abort', abort, { once: true });
     xhr.send(init.body ?? null);
   });
 
@@ -165,6 +171,7 @@ export function startUpload(req: UploadRequest, deps: UploadDeps): UploadHandle 
 
   let paused = false;
   let aborted = false;
+  let finished = false;
   let wake: (() => void) | null = null;
   let current: AbortController | null = null;
   let session: { sessionId: string; uploadUrl: string; chunkSize: number; context: string } | null = null;
@@ -173,6 +180,15 @@ export function startUpload(req: UploadRequest, deps: UploadDeps): UploadHandle 
   let firstChunkPending = true;
 
   const emit = (stage: UploadStage, message?: UserMessage) => deps.onProgress?.({ stage, sent, total, ...(message ? { message } : {}) });
+
+  function cancelSession(s: NonNullable<typeof session>) {
+    // Defer the token lookup: an account switch may be in an Auth callback.
+    void Promise.resolve().then(deps.getToken).then((token) => token ? fetchFn('/api/files/upload-cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ sessionId: s.sessionId, uploadUrl: s.uploadUrl }),
+    }) : null).catch(() => null);
+  }
 
   const onOffline = () => {
     paused = true;
@@ -262,7 +278,7 @@ export function startUpload(req: UploadRequest, deps: UploadDeps): UploadHandle 
     if (res.status === 308) return { done: null, offset: nextOffsetFromRange(res.header('Range')) };
     if (res.status === 200 || res.status === 201) return { done: res, offset: total };
     if (res.status === 404 || res.status === 410) throw uploadError('SESSION_EXPIRED');
-    if (res.status >= 500) throw fileError('UPSTREAM');
+    if (res.status >= 500 || res.status === 408 || res.status === 429) throw fileError('UPSTREAM');
     throw uploadError('UPLOAD_REJECTED');
   }
 
@@ -279,7 +295,10 @@ export function startUpload(req: UploadRequest, deps: UploadDeps): UploadHandle 
           const q = await queryOffset();
           needQuery = false;
           if (q.done) res = q.done;
-          else offset = q.offset;
+          else {
+            if (q.offset >= total) throw fileError('UPSTREAM');
+            offset = q.offset;
+          }
         }
         if (!res) {
           const end = Math.min(offset + session!.chunkSize, total);
@@ -303,7 +322,9 @@ export function startUpload(req: UploadRequest, deps: UploadDeps): UploadHandle 
           firstChunkPending = false;
         }
         if (res.status === 308) {
-          offset = nextOffsetFromRange(res.header('Range'));
+          const next = nextOffsetFromRange(res.header('Range'));
+          if (next <= offset || next >= total) throw fileError('UPSTREAM');
+          offset = next;
           sent = offset;
           failures = 0;
           continue;
@@ -344,6 +365,10 @@ export function startUpload(req: UploadRequest, deps: UploadDeps): UploadHandle 
         }),
       );
       session = { sessionId: String(s.sessionId), uploadUrl: String(s.uploadUrl), chunkSize: Number(s.chunkSize) || 8 * 1024 * 1024, context: String(s.context) };
+      if (aborted) {
+        cancelSession(session);
+        throw uploadError('CANCELLED');
+      }
       const driveFileId = await sendChunks();
       emit('memverifikasi');
       const done = await withRetry(() => api('/api/files/upload-complete', { sessionId: session!.sessionId, driveFileId, context: session!.context }));
@@ -352,11 +377,13 @@ export function startUpload(req: UploadRequest, deps: UploadDeps): UploadHandle 
     } catch (error) {
       if (aborted) {
         emit('dibatalkan');
+        throw uploadError('CANCELLED');
       } else {
         emit('gagal', error instanceof FileAccessError ? error.userMessage : fileError('UNKNOWN').userMessage);
       }
       throw error;
     } finally {
+      finished = true;
       window.removeEventListener('offline', onOffline);
       window.removeEventListener('online', onOnline);
     }
@@ -365,7 +392,7 @@ export function startUpload(req: UploadRequest, deps: UploadDeps): UploadHandle 
   const handle: UploadHandle = {
     promise,
     pause() {
-      if (paused || aborted) return;
+      if (paused || aborted || finished) return;
       paused = true;
       current?.abort();
       emit('jeda');
@@ -377,22 +404,11 @@ export function startUpload(req: UploadRequest, deps: UploadDeps): UploadHandle 
       wake = null;
     },
     abort() {
-      if (aborted) return;
+      if (aborted || finished) return;
       aborted = true;
       current?.abort();
       wake?.();
-      if (session) {
-        const s = session;
-        void deps.getToken().then((token) =>
-          token
-            ? fetchFn('/api/files/upload-cancel', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ sessionId: s.sessionId, uploadUrl: s.uploadUrl }),
-              }).catch(() => null)
-            : null,
-        );
-      }
+      if (session) cancelSession(session);
     },
   };
   return handle;

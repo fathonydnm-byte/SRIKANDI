@@ -241,6 +241,36 @@ describe('pengunggah resumable', () => {
     expect(stages.at(-1)).toBe('dibatalkan');
   });
 
+  it('closes a session that arrives after the operator cancels', async () => {
+    let open!: (r: Response) => void;
+    const api = apiFetch();
+    const fetchFn = vi.fn((path: string, opts?: RequestInit) =>
+      path === '/api/files/upload-session' ? new Promise<Response>((resolve) => { open = resolve; }) : api.fn(path, opts));
+    const transport = vi.fn<Transport>();
+    const h = startUpload({ purpose: 'ITEM_PDF', objectId: 'X', file: file(), fileName: 'a.pdf' }, {
+      getToken: token, fetchFn: fetchFn as unknown as typeof fetch, transport, sleep: noSleep,
+    });
+    await vi.waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1));
+    h.abort();
+    open(Response.json({ ok: true, sessionId: 'late', uploadUrl: 'https://www.googleapis.com/upload/test', context: 'CTX' }));
+    await expect(h.promise).rejects.toMatchObject({ code: 'CANCELLED' });
+    await vi.waitFor(() => expect(api.calls).toEqual([
+      { path: '/api/files/upload-cancel', body: { sessionId: 'late', uploadUrl: 'https://www.googleapis.com/upload/test' } },
+    ]));
+    expect(transport).not.toHaveBeenCalled();
+  });
+
+  it('stops retrying when Drive keeps acknowledging no bytes', async () => {
+    const transport = vi.fn<Transport>().mockResolvedValue(res(308));
+    const h = startUpload({ purpose: 'ITEM_PDF', objectId: 'X', file: file(), fileName: 'a.pdf' }, {
+      getToken: token, fetchFn: apiFetch().fn, transport, sleep: noSleep, maxRetries: 2,
+    });
+    await expect(h.promise).rejects.toMatchObject({ code: 'UPSTREAM' });
+    expect(transport.mock.calls.map(([, req]) => req.headers['Content-Range'])).toEqual([
+      'bytes 0-3/10', 'bytes */10', 'bytes 0-3/10', 'bytes */10', 'bytes 0-3/10',
+    ]);
+  });
+
   it('gangguan saat membuka sesi diulang dengan requestId yang sama', async () => {
     let n = 0;
     const api = apiFetch({

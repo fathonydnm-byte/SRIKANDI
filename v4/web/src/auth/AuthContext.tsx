@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import type { Session, SupabaseClient } from '@supabase/supabase-js';
 import { ApiError, fetchAccountStatus, fetchProfile, fetchUnit, fetchUnits, type Profile, type Unit } from '../lib/api';
 import { toUserMessage, type UserMessage } from '../lib/errors';
+import { uploads } from '../lib/uploadStore';
 import { can, isRole } from './permissions';
 
 export type BlockedReason = 'missing' | 'inactive' | 'no_unit' | 'unit_inactive' | 'invalid_role';
@@ -83,22 +84,38 @@ export function AuthProvider({
   const [reloadKey, setReloadKey] = useState(0);
   const [units, setUnits] = useState<Unit[]>([]);
   const [activeUnitId, setActiveUnitId] = useState<string | null>(null);
+  const currentUserId = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    let hasAuthEvent = false;
+    function acceptSession(next: Session | null) {
+      const owner = next?.user.id ?? null;
+      if (currentUserId.current !== owner) {
+        currentUserId.current = owner;
+        setActiveUnitId(null);
+        setUnits([]);
+      }
+      uploads.setAccount(owner, async () => {
+        const { data } = await client.auth.getSession();
+        return owner && data.session?.user.id === owner ? data.session.access_token : null;
+      });
+      setSession(next);
+    }
     client.auth
       .getSession()
       .then(({ data }) => {
-        if (!cancelled) setSession(data.session);
+        if (!cancelled && !hasAuthEvent) acceptSession(data.session);
       })
       .catch(() => {
-        if (!cancelled) setSession(null);
+        if (!cancelled && !hasAuthEvent) acceptSession(null);
       });
     const { data } = client.auth.onAuthStateChange((event, next) => {
       // Jangan memanggil Supabase secara sinkron di dalam callback ini.
+      hasAuthEvent = true;
       if (event === 'PASSWORD_RECOVERY') setRecovery(true);
       if (event === 'SIGNED_OUT') setRecovery(false);
-      setSession(next);
+      acceptSession(next);
     });
     return () => {
       cancelled = true;
@@ -142,7 +159,7 @@ export function AuthProvider({
     return () => {
       cancelled = true;
     };
-  }, [client, role]);
+  }, [client, role, userId]);
 
   const signIn = useCallback(
     async (email: string, password: string) => {
@@ -157,9 +174,12 @@ export function AuthProvider({
       await client.auth.signOut();
     } finally {
       // Sesi lokal tetap dibuang walau server tidak terjangkau.
+      uploads.setAccount(null);
+      currentUserId.current = null;
       setSession(null);
       setRecovery(false);
       setActiveUnitId(null);
+      setUnits([]);
     }
   }, [client]);
 

@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderApp } from '../../test/renderApp';
-import { createFakeClient, makeProfile, makeSession, type RpcHandler } from '../../test/fakeSupabase';
+import { createFakeClient, makeProfile, makeSession, type RpcHandler, type RpcResult } from '../../test/fakeSupabase';
 import type { DashboardGroup, OverviewItem } from '../../lib/api';
 import type { Role } from '../../auth/permissions';
 
@@ -84,7 +84,7 @@ describe('Dashboard (paritas 3.x)', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     const link = await screen.findByRole('link', { name: /Notulen rapat/ });
     expect(link).toHaveAttribute('href', '/cari/item/ITM-2-1');
-    expect(items).toHaveBeenCalledWith({ p_berkas_ids: ['BRK-2'] }, undefined);
+    expect(items).toHaveBeenCalledWith({ p_berkas_ids: ['BRK-2'] }, expect.any(AbortSignal));
     await user.click(screen.getByRole('button', { name: 'Tutup isi berkas 2' }));
     expect(screen.queryByRole('link', { name: /Notulen rapat/ })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Buka isi berkas 2' }));
@@ -127,6 +127,37 @@ describe('Dashboard (paritas 3.x)', () => {
     renderApp('/dashboard', fake.client);
     await userEvent.setup().click(await screen.findByRole('button', { name: 'Segarkan Data' }));
     await waitFor(() => expect(overview).toHaveBeenCalledTimes(2));
+  });
+
+  it('shows an item search failure separately from an empty result and retries it', async () => {
+    const match = vi.fn<RpcHandler>()
+      .mockReturnValueOnce({ data: null, error: { message: 'failed to fetch' } })
+      .mockReturnValueOnce({ data: ['BRK-2'], error: null });
+    renderApp('/dashboard', setup('PETUGAS', { dashboard_match_berkas: match }).fake.client);
+    const box = await screen.findByRole('searchbox', { name: 'Saring daftar berkas' });
+    fireEvent.change(box, { target: { value: 'notulen' } });
+    const retry = await screen.findByRole('button', { name: 'Ulangi pencarian item' });
+    expect(screen.queryByText('Tidak ada berkas atau item yang cocok dengan pencarian.')).not.toBeInTheDocument();
+    await userEvent.setup().click(retry);
+    expect(await screen.findByRole('link', { name: '2 — Rapat pimpinan' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Ulangi pencarian item' })).not.toBeInTheDocument();
+  });
+
+  it('discards an item response that arrives after refresh', async () => {
+    let oldItems!: (r: RpcResult) => void;
+    const items = vi.fn<RpcHandler>()
+      .mockImplementationOnce(() => new Promise((resolve) => { oldItems = resolve; }))
+      .mockReturnValueOnce({ data: { 'BRK-2': [ITEM(2, 1, 'Isi terbaru')] }, error: null });
+    renderApp('/dashboard', setup('PETUGAS', { dashboard_berkas_items: items }).fake.client);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Buka isi berkas 2' }));
+    await waitFor(() => expect(items).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByRole('button', { name: 'Segarkan Data' }));
+    expect(items.mock.calls[0]?.[1]?.aborted).toBe(true);
+    await act(async () => oldItems({ data: { 'BRK-2': [ITEM(2, 1, 'Isi lama')] }, error: null }));
+    await user.click(screen.getByRole('button', { name: 'Buka isi berkas 2' }));
+    expect(await screen.findByText('Isi terbaru')).toBeVisible();
+    expect(screen.queryByText('Isi lama')).not.toBeInTheDocument();
   });
 
   it('Admin Pusat: ringkasan mengikuti unit aktif', async () => {

@@ -275,11 +275,14 @@ test('integrity failures roll everything back (exit 4): orphan rows, duplicate n
 });
 
 test('--dry-run loads, checks, and rolls back', async () => {
+  const seqState = () => dst.query('select last_value, is_called from public.folder_label_log_seq_seq').then((r) => r.rows);
+  const previousSequence = await seqState();
   const r = restoreCli(['--package', packages['RT-A'], '--package', packages.zipB, '--package', packages._PLATFORM, '--database-url-env', 'RESTORE_DATABASE_URL', '--dry-run']);
   assert.equal(r.code, 0, r.err);
   assert.match(r.out, /--dry-run: semua dimuat lalu dibatalkan \(ROLLBACK\)/);
   assert.match(r.out, /item\s+paket\s+2512\s+ditulis\s+2512/);
   assert.ok(Object.values(await counts(dst, [UNIT.A, UNIT.B])).every((n) => n === 0));
+  assert.deepEqual(await seqState(), previousSequence, 'dry-run does not alter the label sequence');
 });
 
 test('RESTORE: folder + zip + folder in ONE transaction into an empty migrated database; every table byte-equal on the canonical dump', async () => {
@@ -297,12 +300,16 @@ test('RESTORE: folder + zip + folder in ONE transaction into an empty migrated d
 });
 
 test('idempotent: restoring the same packages again changes nothing', async () => {
+  await dst.query(`select setval('public.folder_label_log_seq_seq', (select max(seq)+100 from public.folder_label_log))`);
+  const seqState = () => dst.query('select last_value, is_called from public.folder_label_log_seq_seq').then((r) => r.rows);
+  const previousSequence = await seqState();
   const before = await canonicalDump(dst, [UNIT.A, UNIT.B]);
   const r = restoreCli(['--package', packages['RT-A'], '--package', packages.zipB, '--package', packages._PLATFORM, '--database-url-env', 'RESTORE_DATABASE_URL']);
   assert.equal(r.code, 0, r.err);
   const after = await canonicalDump(dst, [UNIT.A, UNIT.B]);
   for (const t of RESTORE_TABLES) assert.equal(after[t].sha256, before[t].sha256, t);
   assert.equal((await dst.query('select count(*)::int n from public.audit_log')).rows[0].n, sourceDump.audit_log.rows, 'append-only audit rows were not duplicated');
+  assert.deepEqual(await seqState(), previousSequence, 'restore does not rewind an existing sequence');
 });
 
 test('after the restore the system keeps working: counters hand out fresh numbers, the identity column continues', async () => {
