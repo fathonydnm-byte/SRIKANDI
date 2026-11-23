@@ -13,7 +13,8 @@ Record Center tetap dijeda.
 | Branch rilis | `release/v4-edit-item-hierarchy-20261120` menunjuk ke `8f0773299122cbd9b53ba0c914fa51373e3c3c17`. Dibandingkan commit yang dikirim, satu-satunya perubahan adalah `.github/workflows/v4-deploy.yml` yang mengembalikan pemicu manual. Kode aplikasi, Functions, migrasi, dan sumber Apps Script sama di kedua commit. |
 | Aset publik | `npm ci` dan `npm run build` dengan konfigurasi browser dari workflow staging menghasilkan 56 berkas publik yang semuanya identik byte per byte dengan berkas yang disajikan staging. Konfigurasi internal Pages (`_headers`, `_redirects`, `_routes.json`) bukan aset unduhan publik. `/edit` dan `/retensi` mengembalikan halaman HTML. |
 | Functions live | Permintaan POST tanpa autentikasi mendapat `401 UNAUTHENTICATED` dari tiket file dan `401 JOB_DENIED` dari endpoint ekspor. Ini memverifikasi rute dan penolakan permintaan tanpa autentikasi; belum menguji alur tulis atau isi data staging. |
-| Supabase dan Apps Script live | Baseline repo memuat migrasi `0001`–`0028`; pengecekan web tidak membuktikan skema staging atau isi deployment Apps Script. Cocokkan log migrasi dan versi deployment Apps Script dari akun instansi. |
+| Supabase staging | Pada 23 November 2026, pemilik menjalankan kueri baca saja pada proyek staging. `public.schema_migrations_log` melaporkan 28 migrasi dan versi terbaru `0028`, sesuai baseline repo. Ini memverifikasi log migrasi, bukan diff seluruh definisi skema. |
+| Apps Script live | `DRIVE_GATEWAY_URL` pada Cloudflare Pages bertipe Secret; nilainya tidak ditampilkan setelah disimpan. Pemetaan ke deployment Gerbang Drive serta kecocokan revisi Apps Script dengan repo belum dikonfirmasi. |
 
 Sidik jari SHA-256: HTML utama
 `025cbafed91554707b369d781660ddff08f154d9e834e2be46896b75795081b5`;
@@ -53,10 +54,7 @@ saat pemeriksaan.
   Sebelum perluasan ke banyak unit, uji dua unit dengan ID arsip historis
   sama, dan sertakan unit pada pengelompokan serta navigasi detail. Belum
   ada bukti benturan di data staging yang diperiksa.
-- Baca versi skema pada Supabase **staging** dari SQL Editor, misalnya
-  `select count(*), max(version) from public.schema_migrations_log;`
-  (baseline repo: 28 migrasi, versi `0028`). Catat bila berbeda; jangan
-  ubah data untuk menyamakan hasil pemeriksaan.
+- Untuk Gerbang Drive, cocokkan URL deployment dari catatan pemasangan internal jika tersedia. Tanpa catatan, buka satu PDF yang sudah ada di staging dan gunakan waktu buka serta log Web App `doPost` sebagai petunjuk. Jika token Drive masih tersimpan di cache, tidak selalu ada eksekusi Apps Script baru. Uji fungsional tidak membuktikan nilai URL atau kecocokan kode byte per byte. Jangan mengganti secret hanya untuk pemeriksaan ini.
 - Sebelum memasang hasil audit, lakukan uji dengan akun uji berizin
   menggunakan arsip contoh: login, pencarian, buka PDF, unggah/batalkan,
   ganti akun, serta baca status cadangan. Simpan bukti versi deployment.
