@@ -23,6 +23,20 @@ Sidik jari SHA-256: HTML utama
 `/sw.js`
 `47efbad33ed9678a959aadc05096256a458366b1d35112a21fd623732db04c7d`.
 
+## Perbedaan data antara staging dan produksi
+
+- Operasional BAGUM memakai [Central File produksi](https://central-file-uinsa-prod.pages.dev/)
+  dengan proyek Supabase `igiusmzhpgfmwqwdiejo`.
+- [Central File staging](https://central-file-uinsa.pages.dev/) memakai proyek
+  Supabase `bycimuphbyfkwywcbsvx` dan dipakai untuk pembanding serta pengujian.
+  Kedua referensi proyek diperiksa dari konfigurasi browser yang disajikan
+  masing-masing situs pada 23 November 2026.
+- Sesudah cutover, data dan tautan PDF baru di produksi tidak otomatis
+  muncul di staging. Jika status PDF berbeda, periksa domain di bilah alamat
+  sebelum menyimpulkan unggahan gagal. Verifikasi hasil unggahan pada tab
+  baru di domain produksi yang sama; tidak perlu unggah ulang hanya untuk
+  membuat tampilan antarlingkungan sama.
+
 ## Temuan dan perbaikan pada branch audit
 
 | Bagian | Temuan dan hasil |
