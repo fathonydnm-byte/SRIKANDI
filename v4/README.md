@@ -82,4 +82,7 @@ Variabel server di Cloudflare Pages (Settings → Variables and Secrets, tipe Se
 
 ## CI
 
+Lihat [audit dan bukti kecocokan staging November 2026](../docs/CENTRAL_FILE_V4_STAGING_AUDIT_2026-11-23.md)
+untuk commit yang tayang, langkah verifikasi, dan temuan.
+
 `.github/workflows/v4-ci.yml` berjalan untuk perubahan di `v4/**`: job **web** (typecheck termasuk Functions, lint, tes, build, tes gerbang Apps Script) dan job **db** (`v4/tests/db/run.sh` dengan PostgreSQL 16 dari runner).

@@ -27,12 +27,14 @@ const callbacks = new Map<string, (r: UploadResult) => void>();
 const indexers = new Map<string, (r: UploadResult) => Promise<unknown>>();
 const listeners = new Set<Listener>();
 let getTokenRef: GetAccessToken = async () => null;
+let accountId: string | null = null;
 
 function set(next: UploadJob[]) {
   jobs = next;
   listeners.forEach((l) => l());
 }
 function patch(id: string, p: Partial<UploadJob>) {
+  if (!jobs.some((j) => j.id === id)) return;
   set(jobs.map((j) => (j.id === id ? { ...j, ...p } : j)));
 }
 
@@ -57,19 +59,27 @@ function run(job: UploadJob) {
   handles.set(job.id, handle);
   handle.promise.then(
     (result) => {
+      if (handles.get(job.id) !== handle) return;
+      handles.delete(job.id);
       patch(job.id, { result, error: null });
       void indexContent(job.id, result);
       callbacks.get(job.id)?.(result);
       callbacks.delete(job.id);
     },
     (error: unknown) => {
+      if (handles.get(job.id) !== handle) return;
+      handles.delete(job.id);
       patch(job.id, { error: error instanceof FileAccessError ? error.userMessage : { title: 'Unggahan gagal.', action: 'Coba lagi.' } });
     },
   );
 }
 
 export const uploads = {
-  configure(getToken: GetAccessToken) {
+  setAccount(userId: string | null, getToken: GetAccessToken = async () => null) {
+    if (accountId !== userId) {
+      accountId = userId;
+      uploads.reset();
+    }
     getTokenRef = getToken;
   },
   /** Mulai unggahan. requestId tetap per job, sehingga "Coba lagi" tidak membuat sesi ganda. */
@@ -90,7 +100,7 @@ export const uploads = {
   },
   retry(id: string) {
     const job = jobs.find((j) => j.id === id);
-    if (!job) return;
+    if (!job?.error || job.progress.stage === 'dibatalkan') return;
     const next = { ...job, error: null, progress: { stage: 'menyiapkan' as const, sent: 0, total: job.request.file.size } };
     set(jobs.map((j) => (j.id === id ? next : j)));
     run(next);
@@ -116,7 +126,7 @@ export const uploads = {
     return () => listeners.delete(l);
   },
   snapshot: () => jobs,
-  /** Hanya untuk tes. */
+  /** Bersihkan file dan callback saat akun berganti. */
   reset() {
     handles.forEach((h) => h.abort());
     handles.clear();

@@ -26,3 +26,28 @@ it('indexes only after PDF commit and retries a failed index without uploading a
   expect(startUpload).toHaveBeenCalledTimes(1);
   expect(index.mock.calls).toEqual([[result], [result]]);
 });
+
+it('keeps uploads for the same account and drops them and late callbacks on account switch', async () => {
+  let commit!: (result: UploadResult) => void;
+  const abort = vi.fn();
+  vi.mocked(startUpload).mockReturnValueOnce({
+    promise: new Promise((resolve) => { commit = resolve; }),
+    pause: vi.fn(), resume: vi.fn(), abort,
+  });
+  uploads.setAccount('user-a', async () => 'token-a');
+  const done = vi.fn();
+  const index = vi.fn().mockResolvedValue(null);
+  uploads.start({ purpose: 'ITEM_PDF', objectId: 'ITM-1', fileName: 'input.pdf', file: new Blob(['test']) },
+    'PDF akun pertama', done, index);
+  uploads.setAccount('user-a', async () => 'token-a-baru');
+  expect(uploads.snapshot()).toHaveLength(1);
+  expect(abort).not.toHaveBeenCalled();
+  uploads.setAccount('user-b', async () => 'token-b');
+  expect(abort).toHaveBeenCalledTimes(1);
+  expect(uploads.snapshot()).toHaveLength(0);
+  commit({ sessionId: 'session-1', driveFileId: 'drive-1', result: {} });
+  await Promise.resolve();
+  expect(done).not.toHaveBeenCalled();
+  expect(index).not.toHaveBeenCalled();
+  expect(uploads.snapshot()).toHaveLength(0);
+});

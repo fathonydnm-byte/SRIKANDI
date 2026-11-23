@@ -42,6 +42,26 @@ function insertSql(client, table, meta) {
           select ${names.join(', ')} from jsonb_populate_recordset(null::public.${q(table)}, $1::jsonb)${conflict}`;
 }
 
+/** Advance the sequence only if IDs from the package would overtake it. */
+async function restoreIdentity(client, table, column) {
+  const name = `public.${client.escapeIdentifier(table)}`;
+  const col = client.escapeIdentifier(column);
+  await client.query(`lock table ${name} in access exclusive mode`);
+  const { rows: [sequence] } = await client.query(
+    `select n.nspname as schema, c.relname as name, s.seqincrement as step
+       from pg_class c join pg_namespace n on n.oid = c.relnamespace join pg_sequence s on s.seqrelid = c.oid
+       where c.oid = pg_get_serial_sequence($1, $2)::regclass`, [name, column]);
+  const seq = [sequence.schema, sequence.name].map((part) => client.escapeIdentifier(part)).join('.');
+  const { rows: [{ last_value, is_called }] } = await client.query(`select last_value, is_called from ${seq}`);
+  const { rows: [{ highest }] } = await client.query(`select max(${col}) as highest from ${name}`);
+  if (highest == null) return;
+  const step = BigInt(sequence.step);
+  const next = BigInt(highest) + step;
+  const current = BigInt(last_value) + (is_called ? step : 0n);
+  // All application identity columns increment by one. RESTART rolls back with the transaction.
+  if (next > current) await client.query(`alter sequence ${seq} restart with ${next}`);
+}
+
 /**
  * @param client   connected pg client (one session; this function runs begin ... commit/rollback itself)
  * @param packages [{pkg, manifest, counts}] already verified
@@ -94,13 +114,6 @@ export async function restorePackages(client, packages, { dryRun = false, forceS
         }
       }
       summary.tables[table] = { packageRows, affected };
-      // identity sequences must continue after the restored maximum (otherwise the next insert collides)
-      for (const c of meta.cols.filter((x) => x.identity !== '')) {
-        const q = client.escapeIdentifier;
-        await client.query(
-          `select setval(pg_get_serial_sequence($1, $2), coalesce(max(${q.call(client, c.name)}), 1), max(${q.call(client, c.name)}) is not null) from public.${q.call(client, table)}`,
-          [`public.${q.call(client, table)}`, c.name]);
-      }
     }
     summary.checks = await runIntegrityChecks(client, packages, summary);
     const failed = summary.checks.filter((c) => !c.ok);
@@ -108,6 +121,12 @@ export async function restorePackages(client, packages, { dryRun = false, forceS
     if (dryRun) {
       await client.query('rollback');
     } else {
+      for (const table of tables) {
+        if (!summary.tables[table].packageRows) continue;
+        for (const col of metas[table].cols) {
+          if (col.identity !== '') await restoreIdentity(client, table, col.name);
+        }
+      }
       await client.query('commit');
       summary.committed = true;
     }

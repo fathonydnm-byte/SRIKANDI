@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { ApiError, getBerkasItems, isAbortError, matchBerkasByItems, type DashboardGroup, type OverviewItem } from '../../lib/api';
@@ -9,10 +9,11 @@ import { FileBadge, LoanBadge } from '../../components/Badges';
 import { RetentionBadge } from './RetentionBadge';
 
 export const FILTER_DEBOUNCE_MS = 300;
-/** Batas "Buka Semua" sekali tekan: 400 berkas × 50 item = 20.000 baris membekukan HP. */
+/** Batas "Buka Semua" sekali tekan, sesuai batas RPC. */
 export const EXPAND_ALL_LIMIT = 100;
 
 type ItemsState = OverviewItem[] | 'loading' | { error: UserMessage };
+type ItemMatch = { key: string; ids: Set<string> } | { key: string; error: true };
 
 /** 3.x normalizeFolderLabelFilter_: trim + huruf kecil; token dipisah spasi. */
 function tokensOf(term: string): string[] {
@@ -71,17 +72,20 @@ function ItemRows({ state, onRetry }: { state: ItemsState | undefined; onRetry()
  * sudah dimuat; bagian "uraian item" ditanyakan ke server (debounce) agar
  * dashboard tidak perlu memuat ±20.000 item per unit sekaligus.
  */
-export function ArchiveOverview({ groups, unitId, onRefresh, refreshing }: { groups: DashboardGroup[]; unitId: string | null; onRefresh(): void; refreshing: boolean }) {
+export function ArchiveOverview({ groups, unitId, onRefresh }: { groups: DashboardGroup[]; unitId: string | null; onRefresh(): void }) {
   const { client } = useAuth();
   const filterId = useId();
   const [term, setTerm] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [items, setItems] = useState<Record<string, ItemsState>>({});
-  const [itemMatch, setItemMatch] = useState<{ term: string; ids: Set<string> } | null>(null);
+  const [itemMatch, setItemMatch] = useState<ItemMatch | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [capped, setCapped] = useState(false);
+  const itemRequests = useRef<AbortController | null>(null);
+  useEffect(() => () => itemRequests.current?.abort(), []);
 
-  const tokens = tokensOf(term);
-  const trimmed = tokens.join(' ');
+  const trimmed = tokensOf(term).join(' ');
+  const matchKey = JSON.stringify([unitId, trimmed, attempt]);
 
   // Bagian item dari filter: satu permintaan per teks, yang lama dibatalkan.
   useEffect(() => {
@@ -90,26 +94,27 @@ export function ArchiveOverview({ groups, unitId, onRefresh, refreshing }: { gro
     const t = window.setTimeout(() => {
       matchBerkasByItems(client, trimmed, unitId, ctrl.signal)
         .then((ids) => {
-          if (!ctrl.signal.aborted) setItemMatch({ term: trimmed, ids: new Set(ids) });
+          if (!ctrl.signal.aborted) setItemMatch({ key: matchKey, ids: new Set(ids) });
         })
         .catch((error: unknown) => {
-          if (!ctrl.signal.aborted && !isAbortError(error)) setItemMatch({ term: trimmed, ids: new Set() });
+          if (!ctrl.signal.aborted && !isAbortError(error)) setItemMatch({ key: matchKey, error: true });
         });
     }, FILTER_DEBOUNCE_MS);
     return () => {
       window.clearTimeout(t);
       ctrl.abort();
     };
-  }, [client, trimmed, unitId]);
+  }, [client, trimmed, unitId, matchKey]);
 
-  const itemIds = itemMatch && itemMatch.term === trimmed ? itemMatch.ids : null;
-  const visible = useMemo(
-    () => (tokens.length ? groups.filter((g) => berkasMatches(g, tokens) || Boolean(itemIds?.has(g.berkas_id))) : groups),
-    // tokens berasal dari trimmed
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [groups, trimmed, itemIds],
-  );
-  const itemSearchPending = tokens.length > 0 && itemIds === null;
+  const currentMatch = trimmed && itemMatch?.key === matchKey ? itemMatch : null;
+  const itemIds = currentMatch && 'ids' in currentMatch ? currentMatch.ids : null;
+  const visible = useMemo(() => {
+    if (!trimmed) return groups;
+    const tokens = trimmed.split(' ');
+    return groups.filter((g) => berkasMatches(g, tokens) || Boolean(itemIds?.has(g.berkas_id)));
+  }, [groups, trimmed, itemIds]);
+  const itemSearchPending = Boolean(trimmed && !currentMatch);
+  const itemSearchFailed = currentMatch !== null && 'error' in currentMatch;
 
   async function load(ids: string[]) {
     const need = ids.filter((id) => {
@@ -117,15 +122,18 @@ export function ArchiveOverview({ groups, unitId, onRefresh, refreshing }: { gro
       return s === undefined || (typeof s === 'object' && !Array.isArray(s));
     });
     if (!need.length) return;
+    if (!itemRequests.current || itemRequests.current.signal.aborted) itemRequests.current = new AbortController();
+    const { signal } = itemRequests.current;
     setItems((prev) => {
       const next = { ...prev };
       for (const id of need) next[id] = 'loading';
       return next;
     });
     try {
-      const map = await getBerkasItems(client, need);
-      setItems((prev) => ({ ...prev, ...map }));
+      const map = await getBerkasItems(client, need, signal);
+      if (!signal.aborted) setItems((prev) => ({ ...prev, ...map }));
     } catch (error) {
+      if (signal.aborted) return;
       const message = error instanceof ApiError ? error.userMessage : toUserMessage(error);
       setItems((prev) => {
         const next = { ...prev };
@@ -163,14 +171,16 @@ export function ArchiveOverview({ groups, unitId, onRefresh, refreshing }: { gro
         <button
           type="button"
           className="btn btn-secondary btn-sm"
-          disabled={refreshing}
           onClick={() => {
+            itemRequests.current?.abort();
             setItems({});
             setExpanded(new Set());
+            setCapped(false);
+            setAttempt((n) => n + 1);
             onRefresh();
           }}
         >
-          {refreshing ? 'Memuat…' : 'Segarkan Data'}
+          Segarkan Data
         </button>
       </div>
       <div className="arc-toolbar">
@@ -204,13 +214,18 @@ export function ArchiveOverview({ groups, unitId, onRefresh, refreshing }: { gro
         </div>
       </div>
       <p className="muted small arc-count" role="status" aria-live="polite">
-        {tokens.length
+        {trimmed
           ? `${formatNumber(visible.length)} dari ${formatNumber(groups.length)} berkas cocok${itemSearchPending ? ' — mencari juga di uraian item…' : ''}`
           : `${formatNumber(groups.length)} berkas aktif`}
         {capped && expanded.size ? ` — dibuka ${formatNumber(EXPAND_ALL_LIMIT)} berkas pertama; persempit dengan kotak pencarian untuk membuka yang lain.` : ''}
       </p>
+      {itemSearchFailed ? <Alert tone="warning">
+        Pencarian uraian item gagal. Hasil berdasarkan data berkas tetap ditampilkan.{' '}
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAttempt((n) => n + 1)}>Ulangi pencarian item</button>
+      </Alert> : null}
       {visible.length === 0 ? (
-        <p className="arc-empty">{groups.length ? (itemSearchPending ? 'Mencari…' : 'Tidak ada berkas atau item yang cocok dengan pencarian.') : 'Belum ada berkas aktif.'}</p>
+        itemSearchFailed ? null :
+          <p className="arc-empty">{groups.length ? (itemSearchPending ? 'Mencari…' : 'Tidak ada berkas atau item yang cocok dengan pencarian.') : 'Belum ada berkas aktif.'}</p>
       ) : (
         <ul className="arc-list">
           {visible.map((g) => {

@@ -399,19 +399,12 @@ export async function getDashboardShortcut(client: SupabaseClient, kind: 'DIPINJ
   return (data as ShortcutRow[] | null) ?? [];
 }
 
-export const BERKAS_ITEMS_BATCH = 100;
-
-/** Item untuk banyak berkas sekaligus (dipecah per 100 berkas). */
-export async function getBerkasItems(client: SupabaseClient, berkasIds: string[]): Promise<Record<string, OverviewItem[]>> {
-  const out: Record<string, OverviewItem[]> = {};
-  for (let i = 0; i < berkasIds.length; i += BERKAS_ITEMS_BATCH) {
-    const chunk = berkasIds.slice(i, i + BERKAS_ITEMS_BATCH);
-    const { data, error } = await client.rpc('dashboard_berkas_items', { p_berkas_ids: chunk });
-    if (error) failRpc(error);
-    const map = (data as Record<string, OverviewItem[]> | null) ?? {};
-    for (const id of chunk) out[id] = map[id] ?? [];
-  }
-  return out;
+/** Item untuk satu permintaan dashboard (maksimal 100 berkas). */
+export async function getBerkasItems(client: SupabaseClient, berkasIds: string[], signal: AbortSignal): Promise<Record<string, OverviewItem[]>> {
+  const { data, error } = await client.rpc('dashboard_berkas_items', { p_berkas_ids: berkasIds }).abortSignal(signal);
+  if (error) failRpc(error);
+  const map = (data as Record<string, OverviewItem[]> | null) ?? {};
+  return Object.fromEntries(berkasIds.map((id) => [id, map[id] ?? []]));
 }
 
 /** Berkas yang itemnya cocok dengan teks filter (bagian item dari filter Daftar Isi). */

@@ -1,5 +1,4 @@
 import { useEffect } from 'react';
-import { useAuth } from '../auth/AuthContext';
 import { percent, STAGE_LABELS, uploads, useUploads, type UploadJob } from '../lib/uploadStore';
 
 function JobRow({ job }: { job: UploadJob }) {
@@ -66,11 +65,7 @@ function JobRow({ job }: { job: UploadJob }) {
 
 /** Status unggahan yang sedang berjalan, tampil di semua halaman. */
 export function UploadTray() {
-  const { client } = useAuth();
   const jobs = useUploads();
-  useEffect(() => {
-    uploads.configure(async () => (await client.auth.getSession()).data.session?.access_token ?? null);
-  }, [client]);
   // Peringatan bila menutup tab saat masih mengunggah.
   const busy = jobs.some((j) => j.indexState === 'pending' || (!j.error && j.progress.stage !== 'selesai' && j.progress.stage !== 'dibatalkan'));
   useEffect(() => {
