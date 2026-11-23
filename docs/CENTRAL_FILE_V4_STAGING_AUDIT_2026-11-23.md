@@ -14,7 +14,7 @@ Record Center tetap dijeda.
 | Aset publik | `npm ci` dan `npm run build` dengan konfigurasi browser dari workflow staging menghasilkan 56 berkas publik yang semuanya identik byte per byte dengan berkas yang disajikan staging. Konfigurasi internal Pages (`_headers`, `_redirects`, `_routes.json`) bukan aset unduhan publik. `/edit` dan `/retensi` mengembalikan halaman HTML. |
 | Functions live | Permintaan POST tanpa autentikasi mendapat `401 UNAUTHENTICATED` dari tiket file dan `401 JOB_DENIED` dari endpoint ekspor. Ini memverifikasi rute dan penolakan permintaan tanpa autentikasi; belum menguji alur tulis atau isi data staging. |
 | Supabase staging | Pada 23 November 2026, pemilik menjalankan kueri baca saja pada proyek staging. `public.schema_migrations_log` melaporkan 28 migrasi dan versi terbaru `0028`, sesuai baseline repo. Ini memverifikasi log migrasi, bukan diff seluruh definisi skema. |
-| Apps Script live | `DRIVE_GATEWAY_URL` pada Cloudflare Pages bertipe Secret; nilainya tidak ditampilkan setelah disimpan. Pemetaan ke deployment Gerbang Drive serta kecocokan revisi Apps Script dengan repo belum dikonfirmasi. |
+| Gerbang Drive (Apps Script) | Tangkapan layar konsol pada 23 November 2026 menunjukkan satu deployment aktif bernama Gerbang Drive v2, menggunakan Version 2 (dibuat 14 November 2026); v1 diarsipkan. `DRIVE_GATEWAY_URL` pada Cloudflare Pages bertipe Secret. Pemetaan staging ke deployment ini serta kecocokan isi Version 2 dengan repo belum dikonfirmasi. |
 
 Sidik jari SHA-256: HTML utama
 `025cbafed91554707b369d781660ddff08f154d9e834e2be46896b75795081b5`;
