@@ -85,6 +85,10 @@ Variabel server di Cloudflare Pages (Settings → Variables and Secrets, tipe Se
 Jalankan [latihan rekonsiliasi dan checklist perpindahan](../docs/CENTRAL_FILE_V4_S7_CUTOVER_REHEARSAL.md)
 dengan ekspor XLSX lama dan paket cadangan unit v4. Alat pembanding berjalan lokal dan hanya membaca kedua salinan.
 
+Setelah BAGUM beralih ke produksi, gunakan [inventaris riwayat usul dan
+rencana uji Record Center](../docs/CENTRAL_FILE_V4_S8_RECORD_CENTER.md)
+untuk memulai Sprint 8.
+
 ## CI
 
 `.github/workflows/v4-ci.yml` berjalan untuk perubahan di `v4/**`: job **web** (typecheck termasuk Functions, lint, tes, build, tes gerbang Apps Script) dan job **db** (`v4/tests/db/run.sh` dengan PostgreSQL 16 dari runner).
