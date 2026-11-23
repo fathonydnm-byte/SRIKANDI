@@ -85,9 +85,9 @@ Variabel server di Cloudflare Pages (Settings → Variables and Secrets, tipe Se
 Jalankan [latihan rekonsiliasi dan checklist perpindahan](../docs/CENTRAL_FILE_V4_S7_CUTOVER_REHEARSAL.md)
 dengan ekspor XLSX lama dan paket cadangan unit v4. Alat pembanding berjalan lokal dan hanya membaca kedua salinan.
 
-Setelah BAGUM beralih ke produksi, gunakan [inventaris riwayat usul dan
-rencana uji Record Center](../docs/CENTRAL_FILE_V4_S8_RECORD_CENTER.md)
-untuk memulai Sprint 8.
+Lihat [status draf, catatan rekonsiliasi, dan rancangan integrasi Record
+Center](../docs/CENTRAL_FILE_V4_S8_RECORD_CENTER.md). Integrasi Sprint 8
+dijeda sampai aplikasi Record Center dan lingkungan ujinya siap.
 
 ## CI
 

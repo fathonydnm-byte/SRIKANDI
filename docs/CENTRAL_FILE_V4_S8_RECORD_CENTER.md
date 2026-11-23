@@ -1,4 +1,9 @@
-# Sprint 8 — Pengajuan pemindahan ke Record Center
+# Sprint 8 — Fondasi pemindahan arsip dan rencana integrasi Record Center
+
+**Dijeda 23 November 2026 atas keputusan pemilik.** Cakupan Central File
+berhenti pada persiapan draf. Pembuatan paket, pengiriman, dan sinkronisasi
+keputusan ditunda sampai aplikasi Record Center dan lingkungan ujinya siap.
+Tidak ada pemasangan Sprint 8 ke produksi BAGUM.
 
 Central File v4 produksi BAGUM mulai dipakai pada 23 November 2026 dengan
 skema `0028`. Pemulihan metadata, login Admin Pusat, pembukaan PDF lama,
@@ -7,9 +12,11 @@ dikonfirmasi. Cadangan manual sekitar 10.15 WIB mencatat 1.994 baris dan
 204 rujukan Drive untuk BAGUM; `_PLATFORM` melaporkan 0 baris. Eksekusi
 cadangan terjadwal pertama masih perlu dikonfirmasi di **Cadangan & Cermin**.
 
-Di v4, **Penyusutan Arsip** baru menyimpan draf lokal dengan nomor
-`DRAF-…`. Sprint ini menyiapkan pengajuan, pembatalan, dan sinkronisasi
-keputusan ke Record Center uji. Sistem Record Center tetap terpisah.
+| Cakupan | Status |
+| --- | --- |
+| Central File v4 produksi (`0028`) | **Penyusutan Arsip** bisa menampilkan kandidat, membuat dan membatalkan draf lokal bernomor `DRAF-…`, serta menyimpan salinan metadata berkas dan item saat draf dibuat. Lihat [API draf](../v4/supabase/API_S5.md). |
+| Branch `feat/v4-s8-record-center` (`0029`) | **Periksa Kelayakan** memeriksa ulang status berkas, pinjaman, dan perubahan metadata sejak draf dibuat. Sudah diuji lokal. Migrasi dan build tetap di branch Sprint 8. |
+| Integrasi ke aplikasi Record Center yang akan datang | Rancangan disimpan di bawah. Belum ada penomoran resmi, pembuat paket, pengiriman dari v4, atau sinkronisasi keputusan. Implementasi Apps Script lama adalah referensi kompatibilitas dan tidak menjadi tujuan pengiriman baru. |
 
 ## 1. Inventaris riwayat BAGUM (baca saja)
 
@@ -54,7 +61,44 @@ relasi di ekspor. Pemilik mengonfirmasi ID pengajuan dan status
 `DITOLAK` cocok dengan catatan Record Center. Pertahankan pengiriman dan
 keputusan itu sebagai riwayat. Riwayat belum dimuat ke database v4.
 
-## 2. Kriteria Sprint 8 di lingkungan uji
+## 2. Rancangan sambungan saat aplikasi Record Center siap
+
+Central File menyiapkan usul dan mencatat hasil pengiriman. Record Center
+menerima usul, mencatat keputusan, dan mengelola serah terima fisik.
+Keberhasilan pengiriman teknis (`SENT`) tidak menandakan persetujuan atau
+perpindahan fisik. Usul lama yang sudah `SENT` dipertahankan sebagai
+riwayat dan tidak dimasukkan ke antrean baru.
+
+1. **Siapkan pengajuan di Central File.** Periksa ulang kelayakan dalam
+   transaksi yang memfinalkan pengajuan. Jika suatu berkas berubah atau
+   tidak lagi memenuhi syarat, jangan simpan pengajuan sebagian. Jika
+   lolos, tetapkan nomor resmi `UP-…` per unit setelah meninjau nomor
+   historis. Bentuk paket dari salinan metadata yang telah diperiksa:
+   berkas, item, nota dinas, daftar usul XLSX, riwayat JRA, dan PDF jika
+   tersedia. Draf `DRAF-…` tetap menjadi asal usul.
+2. **Kirim dari server dan simpan bukti penerimaan.** Gunakan antrean
+   tersimpan, dengan ID event yang sama saat mencoba kembali pengiriman
+   yang sama. Catat unit, ID usul, ID event, dan identitas tujuan. Record
+   Center harus mengenali pengiriman ulang berdasarkan identitas sumber
+   dan event, sehingga satu pengajuan tercatat satu kali. Tentukan skema
+   penandatanganan dan akses dokumen antarserver bersama tim Record Center;
+   kredensial tidak boleh masuk ke browser atau paket.
+3. **Sinkronkan keputusan dan pembatalan.** Kaitkan hasil Record Center
+   ke pengajuan asal. Catat keputusan, alasan, dan waktunya terpisah dari
+   status pengiriman. Terapkan keputusan hanya sekali walaupun respons
+   dibaca berulang. Draf yang belum dikirim bisa dibatalkan secara lokal;
+   pengajuan yang sudah terkirim perlu prosedur pembatalan dari kedua
+   sistem. Serah terima fisik adalah tahap tersendiri.
+
+Sebelum mulai menghubungkan, cocokkan skema paket, ID sumber/tujuan,
+penerimaan dokumen, dan status dengan tim Record Center. Referensi pilot
+Apps Script: [desain endpoint RC-01](ADDENDUM_2026-08-21_RC01_DESAIN_ENDPOINT.md)
+untuk `SUBMIT_TRANSFER_PROPOSAL`, `CANCEL_TRANSFER_PROPOSAL`, dan
+`QUERY_DECISION`, serta [protokol keputusan](ADDENDUM_2026-08-20_PROTOKOL_KEPUTUSAN_RC_CF.md).
+Gunakan referensi ini untuk menilai kompatibilitas; transport, autentikasi,
+dan kontrak final mengikuti rancangan aplikasi Record Center yang baru.
+
+## 3. Cara melanjutkan di lingkungan uji
 
 Dengan migrasi `0029` dan build Sprint 8 di lingkungan uji, buka
 **Penyusutan Arsip → Draf Usul → Periksa Kelayakan**. Mulai dengan
@@ -66,21 +110,11 @@ ini tidak mengubah draf, membuat dokumen, atau menghubungi Record
 Center. Pengajuan yang kelak menyimpan paket harus mengulang
 pemeriksaan dalam transaksi tulisnya sendiri.
 
-Tahap berikutnya mencakup alur lengkap ini:
-1. Sebelum membuat nomor resmi dan paket, periksa ulang kelayakan berkas
-   dari draf. Bila data berubah atau arsip sedang dipinjam, operator
-   menerima alasan dan pengajuan tidak disimpan sebagian.
-2. Buat paket untuk data sintetis: nota dinas, daftar usul XLSX dan
-   riwayat JRA wajib; daftar PDF sesuai paket lama. Pastikan akun
-   Record Center uji dapat membaca dokumen yang dibutuhkan.
-3. Gunakan kontrak Apps Script yang ada untuk pengiriman, pembatalan,
-   dan polling. Uji kehilangan respons, ulang pengiriman dengan ID
-   yang sama, dan dua pemroses yang bersamaan: satu usul diterima.
-   Ulang pengambilan keputusan tidak boleh menggandakan perubahan
-   status atau audit di Central File.
-4. Uji keputusan setuju dan tolak serta pembatalan; bedakan status
-   teknis kirim dari keputusan bisnis. Uji izin akses antarunit
-   dan kecocokan riwayat setelah backup serta pemulihan uji.
+Setelah aplikasi Record Center uji siap, mulai dari satu draf sintetis.
+Uji akses dokumen, pengiriman ulang setelah respons hilang, dua pemroses
+yang bersamaan, keputusan setuju dan tolak, pembatalan, pemisahan akses
+antarunit, serta pemulihan riwayat dari cadangan. Pastikan paket historis
+BAGUM tidak pernah ikut dikirim dalam pengujian.
 
 Pakai instance, kredensial, dan folder Drive khusus pengujian. Aktivasi
 pengiriman BAGUM produksi dilakukan setelah hasil uji dan rekonsiliasi
