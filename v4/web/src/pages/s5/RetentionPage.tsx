@@ -149,6 +149,7 @@ function Drafts({ unitId, onCancel }: { unitId: string | null; onCancel: () => v
   const [offset, setOffset] = useState(0);
   const [data, reload] = useLoad(`transfer-drafts:${offset}`, () => transferApi.drafts(client, unitId, offset));
   const [detail, setDetail] = useState<string | null>(null);
+  const [check, setCheck] = useState<string | null>(null);
   const [cancel, setCancel] = useState<string | null>(null);
   return <section className="card stack" aria-label="Daftar Draf Usul">
     <h2 className="section-title">Draf Usul</h2>
@@ -164,12 +165,17 @@ function Drafts({ unitId, onCancel }: { unitId: string | null; onCancel: () => v
         {d.cancel_reason && <p className="muted">Alasan pembatalan: {d.cancel_reason}</p>}
         <div className="retention-actions">
           <button type="button" className="btn btn-secondary" aria-expanded={detail === d.id} onClick={() => setDetail(detail === d.id ? null : d.id)}>{detail === d.id ? 'Tutup Rincian' : 'Lihat Rincian'}</button>
+          {!d.cancelled_at && <button type="button" className="btn btn-secondary" aria-expanded={check === d.id}
+            onClick={() => setCheck(check === d.id ? null : d.id)}>{check === d.id ? 'Tutup Pemeriksaan' : 'Periksa Kelayakan'}</button>}
           {!d.cancelled_at && <button type="button" className="btn btn-secondary" aria-expanded={cancel === d.id} onClick={() => setCancel(cancel === d.id ? null : d.id)}>{cancel === d.id ? 'Tutup Pembatalan' : 'Batalkan Draf'}</button>}
         </div>
         {detail === d.id && <DraftDetail unitId={unitId} id={d.id} />}
-        {cancel === d.id && !d.cancelled_at && <CancelDraft unitId={unitId} draft={d} done={() => { setCancel(null); reload(); onCancel(); }} />}
+        {check === d.id && !d.cancelled_at && <DraftCheck unitId={unitId} id={d.id} />}
+        {cancel === d.id && !d.cancelled_at && <CancelDraft unitId={unitId} draft={d} done={() => {
+          setCancel(null); if (check === d.id) setCheck(null); reload(); onCancel();
+        }} />}
       </article>)}
-      <Pager offset={offset} size={data.data.length} move={(o) => { setOffset(o); setDetail(null); setCancel(null); }} />
+      <Pager offset={offset} size={data.data.length} move={(o) => { setOffset(o); setDetail(null); setCheck(null); setCancel(null); }} />
     </>}
   </section>;
 }
@@ -182,6 +188,23 @@ function DraftDetail({ unitId, id }: { unitId: string | null; id: string }) {
   return <div><p className="muted">Data berkas saat draf dibuat:</p><ul>
     {data.data.map((r) => <li key={r.berkas_id}>{r.number} — {r.title} · {formatNumber(r.item_count)} item · batas aktif {formatDate(r.batas_aktif, '—')}{r.location ? ` · ${r.location}` : ''}</li>)}
   </ul></div>;
+}
+
+function DraftCheck({ unitId, id }: { unitId: string | null; id: string }) {
+  const { client } = useAuth();
+  const [attempt, setAttempt] = useState(0);
+  const [data] = useLoad(`draft-check:${id}:${attempt}`, () => transferApi.check(client, unitId, id));
+  if (data.kind === 'loading') return <p role="status">Memeriksa kelayakan berkas…</p>;
+  return <div className="stack">
+    {data.kind === 'error' ? <Alert tone="error" message={data.message} />
+      : data.data.eligible ? <Alert tone="success">Berkas lolos pemeriksaan. Dokumen dan pengiriman belum disiapkan.</Alert>
+      : <>
+        <Alert tone="warning">Draf belum siap diajukan. Tinjau berkas berikut.</Alert>
+        <ul>{data.data.issues.map((issue) =>
+          <li key={issue.berkas_id}>Berkas {issue.number}: {issue.reason}</li>)}</ul>
+      </>}
+    <div><button type="button" className="btn btn-secondary" onClick={() => setAttempt((n) => n + 1)}>Periksa Ulang</button></div>
+  </div>;
 }
 
 function CancelDraft({ unitId, draft, done }: { unitId: string | null; draft: TransferDraft; done: () => void }) {

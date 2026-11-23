@@ -47,8 +47,26 @@ kaitan berkas, ID event, dan keputusan yang sudah tercatat. Cocokkan
 `SENT` pada Central File dengan penerimaan di Record Center berdasarkan
 instance sumber dan ID event. Riwayat `SENT` tidak masuk antrean kirim ulang.
 
+**Hasil BAGUM, 23 November 2026.** Ekspor memuat 3 usul (1 draf,
+1 ditolak, 1 dibatalkan) dan 1 event pengajuan berstatus `SENT`.
+Tidak ada usul `DIAJUKAN`, event menunggu kirim, atau ketidakcocokan
+relasi di ekspor. Pemilik mengonfirmasi ID pengajuan dan status
+`DITOLAK` cocok dengan catatan Record Center. Pertahankan pengiriman dan
+keputusan itu sebagai riwayat. Riwayat belum dimuat ke database v4.
+
 ## 2. Kriteria Sprint 8 di lingkungan uji
 
+Dengan migrasi `0029` dan build Sprint 8 di lingkungan uji, buka
+**Penyusutan Arsip → Draf Usul → Periksa Kelayakan**. Mulai dengan
+draf sintetis dari berkas terverifikasi yang retensi aktifnya sudah
+berakhir dan memiliki item aktif. Periksa bahwa draf lolos. Ubah data
+contoh, atau tandai salah satu item dipinjam, lalu klik **Periksa
+Ulang**: alasan hambatan muncul di bawah nomor berkas. Pemeriksaan
+ini tidak mengubah draf, membuat dokumen, atau menghubungi Record
+Center. Pengajuan yang kelak menyimpan paket harus mengulang
+pemeriksaan dalam transaksi tulisnya sendiri.
+
+Tahap berikutnya mencakup alur lengkap ini:
 1. Sebelum membuat nomor resmi dan paket, periksa ulang kelayakan berkas
    dari draf. Bila data berubah atau arsip sedang dipinjam, operator
    menerima alasan dan pengajuan tidak disimpan sebagian.

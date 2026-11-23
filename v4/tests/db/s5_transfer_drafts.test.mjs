@@ -66,11 +66,24 @@ test('draft creation reserves folders once, captures immutable item metadata and
   await asUser(pool,fx.user.adminA,c=>expectSqlError(c.query('select * from public.transfer_draft_items')));
   const expected = await get('petugasA2');
   assert.deepEqual(expected.map(r=>r.number),[1,11]);
+  const check = (who, unit) => use('transfer_draft_check', { p_draft_id: draft.id }, who, unit);
+  await expectCode(check('petugasB'), 'NOT_FOUND');
+  await expectCode(check('pimpinanA'), 'FORBIDDEN_ROLE');
+  assert.deepEqual(await check(), { eligible: true, issues: [] });
+  await owner(pool, "update public.item set status_peminjaman='DIPINJAM' where unit_id=$1 and id=$2", [fx.unit.A,item(11)]);
+  assert.match((await check()).issues[0].reason, /dipinjam/);
+  await owner(pool, "update public.item set status_peminjaman='TERSEDIA' where unit_id=$1 and id=$2", [fx.unit.A,item(11)]);
+  assert.deepEqual(await check(), { eligible: true, issues: [] });
   const rows = await owner(pool,'select snapshot from public.transfer_draft_items where unit_id=$1 and draft_id=$2 order by item_id',[fx.unit.A,draft.id]);
   assert.equal(rows.length,2);
   assert.equal(rows[0].snapshot.title,item(1));
   await owner(pool,"update public.item set uraian_lengkap='Diubah setelah draf' where unit_id=$1 and id=$2",[fx.unit.A,item(1)]);
-  await owner(pool,"update public.berkas set judul_berkas='Diubah setelah draf' where unit_id=$1 and id=$2",[fx.unit.A,folder(1)]);
+  await owner(pool,"update public.berkas set judul_berkas='Diubah setelah draf' where unit_id=$1 and id=$2",[fx.unit.A,folder(11)]);
+  const blocked = await check();
+  assert.equal(blocked.eligible, false);
+  assert.deepEqual(blocked.issues.map(r => r.number), [1, 11]);
+  assert.match(blocked.issues[0].reason, /data item berubah/);
+  assert.match(blocked.issues[1].reason, /Data berkas berubah/);
   assert.deepEqual(await get(),expected);
   assert.equal((await owner(pool,'select snapshot from public.transfer_draft_items where unit_id=$1 and draft_id=$2 and item_id=$3',[fx.unit.A,draft.id,item(1)]))[0].snapshot.title,item(1));
 
@@ -78,6 +91,7 @@ test('draft creation reserves folders once, captures immutable item metadata and
   const cancelId=randomUUID();
   await cancel(draft.id,undefined,cancelId);
   assert.equal((await cancel(draft.id,undefined,cancelId)).replayed,true);
+  await expectCode(check(), 'ALREADY_CANCELLED');
   await expectCode(cancel(draft.id),'ALREADY_CANCELLED');
   assert.ok((await candidates('HABIS')).find(r=>r.berkas_id===folder(1) && !r.blocked_reason));
   const afterCancel = (await use('transfer_drafts_list',{ p_offset:0 }))[0];

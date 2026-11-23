@@ -38,6 +38,10 @@ export interface TransferDraftFolder {
   location: string | null;
   item_count: number;
 }
+export interface TransferDraftCheck {
+  eligible: boolean;
+  issues: { berkas_id: string; number: number; reason: string }[];
+}
 export const transferApi = {
   candidates: (c: SupabaseClient, unit: string | null, filter: RetentionFilter, offset: number) =>
     callRead<RetentionCandidate[]>(c, 'retention_candidates', { p_unit_id: unit, p_filter: filter, p_offset: offset }),
@@ -45,6 +49,8 @@ export const transferApi = {
     callRead<TransferDraft[]>(c, 'transfer_drafts_list', { p_unit_id: unit, p_offset: offset }),
   get: (c: SupabaseClient, unit: string | null, id: string) =>
     callRead<TransferDraftFolder[]>(c, 'transfer_draft_get', { p_unit_id: unit, p_draft_id: id }),
+  check: (c: SupabaseClient, unit: string | null, id: string) =>
+    callRead<TransferDraftCheck>(c, 'transfer_draft_check', { p_unit_id: unit, p_draft_id: id }),
   create: (c: SupabaseClient, unit: string | null, ids: string[], title: string, notes: string, request: string) =>
     callWrite<{ id: string; draft_number: string }>(c, 'transfer_draft_create',
       { p_unit_id: unit, p_berkas_ids: ids, p_title: title, p_notes: notes }, request),
